@@ -9,13 +9,11 @@ import {
   Fog,
   Group,
   HemisphereLight,
-  Matrix4,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
   PlaneGeometry,
   PointLight,
-  Quaternion,
   type Scene,
   SphereGeometry,
   TorusGeometry,
@@ -25,42 +23,10 @@ import {
 import type { PhysicsWorld } from '../physics/Physics';
 import { getLevelMaterial, getNeonMaterial, texScaleOf } from '../render/materials';
 import { createSignTexture } from '../render/textures';
-import type { BoxDef, DecorDef, DecorProp, LevelData, MaterialId, RampDef } from './types';
+import { boxToOriented, buildLevelPhysics, type OrientedBox, rampToOriented } from './levelPhysics';
+import type { DecorDef, DecorProp, LevelData, MaterialId } from './types';
 
-/** Caja orientada en mundo (forma común de cajas y rampas). */
-export interface OrientedBox {
-  center: Vector3;
-  half: Vector3;
-  quat: Quaternion;
-}
-
-const UP = new Vector3(0, 1, 0);
-
-export function boxToOriented(b: BoxDef): OrientedBox {
-  const quat = new Quaternion();
-  if (b.rotY) quat.setFromAxisAngle(UP, b.rotY);
-  return {
-    center: new Vector3(b.c[0], b.c[1], b.c[2]),
-    half: new Vector3(b.s[0] / 2, b.s[1] / 2, b.s[2] / 2),
-    quat,
-  };
-}
-
-/** Losa inclinada cuya cara superior pasa exactamente por from → to. */
-export function rampToOriented(r: RampDef): OrientedBox {
-  const t = r.thickness ?? 0.3;
-  const from = new Vector3(r.from[0], r.from[1], r.from[2]);
-  const to = new Vector3(r.to[0], r.to[1], r.to[2]);
-  const run = new Vector3().subVectors(to, from);
-  const length = run.length();
-  const dir = run.clone().normalize();
-  // Base ortonormal: x = lateral, y = normal de la rampa, z = dirección de subida.
-  const lateral = new Vector3().crossVectors(UP, dir).normalize();
-  const normal = new Vector3().crossVectors(dir, lateral).normalize();
-  const quat = new Quaternion().setFromRotationMatrix(new Matrix4().makeBasis(lateral, normal, dir));
-  const center = new Vector3().addVectors(from, to).multiplyScalar(0.5).addScaledVector(normal, -t / 2);
-  return { center, half: new Vector3(r.w / 2, t / 2, length / 2), quat };
-}
+export type { OrientedBox } from './levelPhysics';
 
 const FACES: ReadonlyArray<{ n: readonly [number, number, number]; u: readonly [number, number, number]; v: readonly [number, number, number] }> = [
   { n: [1, 0, 0], u: [0, 1, 0], v: [0, 0, 1] },
@@ -164,8 +130,9 @@ const CELL = 20;
 export function buildLevel(data: LevelData, scene: Scene, physics: PhysicsWorld, opts: BuildOptions): LevelRuntime {
   const root = new Group();
   root.name = `level:${data.id}`;
-  const solids: OrientedBox[] = [];
   const disposables: Array<{ dispose(): void }> = [];
+  // Colliders desde la MISMA fuente que los meshes (R4).
+  const solids: OrientedBox[] = buildLevelPhysics(data, physics);
 
   // --- Geometría estática fusionada + colliders desde la MISMA fuente (R4) ---
   const groups = new Map<string, { mat: MaterialId; cast: boolean; acc: GeoAccumulator }>();
@@ -181,18 +148,11 @@ export function buildLevel(data: LevelData, scene: Scene, physics: PhysicsWorld,
 
   for (const b of data.boxes) {
     const ob = boxToOriented(b);
-    const cast = b.shadow ?? true;
-    accFor(b.mat, cast, ob.center.x, ob.center.z).appendBox(ob, texScaleOf(b.mat));
-    if (b.collide !== false) {
-      physics.addStaticBox(ob.center, ob.half, ob.quat);
-      solids.push(ob);
-    }
+    accFor(b.mat, b.shadow ?? true, ob.center.x, ob.center.z).appendBox(ob, texScaleOf(b.mat));
   }
   for (const r of data.ramps) {
     const ob = rampToOriented(r);
     accFor(r.mat, true, ob.center.x, ob.center.z).appendBox(ob, texScaleOf(r.mat));
-    physics.addStaticBox(ob.center, ob.half, ob.quat);
-    solids.push(ob);
   }
   for (const g of groups.values()) {
     if (g.acc.empty) continue;

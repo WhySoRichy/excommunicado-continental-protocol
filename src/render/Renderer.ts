@@ -142,9 +142,26 @@ export class GameRenderer {
     return Math.min(window.devicePixelRatio || 1, q.pixelRatioCap) * q.baseScale * (this.dynamicResolution ? this.dynamicScale : 1);
   }
 
+  private appliedW = 0;
+  private appliedH = 0;
+  private appliedDpr = 0;
+
+  /**
+   * Comprobación barata por frame: si cambió el tamaño del contenedor o el devicePixelRatio
+   * (ventana movida a otro monitor, zoom, emulación) se redimensiona aunque no llegue evento.
+   */
+  checkResize(): void {
+    const w = this.container.clientWidth || window.innerWidth;
+    const h = this.container.clientHeight || window.innerHeight;
+    if (w !== this.appliedW || h !== this.appliedH || window.devicePixelRatio !== this.appliedDpr) this.resize();
+  }
+
   readonly resize = (): void => {
     const w = Math.max(1, this.container.clientWidth || window.innerWidth);
     const h = Math.max(1, this.container.clientHeight || window.innerHeight);
+    this.appliedW = w;
+    this.appliedH = h;
+    this.appliedDpr = window.devicePixelRatio;
     this.renderer.setPixelRatio(this.pixelRatio);
     this.renderer.setSize(w, h, false);
     this.canvas.style.width = '100%';

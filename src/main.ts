@@ -11,12 +11,13 @@ const presetParam = params.get('preset');
 const preset: QualityPreset = presetParam === 'low' || presetParam === 'high' ? presetParam : 'medium';
 const levelParam = params.get('level');
 const startLevel: LevelId = levelParam === 'arena' ? 'arena' : 'arena';
+const pointerLock = !qa || params.get('lock') === '1';
 
 function start(): void {
   const gameRoot = document.getElementById('game-root');
   const uiRoot = document.getElementById('ui-root');
   if (!gameRoot || !uiRoot) throw new Error('Faltan #game-root o #ui-root en index.html');
-  const game = new Game(gameRoot, uiRoot, { qa, preset, startLevel });
+  const game = new Game(gameRoot, uiRoot, { qa, preset, startLevel, pointerLock });
   if (qa) installQa(game);
   game.boot().catch(showFatal);
 }

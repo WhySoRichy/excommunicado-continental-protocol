@@ -1,5 +1,5 @@
 import type * as RapierNS from '@dimforge/rapier3d-compat';
-import type { Collider, KinematicCharacterController, RigidBody, World } from '@dimforge/rapier3d-compat';
+import type { Collider, KinematicCharacterController, World } from '@dimforge/rapier3d-compat';
 
 export type Rapier = typeof RapierNS;
 
@@ -78,8 +78,12 @@ export function createRayHit(): RayHit {
   return { hit: false, distance: 0, point: { x: 0, y: 0, z: 0 }, normal: { x: 0, y: 1, z: 0 }, collider: null };
 }
 
+/**
+ * Personaje = collider de cápsula SIN cuerpo rígido (parentless) + controlador cinemático.
+ * `collider.setTranslation()` / `setHalfHeight()` son inmediatos: teleports y cambios de
+ * postura no dependen del orden del step. `world.step()` refresca la BVH de consultas.
+ */
 export interface CharacterBody {
-  body: RigidBody;
   collider: Collider;
   controller: KinematicCharacterController;
 }
@@ -97,7 +101,8 @@ export const DEFAULT_KCC: CharacterControllerConfig = {
   offset: 0.02,
   autostepHeight: 0.36,
   autostepMinWidth: 0.12,
-  snapToGround: 0.3,
+  // ≥ contrahuella máxima (0,36): al bajar escaleras se mantiene pegado a cada peldaño.
+  snapToGround: 0.4,
   maxSlopeClimbDeg: 46,
   minSlopeSlideDeg: 50,
 };
@@ -113,6 +118,7 @@ export class PhysicsWorld {
   readonly world: World;
   private readonly ray: RapierNS.Ray;
   private readonly ball: RapierNS.Ball;
+  private readonly capsule: RapierNS.Capsule;
   private staticCount = 0;
 
   constructor(R: Rapier) {
@@ -122,6 +128,7 @@ export class PhysicsWorld {
     this.world.timestep = 1 / 60;
     this.ray = new R.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 1 });
     this.ball = new R.Ball(0.2);
+    this.capsule = new R.Capsule(0.5, 0.3);
   }
 
   get staticColliderCount(): number {
@@ -143,12 +150,13 @@ export class PhysicsWorld {
     return this.world.createCollider(desc);
   }
 
-  /** Cuerpo cinemático con cápsula para un personaje. `pos` es el centro de la cápsula. */
+  /** Cápsula de personaje (parentless) + controlador. `pos` es el centro de la cápsula. */
   createCharacter(pos: Vec3Like, radius: number, halfHeight: number, groups: number, cfg: CharacterControllerConfig = DEFAULT_KCC): CharacterBody {
-    const body = this.world.createRigidBody(this.R.RigidBodyDesc.kinematicPositionBased().setTranslation(pos.x, pos.y, pos.z));
     const collider = this.world.createCollider(
-      this.R.ColliderDesc.capsule(halfHeight, radius).setCollisionGroups(groups).setSolverGroups(groups),
-      body,
+      this.R.ColliderDesc.capsule(halfHeight, radius)
+        .setTranslation(pos.x, pos.y, pos.z)
+        .setCollisionGroups(groups)
+        .setSolverGroups(groups),
     );
     const controller = this.world.createCharacterController(cfg.offset);
     controller.setUp({ x: 0, y: 1, z: 0 });
@@ -158,12 +166,12 @@ export class PhysicsWorld {
     controller.setMaxSlopeClimbAngle((cfg.maxSlopeClimbDeg * Math.PI) / 180);
     controller.setMinSlopeSlideAngle((cfg.minSlopeSlideDeg * Math.PI) / 180);
     controller.setApplyImpulsesToDynamicBodies(false);
-    return { body, collider, controller };
+    return { collider, controller };
   }
 
   removeCharacter(c: CharacterBody): void {
     this.world.removeCharacterController(c.controller);
-    this.world.removeRigidBody(c.body);
+    this.world.removeCollider(c.collider, false);
   }
 
   /** Avanza el mundo (refresca la BVH de consultas con las posiciones cinemáticas). */
@@ -230,8 +238,9 @@ export class PhysicsWorld {
 
   /** ¿La forma dada en esa posición solapa algún collider del filtro? */
   overlapsCapsule(center: Vec3Like, radius: number, halfHeight: number, groups: number, exclude?: Collider): Collider | null {
-    const shape = new this.R.Capsule(halfHeight, radius);
-    return this.world.intersectionWithShape(center, IDENTITY_ROT, shape, undefined, groups, exclude);
+    this.capsule.radius = radius;
+    this.capsule.halfHeight = halfHeight;
+    return this.world.intersectionWithShape(center, IDENTITY_ROT, this.capsule, undefined, groups, exclude);
   }
 
   overlapsBall(center: Vec3Like, radius: number, groups: number, exclude?: Collider): Collider | null {
