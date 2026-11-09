@@ -1,0 +1,32 @@
+{
+  "name": "excommunicado-continental-protocol",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Juego 3D de acción en tercera persona en el navegador, proyecto de fans inspirado en el universo de John Wick.",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
+    "build": "npm run typecheck && vite build",
+    "preview": "vite preview --port 4173 --strictPort",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "qa": "npm run build && npm test && npm run test:e2e"
+  },
+  "dependencies": {
+    "@dimforge/rapier3d-compat": "0.21.0",
+    "three": "0.187.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.0",
+    "@types/node": "26.6.6",
+    "@types/pngjs": "6.0.5",
+    "@types/three": "0.187.0",
+    "pngjs": "7.0.0",
+    "typescript": "7.0.2",
+    "vite": "8.3.7",
+    "vitest": "5.1.0"
+  }
+}

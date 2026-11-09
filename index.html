@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="EXCOMMUNICADO: Continental Protocol — juego de acción 3D en tercera persona en el navegador. Proyecto de fans sin fines de lucro." />
+    <meta name="theme-color" content="#121418" />
+    <title>EXCOMMUNICADO: Continental Protocol</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='28' fill='%23d4af37'/%3E%3Ccircle cx='32' cy='32' r='21' fill='none' stroke='%237a5c12' stroke-width='3'/%3E%3Cpath d='M32 18l4 10h10l-8 6 3 10-9-6-9 6 3-10-8-6h10z' fill='%237a5c12'/%3E%3C/svg%3E"
+    />
+    <style>
+      /* CSS crítico de la pantalla de carga: visible antes de que cargue el JS. */
+      html, body { margin: 0; height: 100%; background: #121418; color: #f2efe6; overflow: hidden; }
+      #boot {
+        position: fixed; inset: 0; z-index: 1000; display: flex; flex-direction: column;
+        align-items: center; justify-content: center; gap: 14px; background: #121418;
+        font-family: Georgia, 'Times New Roman', serif; transition: opacity 0.5s ease;
+      }
+      #boot.boot-done { opacity: 0; }
+      .boot-title { font-size: clamp(28px, 6vw, 64px); letter-spacing: 0.18em; color: #d4af37; }
+      .boot-sub { font-size: clamp(12px, 1.8vw, 18px); letter-spacing: 0.5em; color: #c9c3b5; }
+      .boot-bar { width: min(420px, 70vw); height: 4px; background: #2a2d34; border-radius: 2px; overflow: hidden; margin-top: 18px; }
+      #boot-progress { width: 2%; height: 100%; background: #d4af37; transition: width 0.25s ease; }
+      #boot-label { font-family: system-ui, 'Segoe UI', Arial, sans-serif; font-size: 14px; color: #a9a397; }
+    </style>
+  </head>
+  <body>
+    <div id="game-root"></div>
+    <div id="ui-root"></div>
+    <div id="boot" role="progressbar" aria-label="Cargando" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <div class="boot-title">EXCOMMUNICADO</div>
+      <div class="boot-sub">CONTINENTAL PROTOCOL</div>
+      <div class="boot-bar"><div id="boot-progress"></div></div>
+      <div id="boot-label">Cargando…</div>
+      <noscript>Este juego necesita JavaScript activado.</noscript>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
