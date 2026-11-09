@@ -190,10 +190,14 @@ export class PlayerController {
   private readonly hit = createRayHit();
   private readonly center = new Vector3();
 
-  constructor(physics: PhysicsWorld, spawn: Vector3, yaw: number) {
+  /** Grupos de colisión del personaje (jugador o enemigo: el mismo motor robusto para ambos). */
+  readonly groups: number;
+
+  constructor(physics: PhysicsWorld, spawn: Vector3, yaw: number, groups: number = Groups.PLAYER) {
     this.physics = physics;
+    this.groups = groups;
     this.center.set(spawn.x, spawn.y + STAND_HALF + PLAYER_RADIUS, spawn.z);
-    this.char = physics.createCharacter(this.center, PLAYER_RADIUS, STAND_HALF, Groups.PLAYER);
+    this.char = physics.createCharacter(this.center, PLAYER_RADIUS, STAND_HALF, groups);
     this.colOut = new physics.R.CharacterCollision();
     this.feet.copy(spawn);
     this.prevFeet.copy(spawn);
@@ -886,7 +890,7 @@ export class PlayerController {
     d.y = this.velocity.y * dt;
     d.z = this.velocity.z * dt;
     const ctrl = this.char.controller;
-    ctrl.computeColliderMovement(this.char.collider, d, undefined, Groups.PLAYER);
+    ctrl.computeColliderMovement(this.char.collider, d, undefined, this.groups);
     const m = ctrl.computedMovement(this.kccOut);
     this.grounded = ctrl.computedGrounded();
     if (correctVelocity) this.clipVelocityAgainstContacts();

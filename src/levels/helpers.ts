@@ -155,25 +155,28 @@ export interface StairsDef {
 export function stairs(d: StairsDef): BoxDef[] {
   const out: BoxDef[] = [];
   const [sx, sy, sz] = d.start;
+  const o: BoxOpts = { tag: 'stair' };
   for (let i = 0; i < d.steps; i++) {
     const top = sy + d.rise * (i + 1);
     const a = d.run * i;
     const b = d.run * (i + 1);
     const h = d.width / 2;
+    let box: BoxDef;
     switch (d.dir) {
       case 'x+':
-        out.push(aabb(sx + a, sy, sz - h, sx + b, top, sz + h, d.mat));
+        box = aabb(sx + a, sy, sz - h, sx + b, top, sz + h, d.mat, o);
         break;
       case 'x-':
-        out.push(aabb(sx - b, sy, sz - h, sx - a, top, sz + h, d.mat));
+        box = aabb(sx - b, sy, sz - h, sx - a, top, sz + h, d.mat, o);
         break;
       case 'z+':
-        out.push(aabb(sx - h, sy, sz + a, sx + h, top, sz + b, d.mat));
+        box = aabb(sx - h, sy, sz + a, sx + h, top, sz + b, d.mat, o);
         break;
       case 'z-':
-        out.push(aabb(sx - h, sy, sz - b, sx + h, top, sz - a, d.mat));
+        box = aabb(sx - h, sy, sz - b, sx + h, top, sz - a, d.mat, o);
         break;
     }
+    out.push({ ...box, stair: true });
   }
   return out;
 }

@@ -63,6 +63,52 @@ export interface QaApi {
   camera(): { x: number; y: number; z: number; dist: number; fov: number; yaw: number; pitch: number };
   canvas(): { cssW: number; cssH: number; bufW: number; bufH: number; pixelRatio: number };
   prompt(): string;
+  playLevel(id: 'arena' | 'practice', drill?: boolean): Promise<void>;
+  combat(): CombatSnapshot | null;
+  enemies(): EnemySnapshot[];
+  aiStats(): { alive: number; total: number; maxNoProgress: number; stuckEvents: number; states: Record<string, number> } | null;
+  /** Orienta la cámara para apuntar a un punto del mundo. */
+  aimAt(x: number, y: number, z: number): void;
+  spawnEnemy(type: 'thug' | 'escort' | 'marksman' | 'heavy' | 'boss', x: number, y: number, z: number, alert: boolean): string | null;
+  setGod(on: boolean): void;
+  /** Ruta A* (suavizada) desde el jugador hasta un punto: lista de waypoints. */
+  pathTo(x: number, y: number, z: number): Array<{ x: number; y: number; z: number }>;
+  combatInconsistencies(): number;
+  respawn(): void;
+  hud(): { deathVisible: boolean; reloadVisible: boolean; hitmark: string; style: string; ammo: string };
+}
+
+export interface CombatSnapshot {
+  health: number;
+  armor: number;
+  weapon: string;
+  mag: number;
+  reserve: number;
+  reloading: boolean;
+  multiplier: number;
+  score: number;
+  focus: number;
+  focusActive: boolean;
+  dead: boolean;
+  takedown: boolean;
+  stats: Record<string, number>;
+  varietyCount: number;
+  takedownTarget: string | null;
+  blocked: boolean;
+  hitKind: string;
+  aimOverEnemy: boolean;
+}
+
+export interface EnemySnapshot {
+  id: string;
+  type: string;
+  state: string;
+  alive: boolean;
+  x: number;
+  y: number;
+  z: number;
+  health: number;
+  headY: number;
 }
 
 declare global {
@@ -183,6 +229,96 @@ export function installQa(game: Game): void {
       return { cssW: cv.clientWidth, cssH: cv.clientHeight, bufW: cv.width, bufH: cv.height, pixelRatio: game.renderer.pixelRatio };
     },
     prompt: () => document.querySelector('#hud .prompt:not([hidden]) .prompt-text')?.textContent ?? '',
+    playLevel: async (id, drill = false) => {
+      if (game.fsm.state !== 'title' && game.fsm.state !== 'paused') game.fsm.go('paused');
+      await game.playLevel(id, { drill });
+    },
+    combat: () => {
+      const s = game.session;
+      if (!s) return null;
+      const c = s.combat;
+      const w = c.weapon;
+      return {
+        health: c.vitals.health,
+        armor: c.vitals.armor,
+        weapon: c.current,
+        mag: w.mag,
+        reserve: w.reserve,
+        reloading: w.reloading,
+        multiplier: c.style.multiplier,
+        score: c.style.score,
+        focus: c.focus,
+        focusActive: c.focusActive,
+        dead: c.dead,
+        takedown: !!c.takedown,
+        stats: { ...c.stats },
+        varietyCount: c.style.varietyCount,
+        takedownTarget: c.takedownCandidate(s.ctx)?.id ?? null,
+        blocked: c.blocked,
+        hitKind: c.hitMarker.t > 0 ? c.hitMarker.kind : 'none',
+        aimOverEnemy: c.aimOver === 'enemy',
+      };
+    },
+    enemies: () =>
+      (game.session?.enemies.enemies ?? []).map((e) => ({
+        id: e.id,
+        type: e.def.type,
+        state: e.state,
+        alive: e.alive,
+        x: e.feet.x,
+        y: e.feet.y,
+        z: e.feet.z,
+        health: e.vitals.health,
+        headY: e.feet.y + e.height - 0.15,
+      })),
+    aiStats: () => game.session?.enemies.qaStats() ?? null,
+    aimAt: (x, y, z) => {
+      const c = game.camera;
+      // La mira sale de la cámara: se itera para compensar el desplazamiento del hombro.
+      for (let i = 0; i < 4; i++) {
+        const dx = x - c.position.x;
+        const dy = y - c.position.y;
+        const dz = z - c.position.z;
+        c.setYawPitch(Math.atan2(-dx, -dz), Math.atan2(dy, Math.hypot(dx, dz)));
+        game.stepManualCameraOnly();
+      }
+    },
+    spawnEnemy: (type, x, y, z, alert) => {
+      const s = game.session;
+      if (!s) return null;
+      const e = s.enemies.spawnAt(type, new Vector3(x, y, z), 0, alert ? s.player.feet.clone() : undefined);
+      return e.id;
+    },
+    setGod: (on) => {
+      if (game.session) game.session.god = on;
+    },
+    pathTo: (x, y, z) => {
+      const s = game.session;
+      if (!s) return [];
+      const f = s.player.feet;
+      const a = s.nav.nearestNode(f.x, f.y, f.z, 2);
+      const b = s.nav.nearestNode(x, y, z, 3);
+      const raw = s.nav.findPath(a, b);
+      if (!raw) return [];
+      const v = new Vector3();
+      return s.nav.smooth(raw).map((n) => {
+        s.nav.pos(n, v);
+        return { x: v.x, y: v.y, z: v.z };
+      });
+    },
+    combatInconsistencies: () => game.combatInconsistencies,
+    respawn: () => game.qaRespawn(),
+    hud: () => {
+      game.qaRefreshHud();
+      return readHud();
+    },
   };
+  const readHud = () => ({
+      deathVisible: !(document.querySelector('#hud .death') as HTMLElement | null)?.hidden,
+      reloadVisible: !(document.querySelector('#hud .reload') as HTMLElement | null)?.hidden,
+      hitmark: (document.querySelector('#hud .hitmark') as HTMLElement | null)?.className ?? '',
+      style: document.querySelector('#hud .style-mult')?.textContent ?? '',
+      ammo: `${document.querySelector('#hud .ammo-mag')?.textContent ?? ''}${document.querySelector('#hud .ammo-res')?.textContent ?? ''}`,
+    });
   window.__EXCOM__ = api;
 }

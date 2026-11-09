@@ -6,6 +6,7 @@ export type ScreenId = 'title' | 'pause' | 'controls';
 
 export interface ScreenCallbacks {
   onPlayArena(): void;
+  onPlayPractice(): void;
   onResume(): void;
   onQuitToTitle(): void;
 }
@@ -102,7 +103,8 @@ export class Screens {
         h('div', { class: 'title-sub', text: 'CONTINENTAL PROTOCOL' }),
       ]),
       h('div', { class: 'menu' }, [
-        button('Entrar a la arena de pruebas', () => this.cb.onPlayArena(), 'btn btn-primary'),
+        button('Simulacro de combate', () => this.cb.onPlayPractice(), 'btn btn-primary'),
+        button('Arena de pruebas (movimiento)', () => this.cb.onPlayArena()),
         button('Controles', () => this.show('controls')),
       ]),
       h('p', { class: 'fan-note', text: 'Proyecto de fans sin fines de lucro. No afiliado ni respaldado por los titulares de la franquicia John Wick.' }),

@@ -22,10 +22,17 @@ const PITCH_MIN = -1.25;
 const PITCH_MAX = 1.05;
 // Encuadre: el personaje en el tercio izquierdo (hombro derecho) sin tapar la mira.
 const SHOULDER_OFFSET = 0.7;
+/**
+ * Al apuntar el hombro NO se separa más: si la cámara ve más allá de la cobertura que el
+ * arma, la mira queda "bloqueada" a menudo (lo midió el bot 1vN). La distancia y el FOV dan el zoom.
+ */
+const SHOULDER_OFFSET_AIM = 0.7;
 const UP_OFFSET = 0.2;
 const DIST_NORMAL = 3.1;
-const DIST_AIM = 1.7;
+const DIST_AIM = 2.2;
 const DIST_SPRINT = 3.4;
+/** Zoom de FOV al apuntar (compensa la distancia mayor: el objetivo se ve igual de grande). */
+const AIM_FOV_FACTOR = 0.7;
 const CAM_RADIUS = 0.2;
 const MARGIN = 0.06;
 const MIN_DIST = 0.25;
@@ -143,7 +150,7 @@ export class CameraRig {
     this.forward.copy(_fwd);
 
     // 1) Hombro (lateral + algo arriba).
-    const side = SHOULDER_OFFSET * this.shoulderCur;
+    const side = (SHOULDER_OFFSET + (SHOULDER_OFFSET_AIM - SHOULDER_OFFSET) * this.aimK) * this.shoulderCur;
     _dir.copy(_right).multiplyScalar(Math.sign(side) || 1);
     let lateral = Math.abs(side);
     if (physics && lateral > 1e-3) {
@@ -195,7 +202,7 @@ export class CameraRig {
     cam.rotation.set(this.pitch + shakeP, this.yaw + shakeY, 0, 'YXZ');
     const baseFov = this.settings.fov;
     let fovTarget = baseFov + 6 * sprintK;
-    fovTarget += (baseFov * 0.76 - fovTarget) * this.aimK;
+    fovTarget += (baseFov * AIM_FOV_FACTOR - fovTarget) * this.aimK;
     this.fovCur = damp(this.fovCur, fovTarget, 8, dt);
     if (Math.abs(cam.fov - this.fovCur) > 0.01) {
       cam.fov = this.fovCur;

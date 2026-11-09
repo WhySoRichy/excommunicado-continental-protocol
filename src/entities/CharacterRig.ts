@@ -29,6 +29,8 @@ export interface RigOptions {
   /** Chaleco/placas (blindado, escolta). */
   vest?: boolean;
   weapon: WeaponModel;
+  /** Material propio (no cacheado): permite efectos por instancia (destello de impacto). */
+  uniqueMaterial?: boolean;
 }
 
 export interface RigPose {
@@ -85,15 +87,15 @@ function merge(parts: BufferGeometry[]): BufferGeometry {
 
 const materialCache = new Map<string, { mat: MeshStandardMaterial; rim: RimUniforms }>();
 
-/** Material compartido por tipo de personaje (el rim es uniform por material). */
-function rigMaterial(key: string, rimColor: number, rimStrength: number): { mat: MeshStandardMaterial; rim: RimUniforms } {
-  const hit = materialCache.get(key);
+/** Material por tipo de personaje (el rim es uniform por material). `unique` no se cachea. */
+function rigMaterial(key: string, rimColor: number, rimStrength: number, unique: boolean): { mat: MeshStandardMaterial; rim: RimUniforms } {
+  const hit = unique ? undefined : materialCache.get(key);
   if (hit) return hit;
   const mat = new MeshStandardMaterial({ vertexColors: true, roughness: 0.72, metalness: 0.05 });
   mat.name = `rig:${key}`;
   const rim = addRim(mat, rimColor, rimStrength, 2.2);
   const entry = { mat, rim };
-  materialCache.set(key, entry);
+  if (!unique) materialCache.set(key, entry);
   return entry;
 }
 
@@ -124,7 +126,7 @@ export class CharacterRig {
   private opacity = 1;
 
   constructor(key: string, o: RigOptions) {
-    const { mat, rim } = rigMaterial(key, o.rimColor, o.rimStrength);
+    const { mat, rim } = rigMaterial(key, o.rimColor, o.rimStrength, !!o.uniqueMaterial);
     this.material = mat;
     this.rim = rim;
     const c = o.colors;

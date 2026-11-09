@@ -440,7 +440,7 @@ body {
 .hints {
   position: absolute;
   left: 16px;
-  bottom: 16px;
+  top: 16px;
   display: flex;
   flex-direction: column;
   gap: 0.28rem;
@@ -455,9 +455,428 @@ body {
   margin-right: 0.45rem;
 }
 
+/* ===== HUD de combate ===== */
+.crosshair.blocked .ch,
+.crosshair.blocked .ch-dot {
+  background: rgba(150, 150, 150, 0.75);
+}
+
+.crosshair.blocked::after {
+  content: '×';
+  position: absolute;
+  left: -7px;
+  top: -14px;
+  font: 700 22px var(--font-ui);
+  color: rgba(220, 220, 220, 0.9);
+  text-shadow: 0 0 3px #000;
+}
+
+.crosshair.enemy .ch,
+.crosshair.enemy .ch-dot {
+  background: #ff6a5a;
+}
+
+.hitmark {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  opacity: 0;
+}
+
+.hitmark i {
+  position: absolute;
+  width: 11px;
+  height: 2.5px;
+  background: #fff;
+  box-shadow: 0 0 2px #000;
+}
+
+.hitmark i:nth-child(1) {
+  transform: translate(-16px, -12px) rotate(45deg);
+}
+
+.hitmark i:nth-child(2) {
+  transform: translate(5px, -12px) rotate(-45deg);
+}
+
+.hitmark i:nth-child(3) {
+  transform: translate(-16px, 10px) rotate(-45deg);
+}
+
+.hitmark i:nth-child(4) {
+  transform: translate(5px, 10px) rotate(45deg);
+}
+
+.hitmark.on {
+  opacity: 1;
+}
+
+.hitmark.head i {
+  background: #ff3344;
+}
+
+.hitmark.armor i {
+  background: #7fb2ff;
+}
+
+.hitmark.kill i {
+  width: 15px;
+  height: 3.5px;
+  background: #ffd23f;
+}
+
+.dmg-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+}
+
+.dmg-arc {
+  position: absolute;
+  left: -70px;
+  top: -130px;
+  width: 140px;
+  height: 260px;
+  opacity: 0;
+  transform-origin: 70px 130px;
+  background: radial-gradient(ellipse at 50% 0%, rgba(255, 40, 50, 0.85) 0%, rgba(255, 40, 50, 0) 45%);
+  transition: opacity 0.1s;
+}
+
+.vignette {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 55%, rgba(150, 0, 10, 0.75) 100%);
+  transition: opacity 0.25s;
+}
+
+.vitals {
+  position: absolute;
+  left: 18px;
+  bottom: 18px;
+  width: 260px;
+  padding: 0.55rem 0.7rem;
+  background: rgba(14, 16, 20, 0.7);
+  border-left: 3px solid var(--c-gold);
+  border-radius: 4px;
+}
+
+.vitals[hidden],
+.weapon-panel[hidden],
+.style[hidden],
+.focus[hidden],
+.reload[hidden],
+.toast[hidden],
+.death[hidden],
+.hints[hidden] {
+  display: none;
+}
+
+.vitals-label {
+  margin-top: 0.2rem;
+  font: 700 0.62rem var(--font-ui);
+  letter-spacing: 0.18em;
+  color: var(--c-text-dim);
+}
+
+.bar {
+  height: 9px;
+  margin-top: 2px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  transition: width 0.12s;
+}
+
+.bar-fill.armor {
+  background: linear-gradient(90deg, #9fc7ff, #5aa9ff);
+}
+
+.bar-fill.health {
+  background: linear-gradient(90deg, #ff6a5a, #d61f2c);
+}
+
+.vitals-text {
+  margin-top: 0.3rem;
+  font: 600 0.78rem var(--font-ui);
+  color: var(--c-text-dim);
+}
+
+.weapon-panel {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  min-width: 230px;
+  padding: 0.55rem 0.8rem;
+  text-align: right;
+  background: rgba(14, 16, 20, 0.7);
+  border-right: 3px solid var(--c-gold);
+  border-radius: 4px;
+}
+
+.weapon-name {
+  font: 600 0.8rem var(--font-ui);
+  letter-spacing: 0.1em;
+  color: var(--c-gold-soft);
+}
+
+.ammo {
+  font: 700 2rem var(--font-ui);
+  line-height: 1.1;
+}
+
+.ammo-mag.low {
+  color: #ff6a5a;
+}
+
+.ammo-res {
+  font-size: 1rem;
+  color: var(--c-text-dim);
+}
+
+.slots {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.45rem;
+  margin-top: 0.25rem;
+  font-size: 0.72rem;
+  color: var(--c-text-dim);
+}
+
+.slot.active {
+  color: var(--c-text);
+}
+
+.slot .keycap {
+  min-width: 1.4em;
+  padding: 0 0.3em;
+  font-size: 0.75em;
+  background: #6b6452;
+  box-shadow: none;
+}
+
+.slot.active .keycap {
+  background: var(--c-gold-soft);
+}
+
+.reload {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + 42px);
+  width: 180px;
+  transform: translateX(-50%);
+}
+
+.reload-track {
+  position: relative;
+  height: 7px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.reload-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: #e9e5da;
+}
+
+.reload-window {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(212, 175, 55, 0.85);
+}
+
+.reload-label {
+  margin-top: 3px;
+  font-size: 0.66rem;
+  text-align: center;
+  color: var(--c-gold-soft);
+  text-shadow: 0 1px 2px #000;
+}
+
+.style {
+  position: absolute;
+  right: 18px;
+  top: 50%;
+  width: 210px;
+  transform: translateY(-50%);
+  text-align: right;
+}
+
+.style-mult {
+  font: 700 2.6rem var(--font-title);
+  line-height: 1;
+  color: var(--c-gold);
+  text-shadow: 0 0 14px rgba(212, 175, 55, 0.45), 0 2px 3px #000;
+}
+
+.style[data-mult='1'] .style-mult {
+  color: #cfc9bc;
+  text-shadow: 0 2px 3px #000;
+}
+
+.style-rank {
+  font: 700 0.75rem var(--font-ui);
+  letter-spacing: 0.22em;
+  color: var(--c-text);
+  text-shadow: 0 1px 2px #000;
+}
+
+.style-gauge {
+  height: 5px;
+  margin: 0.3rem 0 0.2rem auto;
+  width: 160px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.style-gauge-fill {
+  height: 100%;
+  background: var(--c-gold);
+}
+
+.style-score {
+  font: 600 0.8rem var(--font-ui);
+  color: var(--c-text-dim);
+}
+
+.feed {
+  margin-top: 0.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.feed-item {
+  font: 600 0.82rem var(--font-ui);
+  color: var(--c-text);
+  text-shadow: 0 1px 2px #000;
+  animation: feed-in 0.18s ease-out;
+}
+
+.feed-item b {
+  margin-left: 0.4rem;
+  color: var(--c-gold);
+}
+
+@keyframes feed-in {
+  from {
+    opacity: 0;
+    transform: translateX(14px);
+  }
+}
+
+.focus {
+  position: absolute;
+  left: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.focus-track {
+  position: relative;
+  width: 10px;
+  height: 140px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.focus-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(0deg, #19e3ff, #8ff5ff);
+}
+
+.focus.ready .focus-fill {
+  box-shadow: 0 0 10px #19e3ff;
+}
+
+.focus.active .focus-fill {
+  background: linear-gradient(0deg, #ff2e88, #ffd0e6);
+}
+
+.focus-label {
+  font: 700 0.62rem var(--font-ui);
+  letter-spacing: 0.12em;
+  color: var(--c-text-dim);
+  writing-mode: horizontal-tb;
+}
+
+.focus.ready .focus-label,
+.focus.active .focus-label {
+  color: var(--c-cyan);
+}
+
+.toast {
+  position: absolute;
+  top: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.5rem 1rem;
+  font: 600 0.95rem var(--font-ui);
+  background: rgba(14, 16, 20, 0.85);
+  border: 1px solid var(--c-gold);
+  border-radius: 6px;
+}
+
+.death {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  background: rgba(40, 0, 6, 0.55);
+}
+
+.death h2 {
+  margin: 0;
+  font: 400 3rem var(--font-title);
+  letter-spacing: 0.25em;
+  color: #ff6a5a;
+  text-shadow: 0 2px 6px #000;
+}
+
+.death-cause {
+  margin: 0;
+  font-size: 1.15rem;
+  text-shadow: 0 1px 3px #000;
+}
+
+.death-hint {
+  margin: 0.6rem 0 0;
+  font-size: 0.95rem;
+  color: var(--c-gold-soft);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .btn,
-  #boot {
+  #boot,
+  .feed-item,
+  .bar-fill {
     transition: none;
+    animation: none;
   }
 }
