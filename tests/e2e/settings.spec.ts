@@ -140,3 +140,14 @@ test.describe('Fase 5 · ajustes', () => {
     await expect(page.locator('#screens')).toHaveAttribute('data-screen', 'pause');
   });
 });
+
+test('movimiento reducido del sistema: la primera vez la cámara no tiembla', async ({ browser }) => {
+  const ctx = await browser.newContext({ reducedMotion: 'reduce' });
+  const page = await ctx.newPage();
+  await page.goto('/?qa=1');
+  await page.evaluate(() => window.localStorage.clear());
+  await openGame(page);
+  const st = await page.evaluate(() => window.__EXCOM__!.settings());
+  expect(st.settings.shake).toBe(0);
+  await ctx.close();
+});

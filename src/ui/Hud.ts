@@ -84,6 +84,9 @@ export class Hud {
   private readonly focusFill: HTMLDivElement;
   private readonly focusLabel: HTMLDivElement;
   private readonly vignette: HTMLDivElement;
+  /** Tinta cian en los bordes mientras el Foco está activo (se lee al instante). */
+  private readonly focusTint: HTMLDivElement;
+  private focusTintOn = false;
   private readonly death: HTMLDivElement;
   private readonly deathCause: HTMLParagraphElement;
   private readonly deathHint: HTMLParagraphElement;
@@ -156,6 +159,7 @@ export class Hud {
     this.focusBox = h('div', { class: 'focus', ariaLabel: 'Foco' }, [h('div', { class: 'focus-track' }, [this.focusFill]), this.focusLabel]);
 
     this.vignette = h('div', { class: 'vignette' });
+    this.focusTint = h('div', { class: 'focus-tint' });
     this.deathCause = h('p', { class: 'death-cause' });
     this.deathHint = h('p', { class: 'death-hint' });
     this.death = h('div', { class: 'death', role: 'alertdialog', ariaLabel: 'Has caído' }, [h('h2', { text: 'HAS CAÍDO' }), this.deathCause, this.deathHint]);
@@ -165,7 +169,7 @@ export class Hud {
 
     this.intel = h('div', { class: 'intel-wrap' });
     this.intel.hidden = true;
-    this.root.append(this.vignette, this.beacon, this.beaconArrow, this.crosshair, this.hitmark, this.dmgRing, this.prompt, this.zone, this.objective, this.markers, this.hints, this.vitals, this.weaponPanel, this.reloadBar, this.style, this.focusBox, this.toast, this.death, this.intel);
+    this.root.append(this.focusTint, this.vignette, this.beacon, this.beaconArrow, this.crosshair, this.hitmark, this.dmgRing, this.prompt, this.zone, this.objective, this.markers, this.hints, this.vitals, this.weaponPanel, this.reloadBar, this.style, this.focusBox, this.toast, this.death, this.intel);
     this.root.hidden = true;
     uiRoot.appendChild(this.root);
   }
@@ -271,6 +275,14 @@ export class Hud {
     this.prompt.hidden = false;
   }
 
+  /** Al cambiar de nivel: nada transitorio del nivel anterior sigue en pantalla. */
+  clearTransient(): void {
+    this.toastT = 0;
+    this.toast.hidden = true;
+    this.setBeacon(null);
+    this.setIntel(null);
+  }
+
   showToast(text: string, seconds = 2.5): void {
     setText(this.toast, text);
     this.toast.hidden = false;
@@ -367,6 +379,10 @@ export class Hud {
     this.set(this.focusFill, 'height', `${Math.round(d.focus)}%`);
     this.focusBox.classList.toggle('ready', d.focusReady && !d.focusActive);
     this.focusBox.classList.toggle('active', d.focusActive);
+    if (d.focusActive !== this.focusTintOn) {
+      this.focusTintOn = d.focusActive;
+      this.focusTint.classList.toggle('on', d.focusActive);
+    }
     setText(this.focusLabel, d.focusActive ? 'FOCO' : d.focusReady ? `${d.focusKey} FOCO` : 'FOCO');
 
     if (this.toastT > 0) {

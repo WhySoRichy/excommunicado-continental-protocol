@@ -136,6 +136,8 @@ export const hub: LevelData = {
     { kind: 'prop', prop: 'barStools', c: [-11.9, 0, -5.2] },
   ],
   spawn: { pos: [0, 0, 8], yaw: 0 },
+  // Título: travelling lento por el vestíbulo hacia la recepción (entre las columnas, sin tocar nada).
+  attract: { from: [-6.5, 3.4, 6.2], to: [6.5, 2.6, 6.2], look: [0, 2.8, -12], period: 40 },
   checkpoints: [
     { id: 'lobby', pos: [0, 0, 8], yaw: 0, radius: 2, label: 'Vestíbulo' },
     { id: 'desk', pos: [0, 0, -9.3], yaw: 0, radius: 2, label: 'Recepción' },

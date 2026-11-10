@@ -107,6 +107,8 @@ export interface QaApi {
   player(): PlayerSnapshot | null;
   teleport(x: number, y: number, z: number, yaw: number): void;
   checkpoint(id: string): boolean;
+  /** Ids de los checkpoints del nivel cargado. */
+  checkpointIds(): string[];
   setLook(yaw: number, pitch: number): void;
   hold(action: Action, on: boolean): void;
   press(action: Action): void;
@@ -296,6 +298,7 @@ export function installQa(game: Game): void {
       game.camera.setYawPitch(yaw, game.camera.pitch);
       game.camera.snap();
     },
+    checkpointIds: () => (game.session?.data.checkpoints ?? []).map((c) => c.id),
     checkpoint: (id: string) => {
       const s = game.session;
       const cp = s?.data.checkpoints.find((c) => c.id === id);

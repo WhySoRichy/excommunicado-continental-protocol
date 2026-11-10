@@ -10,7 +10,7 @@ import { Input, type InputEvent, type Vec2 } from '../core/Input';
 import { AnimationLoop, FIXED_DT, FixedStepAccumulator } from '../core/Loop';
 import { wrapAngle } from '../core/math';
 import { Rng } from '../core/rng';
-import { BrowserStore, deleteProfile, type KeyValueStore, loadProfile, newProfile, type Profile, PROFILE_KEY, saveProfile } from '../core/Save';
+import { BrowserStore, deleteProfile, type KeyValueStore, loadProfile, newProfile, type Profile, PROFILE_KEY, saveProfile, SETTINGS_KEY } from '../core/Save';
 import { loadSettings, saveSettings, type Settings } from '../core/Settings';
 import { CollisionDebugView, DebugOverlay } from '../debug/DebugOverlay';
 import { FrameStats } from '../debug/FrameStats';
@@ -72,6 +72,12 @@ const _head = new Vector3();
 const _feet = new Vector3();
 const _beacon = new Vector3();
 const _orbitTarget = new Vector3(0, 1, 0);
+const _attractFrom = new Vector3();
+const _attractTo = new Vector3();
+/** Órbita de respaldo de la cámara de título (niveles sin `attract`). */
+const ORBIT_SPEED = 0.06;
+const ORBIT_RADIUS = 30;
+const ORBIT_HEIGHT = 16;
 
 export class Game {
   readonly renderer: GameRenderer;
@@ -149,6 +155,8 @@ export class Game {
     this.profile = loaded.profile;
     if (loaded.status === 'reset-corrupt') console.warn('[save] la partida guardada estaba corrupta; se empezó una nueva (copia en localStorage).');
     this.settings = loadSettings(this.store);
+    // Primera vez: si el sistema pide menos movimiento, la cámara no tiembla (se puede cambiar en Ajustes).
+    if (this.store.get(SETTINGS_KEY) === null && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) this.settings.shake = 0;
     this.renderer = new GameRenderer(gameRoot, opts.preset ?? this.settings.preset);
     this.input = new Input(this.renderer.canvas);
     this.input.attach();
@@ -280,6 +288,8 @@ export class Game {
     this.camera.snap();
     this.renderer.prewarm();
     this.collisionView.refresh(this.session.physics);
+    this.hud.clearTransient();
+    this.intelShown = false;
     this.hud.setZone(data.name.toUpperCase());
     this.hud.setObjective('');
     this.hud.setMarkers(0, 0);
@@ -1063,9 +1073,20 @@ export class Game {
   }
 
   private updateAttractCamera(dt: number): void {
-    this.orbit += dt * 0.06;
+    this.orbit += dt;
     const cam = this.renderer.camera;
-    cam.position.set(Math.sin(this.orbit) * 30, 16, Math.cos(this.orbit) * 30);
+    const a = this.session?.data.attract;
+    if (a) {
+      // Ida y vuelta suave (coseno) entre los dos puntos del travelling.
+      const u = 0.5 - 0.5 * Math.cos((2 * Math.PI * this.orbit) / a.period);
+      _attractFrom.set(a.from[0], a.from[1], a.from[2]);
+      _attractTo.set(a.to[0], a.to[1], a.to[2]);
+      cam.position.lerpVectors(_attractFrom, _attractTo, u);
+      cam.lookAt(a.look[0], a.look[1], a.look[2]);
+      return;
+    }
+    const k = this.orbit * ORBIT_SPEED;
+    cam.position.set(Math.sin(k) * ORBIT_RADIUS, ORBIT_HEIGHT, Math.cos(k) * ORBIT_RADIUS);
     cam.lookAt(_orbitTarget);
   }
 

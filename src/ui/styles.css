@@ -707,12 +707,12 @@ body {
   text-shadow: 0 1px 2px #000;
 }
 
+/* Arriba a la derecha (bajo la zona): el centro del borde derecho queda libre para la flecha de la baliza. */
 .style {
   position: absolute;
   right: 18px;
-  top: 50%;
+  top: 44px;
   width: 210px;
-  transform: translateY(-50%);
   text-align: right;
 }
 
@@ -1528,4 +1528,17 @@ body {
 .intel-desc {
   color: var(--c-text-dim);
   font-size: 0.9em;
+}
+
+/* Foco activo: bordes cian (no tapa el centro de la pantalla) */
+.focus-tint {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, rgba(25, 227, 255, 0) 58%, rgba(25, 227, 255, 0.28) 100%);
+  transition: opacity 0.2s;
+}
+.focus-tint.on {
+  opacity: 1;
 }

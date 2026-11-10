@@ -269,6 +269,8 @@ export interface LevelData {
   id: LevelId;
   name: string;
   subtitle?: string;
+  /** Cámara de la pantalla de título: travelling de `from` a `to` (ida y vuelta) mirando a `look`. */
+  attract?: { from: Vec3; to: Vec3; look: Vec3; period: number };
   bounds: { min: Vec3; max: Vec3 };
   /** Por debajo de esta altura el jugador vuelve al último suelo seguro (red de seguridad). */
   killY: number;
