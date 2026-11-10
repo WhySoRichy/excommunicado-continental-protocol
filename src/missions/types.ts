@@ -42,7 +42,7 @@ export const MISSIONS: Record<MissionId, MissionDef> = {
     requires: 'practice',
     parTime: 240,
     hasCivilians: true,
-    available: false,
+    available: true,
   },
   docks: {
     id: 'docks',

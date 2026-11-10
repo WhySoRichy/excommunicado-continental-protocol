@@ -35,6 +35,8 @@ interface Solid {
   maxX: number;
   minZ: number;
   maxZ: number;
+  /** Cara superior (las cajas solo giran en Y). */
+  top: number;
 }
 
 interface RampSurf {
@@ -150,6 +152,8 @@ export class NavGrid {
       const top = y + opts.agentHeight - 0.05;
       for (const s of list) {
         if (x < s.minX - R || x > s.maxX + R || z < s.minZ - R || z > s.maxZ + R) continue;
+        // Lo que sobresale menos que un escalón lo sube el autostep del KCC (peldaños, bordillos).
+        if (s.top <= y + opts.step + 0.02) continue;
         // Toda la altura del agente, muestreada más fino que la losa más delgada.
         for (let sy = y + 0.3; sy <= top; sy += CLEARANCE_STEP) if (insideInflated(s, x, sy, z, R)) return true;
         if (insideInflated(s, x, top, z, R)) return true;
@@ -534,7 +538,7 @@ function makeSolid(ob: OrientedBox): Solid {
       }
     }
   }
-  return { ob, inv: ob.quat.clone().invert(), minX, maxX, minZ, maxZ };
+  return { ob, inv: ob.quat.clone().invert(), minX, maxX, minZ, maxZ, top: ob.center.y + ob.half.y };
 }
 
 /** ¿(x, z) está sobre la huella de la caja? (para superficies caminables). */

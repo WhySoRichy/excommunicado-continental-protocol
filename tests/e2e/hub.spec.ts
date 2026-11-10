@@ -62,7 +62,8 @@ test.describe('Fase 3 · El Continental', () => {
     for (let i = 0; i < 4; i++) await page.keyboard.press('Enter');
     await expect.poll(() => page.evaluate(() => window.__EXCOM__!.menu())).toBe('contracts');
     await expect(page.locator('.contract[data-mission="practice"]')).toContainText('Simulacro de combate');
-    await expect(page.locator('.contract[data-mission="nightclub"]')).toContainText('Próximamente');
+    await expect(page.locator('.contract[data-mission="nightclub"]')).toContainText('Completa "Simulacro de combate"');
+    await expect(page.locator('.contract[data-mission="docks"]')).toContainText('Próximamente');
     expect((await page.evaluate(() => window.__EXCOM__!.profile())).flags.charonMet).toBe(true);
     await page.screenshot({ path: shotPath('fase3-contratos') });
     await page.locator('.contract[data-mission="practice"] button').click();

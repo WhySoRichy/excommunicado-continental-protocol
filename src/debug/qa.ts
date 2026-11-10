@@ -152,6 +152,8 @@ export interface QaApi {
   /** Pulsa un botón de la pantalla actual por su texto. */
   clickButton(label: string): boolean;
   civilians(): Array<{ id: string; alive: boolean; state: string; x: number; z: number; health: number }>;
+  /** Mata a un enemigo en silencio (sin ruido ni alerta): prepara escenarios. */
+  killEnemy(id: string): boolean;
 }
 
 export interface MissionSnapshot {
@@ -453,6 +455,13 @@ export function installQa(game: Game): void {
       const btn = [...document.querySelectorAll<HTMLButtonElement>('#screens button')].find((b) => b.textContent?.trim() === label);
       btn?.click();
       return !!btn;
+    },
+    killEnemy: (id) => {
+      const s = game.session;
+      const e = s?.enemies.enemies.find((x) => x.id === id || x.id.startsWith(`${id}#`));
+      if (!s || !e || !e.alive) return false;
+      e.applyHit(9999, 'body', s.player.feet, 1, true);
+      return true;
     },
     civilians: () => (game.session?.civilians?.list ?? []).map((c) => ({ id: c.id, alive: c.alive, state: c.state, x: c.feet.x, z: c.feet.z, health: c.vitals.health })),
   };
