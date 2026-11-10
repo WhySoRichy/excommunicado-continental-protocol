@@ -3,14 +3,15 @@ import type { AudioEngine } from '../audio/AudioEngine';
 import { EnemyManager } from '../combat/EnemyManager';
 import { Pickups } from '../combat/Pickups';
 import { type CombatCtx, PlayerCombat } from '../combat/PlayerCombat';
-import type { UpgradeId, WeaponId } from '../combat/weapons';
+import { loadoutFor, type UpgradeId } from '../combat/weapons';
 import type { Rng } from '../core/rng';
 import type { PlayerTarget } from '../entities/Enemy';
 import { CharacterRig, PLAYER_COLORS } from '../entities/CharacterRig';
+import { Npc, NPC_LOOKS } from '../entities/Npc';
 import { PlayerController } from '../entities/PlayerController';
 import { buildLevel, type LevelRuntime } from '../levels/LevelBuilder';
 import { NavGrid } from '../levels/nav/NavGrid';
-import type { LevelData } from '../levels/types';
+import type { InteractableDef, LevelData } from '../levels/types';
 import { PhysicsWorld, type Rapier } from '../physics/Physics';
 import type { QualitySettings } from '../render/Renderer';
 import { Vfx } from '../render/vfx';
@@ -24,7 +25,6 @@ export interface SessionDeps {
   rng: Rng;
   camera: CameraRig;
   upgrades: ReadonlySet<UpgradeId>;
-  loadout: WeaponId[];
   accuracyMult: number;
   damageMult: number;
 }
@@ -45,6 +45,7 @@ export class LevelSession {
   readonly combat: PlayerCombat;
   readonly ctx: CombatCtx;
   readonly target: PlayerTarget;
+  readonly npcs: Npc[] = [];
   /** God mode de debug (el daño se ignora). */
   god = false;
   infiniteAmmo = false;
@@ -73,7 +74,7 @@ export class LevelSession {
     this.vfx = new Vfx(scene, deps.quality.particles);
     this.pickups = new Pickups(scene);
     for (const p of data.pickups) this.pickups.add(p.kind, new Vector3(p.pos[0], p.pos[1], p.pos[2]));
-    this.combat = new PlayerCombat(deps.upgrades, deps.loadout);
+    this.combat = new PlayerCombat(deps.upgrades, loadoutFor(deps.upgrades));
     this.enemies = new EnemyManager({
       level: data,
       physics: this.physics,
@@ -108,6 +109,14 @@ export class LevelSession {
       alive: true,
       collider: this.player.collider,
     };
+    for (const it of data.interactables) {
+      if (it.kind !== 'npc') continue;
+      const look = NPC_LOOKS[it.id as keyof typeof NPC_LOOKS];
+      if (!look) continue;
+      const box = data.boxes.find((b) => b.tag === `npc:${it.id}`);
+      const yaw = box?.rotY ?? npcYawTowardRoom(it);
+      this.npcs.push(new Npc({ id: it.id, pos: new Vector3(it.pos[0], it.pos[1], it.pos[2]), yaw, ...look }, scene));
+    }
     this.enemies.spawnInitial();
     this.physics.step();
   }
@@ -126,12 +135,39 @@ export class LevelSession {
     return t;
   }
 
+  /** Interactivo más cercano al alcance y delante del jugador (según el yaw de la cámara). */
+  nearestInteractable(camYaw: number): InteractableDef | null {
+    const f = this.player.feet;
+    const fx = -Math.sin(camYaw);
+    const fz = -Math.cos(camYaw);
+    let best: InteractableDef | null = null;
+    let bestD = Number.POSITIVE_INFINITY;
+    for (const it of this.data.interactables) {
+      const dx = it.pos[0] - f.x;
+      const dz = it.pos[2] - f.z;
+      const d = Math.hypot(dx, dz);
+      if (d > it.radius || Math.abs(it.pos[1] - f.y) > 1.5) continue;
+      // Hay que mirar hacia el objeto (salvo que esté encima).
+      if (d > 0.8 && (dx * fx + dz * fz) / d < 0.2) continue;
+      if (d < bestD) {
+        bestD = d;
+        best = it;
+      }
+    }
+    return best;
+  }
+
+  renderNpcs(dt: number): void {
+    for (const n of this.npcs) n.update(dt, this.player.feet);
+  }
+
   respawnAt(feet: Vector3, yaw: number): void {
     this.player.revive(feet, yaw);
     this.physics.step();
   }
 
   dispose(): void {
+    for (const n of this.npcs) n.dispose();
     this.enemies.dispose();
     this.pickups.dispose();
     this.vfx.dispose();
@@ -141,4 +177,9 @@ export class LevelSession {
     this.physics.dispose();
     void this.deps;
   }
+}
+
+/** Un NPC detrás de un mostrador mira hacia el centro de la sala. */
+function npcYawTowardRoom(it: InteractableDef): number {
+  return Math.atan2(-(0 - it.pos[0]), -(0 - it.pos[2]));
 }

@@ -10,7 +10,7 @@ const qa = params.has('qa') || import.meta.env.DEV;
 const presetParam = params.get('preset');
 const preset: QualityPreset = presetParam === 'low' || presetParam === 'high' ? presetParam : 'medium';
 const levelParam = params.get('level');
-const startLevel: LevelId = levelParam === 'arena' ? 'arena' : 'arena';
+const startLevel: LevelId = levelParam === 'arena' || levelParam === 'practice' ? levelParam : 'hub';
 const pointerLock = !qa || params.get('lock') === '1';
 
 function start(): void {

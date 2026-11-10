@@ -62,6 +62,8 @@ export interface BoxDef {
   shadow?: boolean;
   /** Excluir de la grilla de navegación como superficie caminable. */
   noWalk?: boolean;
+  /** Solo collider (sin mesh): cuerpos de NPC, barreras invisibles. */
+  invisible?: boolean;
   /** Peldaño de escalera (la navegación lo trata como pendiente, no como escalón aislado). */
   stair?: boolean;
   tag?: string;

@@ -1,6 +1,9 @@
 import { Vector3 } from 'three';
+import type { UpgradeId } from '../combat/weapons';
 import type { Action } from '../core/actions';
 import { FIXED_DT } from '../core/Loop';
+import { deleteProfile, type Profile } from '../core/Save';
+import { addCoins } from '../hub/economy';
 import type { Game, QaInvariants } from '../game/Game';
 
 /**
@@ -32,6 +35,53 @@ export interface PlayerSnapshot {
   stats: Record<string, number>;
 }
 
+export interface CombatSnapshot {
+  health: number;
+  armor: number;
+  maxArmor: number;
+  weapon: string;
+  loadout: string[];
+  mag: number;
+  magMax: number;
+  reserve: number;
+  reloading: boolean;
+  multiplier: number;
+  score: number;
+  focus: number;
+  focusActive: boolean;
+  dead: boolean;
+  takedown: boolean;
+  holstered: boolean;
+  stats: Record<string, number>;
+  varietyCount: number;
+  takedownTarget: string | null;
+  blocked: boolean;
+  hitKind: string;
+  aimOverEnemy: boolean;
+  recoil0: number;
+}
+
+export interface EnemySnapshot {
+  id: string;
+  type: string;
+  state: string;
+  alive: boolean;
+  x: number;
+  y: number;
+  z: number;
+  health: number;
+  headY: number;
+}
+
+export interface HubSnapshot {
+  state: string;
+  wave: number;
+  hostile: boolean;
+  lostCoins: number;
+  sirenOn: boolean;
+  alarmIntensity: number;
+}
+
 export interface QaApi {
   readonly ready: boolean;
   luminance(): number;
@@ -43,7 +93,10 @@ export interface QaApi {
   runDebug(id: string): boolean;
   info(): { calls: number; triangles: number; programs: number; pixelRatio: number; preset: string; steps: number };
   state(): string;
+  level(): string;
   playArena(): void;
+  playLevel(id: 'arena' | 'practice', drill?: boolean): Promise<void>;
+  goToHub(): Promise<void>;
   pause(): void;
   resume(): void;
   setManual(on: boolean): void;
@@ -63,7 +116,6 @@ export interface QaApi {
   camera(): { x: number; y: number; z: number; dist: number; fov: number; yaw: number; pitch: number };
   canvas(): { cssW: number; cssH: number; bufW: number; bufH: number; pixelRatio: number };
   prompt(): string;
-  playLevel(id: 'arena' | 'practice', drill?: boolean): Promise<void>;
   combat(): CombatSnapshot | null;
   enemies(): EnemySnapshot[];
   aiStats(): { alive: number; total: number; maxNoProgress: number; stuckEvents: number; states: Record<string, number> } | null;
@@ -75,40 +127,21 @@ export interface QaApi {
   pathTo(x: number, y: number, z: number): Array<{ x: number; y: number; z: number }>;
   combatInconsistencies(): number;
   respawn(): void;
-  hud(): { deathVisible: boolean; reloadVisible: boolean; hitmark: string; style: string; ammo: string };
-}
-
-export interface CombatSnapshot {
-  health: number;
-  armor: number;
-  weapon: string;
-  mag: number;
-  reserve: number;
-  reloading: boolean;
-  multiplier: number;
-  score: number;
-  focus: number;
-  focusActive: boolean;
-  dead: boolean;
-  takedown: boolean;
-  stats: Record<string, number>;
-  varietyCount: number;
-  takedownTarget: string | null;
-  blocked: boolean;
-  hitKind: string;
-  aimOverEnemy: boolean;
-}
-
-export interface EnemySnapshot {
-  id: string;
-  type: string;
-  state: string;
-  alive: boolean;
-  x: number;
-  y: number;
-  z: number;
-  health: number;
-  headY: number;
+  hud(): { deathVisible: boolean; reloadVisible: boolean; hitmark: string; style: string; ammo: string; objective: string; zone: string; toast: string };
+  // --- Hub, perfil y menús ---
+  profile(): Profile;
+  setCoins(n: number): void;
+  resetSave(): void;
+  hub(): HubSnapshot | null;
+  /** Interactúa con lo que haya delante (como pulsar E). */
+  interact(): boolean;
+  nearestInteractable(): string | null;
+  menu(): string | null;
+  dialogLine(): string;
+  advanceDialog(): void;
+  closeMenu(): void;
+  buy(id: UpgradeId): boolean;
+  drill(): { active: boolean; done: boolean };
 }
 
 declare global {
@@ -119,6 +152,16 @@ declare global {
 
 export function installQa(game: Game): void {
   const holds: Action[] = ['sprint', 'aim'];
+  const readHud = (): ReturnType<QaApi['hud']> => ({
+    deathVisible: !(document.querySelector('#hud .death') as HTMLElement | null)?.hidden,
+    reloadVisible: !(document.querySelector('#hud .reload') as HTMLElement | null)?.hidden,
+    hitmark: (document.querySelector('#hud .hitmark') as HTMLElement | null)?.className ?? '',
+    style: document.querySelector('#hud .style-mult')?.textContent ?? '',
+    ammo: `${document.querySelector('#hud .ammo-mag')?.textContent ?? ''}${document.querySelector('#hud .ammo-res')?.textContent ?? ''}`,
+    objective: document.querySelector('#hud .objective')?.textContent ?? '',
+    zone: document.querySelector('#hud .zone-label')?.textContent ?? '',
+    toast: (document.querySelector('#hud .toast') as HTMLElement | null)?.hidden ? '' : (document.querySelector('#hud .toast')?.textContent ?? ''),
+  });
   const api: QaApi = {
     get ready() {
       return game.ready;
@@ -151,9 +194,10 @@ export function installQa(game: Game): void {
       };
     },
     state: () => game.fsm.state,
-    playArena: () => {
-      if (game.fsm.state === 'title') game.playArena();
-    },
+    level: () => game.currentLevel,
+    playArena: () => game.playArena(),
+    playLevel: (id, drill = false) => game.playLevel(id, { drill }),
+    goToHub: () => game.goToHub(),
     pause: () => game.pause(),
     resume: () => game.resume(),
     setManual: (on: boolean) => {
@@ -229,10 +273,6 @@ export function installQa(game: Game): void {
       return { cssW: cv.clientWidth, cssH: cv.clientHeight, bufW: cv.width, bufH: cv.height, pixelRatio: game.renderer.pixelRatio };
     },
     prompt: () => document.querySelector('#hud .prompt:not([hidden]) .prompt-text')?.textContent ?? '',
-    playLevel: async (id, drill = false) => {
-      if (game.fsm.state !== 'title' && game.fsm.state !== 'paused') game.fsm.go('paused');
-      await game.playLevel(id, { drill });
-    },
     combat: () => {
       const s = game.session;
       if (!s) return null;
@@ -241,8 +281,11 @@ export function installQa(game: Game): void {
       return {
         health: c.vitals.health,
         armor: c.vitals.armor,
+        maxArmor: c.vitals.maxArmor,
         weapon: c.current,
+        loadout: [...c.loadout],
         mag: w.mag,
+        magMax: w.def.mag,
         reserve: w.reserve,
         reloading: w.reloading,
         multiplier: c.style.multiplier,
@@ -251,12 +294,14 @@ export function installQa(game: Game): void {
         focusActive: c.focusActive,
         dead: c.dead,
         takedown: !!c.takedown,
+        holstered: c.holstered,
         stats: { ...c.stats },
         varietyCount: c.style.varietyCount,
         takedownTarget: c.takedownCandidate(s.ctx)?.id ?? null,
         blocked: c.blocked,
         hitKind: c.hitMarker.t > 0 ? c.hitMarker.kind : 'none',
         aimOverEnemy: c.aimOver === 'enemy',
+        recoil0: w.def.recoil[0]?.[0] ?? 0,
       };
     },
     enemies: () =>
@@ -274,7 +319,6 @@ export function installQa(game: Game): void {
     aiStats: () => game.session?.enemies.qaStats() ?? null,
     aimAt: (x, y, z) => {
       const c = game.camera;
-      // La mira sale de la cámara: se itera para compensar el desplazamiento del hombro.
       for (let i = 0; i < 4; i++) {
         const dx = x - c.position.x;
         const dy = y - c.position.y;
@@ -312,13 +356,40 @@ export function installQa(game: Game): void {
       game.qaRefreshHud();
       return readHud();
     },
+    profile: () => JSON.parse(JSON.stringify(game.profile)) as Profile,
+    setCoins: (n) => {
+      game.profile.coins = 0;
+      addCoins(game.profile, n);
+      game.saveNow();
+      game.screens.refresh();
+    },
+    resetSave: () => deleteProfile(game.store),
+    hub: () => {
+      const d = game.director;
+      if (!d) return null;
+      const lights = game.session?.level.alarmLights ?? [];
+      return {
+        state: d.state,
+        wave: d.rules.wave,
+        hostile: d.hostile,
+        lostCoins: d.lostCoins,
+        sirenOn: game.audio.sirenOn,
+        alarmIntensity: lights.reduce((m, l) => Math.max(m, l.intensity), 0),
+      };
+    },
+    interact: () => game.qaInteract(),
+    nearestInteractable: () => game.session?.nearestInteractable(game.camera.yaw)?.id ?? null,
+    menu: () => game.screens.current,
+    dialogLine: () => document.querySelector('#screens .dialog-line')?.textContent ?? '',
+    advanceDialog: () => game.screens.advanceDialog(),
+    closeMenu: () => game.closeMenu(),
+    buy: (id) => {
+      const before = game.profile.coins;
+      const btn = document.querySelector<HTMLButtonElement>(`#screens .shop-item[data-item="${id}"] button`);
+      btn?.click();
+      return game.profile.coins < before;
+    },
+    drill: () => ({ active: game.drillActive, done: game.drillDone }),
   };
-  const readHud = () => ({
-      deathVisible: !(document.querySelector('#hud .death') as HTMLElement | null)?.hidden,
-      reloadVisible: !(document.querySelector('#hud .reload') as HTMLElement | null)?.hidden,
-      hitmark: (document.querySelector('#hud .hitmark') as HTMLElement | null)?.className ?? '',
-      style: document.querySelector('#hud .style-mult')?.textContent ?? '',
-      ammo: `${document.querySelector('#hud .ammo-mag')?.textContent ?? ''}${document.querySelector('#hud .ammo-res')?.textContent ?? ''}`,
-    });
   window.__EXCOM__ = api;
 }

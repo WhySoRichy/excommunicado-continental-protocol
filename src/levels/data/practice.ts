@@ -106,7 +106,7 @@ export const practice: LevelData = {
     { id: 'p-med-1', kind: 'medkit', pos: [-8, 0, -12] },
     { id: 'p-arm-1', kind: 'armor', pos: [16, 0, -12] },
   ],
-  interactables: [],
+  interactables: [{ id: 'elevator-up', kind: 'door', pos: [0, 0, 12.6], radius: 1.8, prompt: 'Subir al Continental', action: 'goto:hub' }],
   triggers: [],
   music: 'practice',
   ambience: 'range',

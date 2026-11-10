@@ -48,6 +48,7 @@ export class Hud {
   private readonly promptKey: HTMLElement;
   private readonly promptText: HTMLSpanElement;
   private readonly zone: HTMLDivElement;
+  private readonly objective: HTMLDivElement;
   private readonly hints: HTMLDivElement;
   private readonly vitals: HTMLDivElement;
   private readonly armorBar: HTMLDivElement;
@@ -92,6 +93,8 @@ export class Hud {
     this.prompt = h('div', { class: 'prompt', role: 'status' }, [this.promptKey, this.promptText]);
     this.prompt.hidden = true;
     this.zone = h('div', { class: 'zone-label' });
+    this.objective = h('div', { class: 'objective', role: 'status', ariaLabel: 'Objetivo actual' });
+    this.objective.hidden = true;
     this.hints = h('div', { class: 'hints' });
 
     this.armorBar = h('div', { class: 'bar-fill armor' });
@@ -143,7 +146,7 @@ export class Hud {
     this.toast = h('div', { class: 'toast', role: 'status' });
     this.toast.hidden = true;
 
-    this.root.append(this.vignette, this.crosshair, this.hitmark, this.dmgRing, this.prompt, this.zone, this.hints, this.vitals, this.weaponPanel, this.reloadBar, this.style, this.focusBox, this.toast, this.death);
+    this.root.append(this.vignette, this.crosshair, this.hitmark, this.dmgRing, this.prompt, this.zone, this.objective, this.hints, this.vitals, this.weaponPanel, this.reloadBar, this.style, this.focusBox, this.toast, this.death);
     this.root.hidden = true;
     uiRoot.appendChild(this.root);
   }
@@ -161,6 +164,16 @@ export class Hud {
 
   setZone(text: string): void {
     setText(this.zone, text);
+  }
+
+  setCrosshairVisible(v: boolean): void {
+    setVisible(this.crosshair, v);
+  }
+
+  /** Objetivo actual (arriba, centrado). Vacío = oculto. */
+  setObjective(text: string): void {
+    setText(this.objective, text);
+    setVisible(this.objective, text.length > 0);
   }
 
   setHints(lines: PromptSpec[]): void {

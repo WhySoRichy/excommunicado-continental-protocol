@@ -2,20 +2,24 @@ import { Vector3 } from 'three';
 import { AudioEngine } from '../audio/AudioEngine';
 import { type CombatIntent, emptyCombatIntent } from '../combat/PlayerCombat';
 import { STYLE_RANKS } from '../combat/StyleMeter';
-import type { WeaponId } from '../combat/weapons';
+import type { UpgradeId, WeaponId } from '../combat/weapons';
 import type { Action } from '../core/actions';
 import { GameStateMachine, type GameStateId } from '../core/GameStateMachine';
 import { Input, type InputEvent, type Vec2 } from '../core/Input';
 import { AnimationLoop, FIXED_DT, FixedStepAccumulator } from '../core/Loop';
 import { wrapAngle } from '../core/math';
 import { Rng } from '../core/rng';
+import { BrowserStore, deleteProfile, type KeyValueStore, loadProfile, newProfile, type Profile, PROFILE_KEY, recordBest, saveProfile } from '../core/Save';
 import { CollisionDebugView, DebugOverlay } from '../debug/DebugOverlay';
 import { FrameStats } from '../debug/FrameStats';
-import type { EnemyType } from '../levels/types';
 import { idlePose, type RigPose, type WeaponModel } from '../entities/CharacterRig';
 import { emptyIntent, type PlayerIntent } from '../entities/PlayerController';
+import { DIALOGUE, HUB_TEXT, rulesPlaque } from '../hub/dialogue';
+import { addCoins, buy, PRACTICE_DRILL_REWARD } from '../hub/economy';
+import { HubDirector } from '../hub/HubDirector';
 import { loadLevelData } from '../levels/registry';
-import type { LevelId } from '../levels/types';
+import type { EnemyType, InteractableDef, LevelId } from '../levels/types';
+import type { MissionId } from '../missions/types';
 import { loadRapier, QueryGroups, type Rapier } from '../physics/Physics';
 import { GameRenderer, type QualityPreset } from '../render/Renderer';
 import { hideBoot, setBootProgress } from '../ui/boot';
@@ -31,6 +35,8 @@ export interface GameOptions {
   startLevel: LevelId;
   /** Usar pointer lock real (por defecto: sí fuera de QA; `?lock=1` lo fuerza en QA). */
   pointerLock: boolean;
+  /** Almacén del guardado (tests inyectan uno en memoria). */
+  store?: KeyValueStore;
 }
 
 /** Contadores de invariantes de QA (deben quedar en 0). */
@@ -47,6 +53,8 @@ const WEAPON_MODEL: Record<WeaponId, WeaponModel> = { carbine: 'rifle', shotgun:
 const SLOT_ACTIONS: Record<WeaponId, Action> = { carbine: 'weapon1', shotgun: 'weapon1', pistol: 'weapon2', knife: 'weapon3' };
 /** Tiempo mínimo en la pantalla de muerte antes de poder reaparecer. */
 const DEATH_MIN = 1.2;
+/** Autoguardado del tiempo de juego. */
+const AUTOSAVE_SEC = 30;
 
 const _head = new Vector3();
 const _feet = new Vector3();
@@ -67,8 +75,11 @@ export class Game {
   readonly camera: CameraRig;
   readonly audio = new AudioEngine();
   readonly rng = new Rng(7);
+  readonly store: KeyValueStore;
+  profile: Profile;
   R: Rapier | null = null;
   session: LevelSession | null = null;
+  director: HubDirector | null = null;
   ready = false;
   steps = 0;
   /** QA: la simulación solo avanza con qa.step() (determinista, independiente del FPS). */
@@ -78,6 +89,10 @@ export class Game {
   pendingLagMs = 0;
   /** Inconsistencias de estado de combate detectadas por QA (deben quedar en 0). */
   combatInconsistencies = 0;
+  currentLevel: LevelId;
+  /** El simulacro del campo de práctica está en curso. */
+  drillActive = false;
+  drillDone = false;
 
   private readonly intent: PlayerIntent = emptyIntent();
   private readonly idleIntent: PlayerIntent = emptyIntent();
@@ -95,24 +110,46 @@ export class Game {
   private cpIndex = 0;
   private deathTimer = 0;
   private deathSlowmo = 0;
+  private deathReturn: 'hub' | 'playing' = 'playing';
   private lastWeaponModel: WeaponModel = 'pistol';
-  private currentLevel: LevelId;
+  private loading = false;
+  private autosaveT = 0;
+  private nearInteractable: InteractableDef | null = null;
+  private drillStart = 0;
 
   constructor(gameRoot: HTMLElement, uiRoot: HTMLElement, opts: GameOptions) {
     this.opts = opts;
     this.currentLevel = opts.startLevel;
+    this.store = opts.store ?? new BrowserStore();
+    const loaded = loadProfile(this.store);
+    this.profile = loaded.profile;
+    if (loaded.status === 'reset-corrupt') console.warn('[save] la partida guardada estaba corrupta; se empezó una nueva (copia en localStorage).');
     this.renderer = new GameRenderer(gameRoot, opts.preset);
     this.input = new Input(this.renderer.canvas);
     this.input.attach();
     this.input.on((e) => this.onInputEvent(e));
     this.camera = new CameraRig(this.renderer.camera, this.rng);
     this.hud = new Hud(uiRoot);
-    this.screens = new Screens(uiRoot, this.input, {
-      onPlayArena: () => void this.playLevel('arena'),
-      onPlayPractice: () => void this.playLevel('practice', { drill: true }),
-      onResume: () => this.resume(),
-      onQuitToTitle: () => this.quitToTitle(),
-    });
+    this.screens = new Screens(
+      uiRoot,
+      this.input,
+      {
+        onContinue: () => void this.goToHub(),
+        onNewGame: () => this.newGame(),
+        onPlayArena: () => void this.playLevel('arena'),
+        onPlayPractice: () => void this.playLevel('practice', { drill: true }),
+        onResume: () => this.resume(),
+        onReturnToHub: () => void this.goToHub(),
+        onQuitToTitle: () => this.quitToTitle(),
+        onCloseMenu: () => this.closeMenu(),
+        onBuy: (id) => this.buyUpgrade(id),
+        onStartMission: (id) => this.startMission(id),
+        hasSave: () => this.store.get(PROFILE_KEY) !== null,
+        inHub: () => this.currentLevel === 'hub',
+        profile: () => this.profile,
+      },
+      opts.qa,
+    );
     this.captureOverlay = h('div', { class: 'capture-overlay', role: 'button', tabIndex: 0, ariaLabel: 'Haz clic para capturar el ratón' }, [
       h('div', { class: 'capture-box' }, [h('strong', { text: 'Haz clic para jugar' }), h('span', { text: 'El ratón controla la cámara. Esc para pausar.' })]),
     ]);
@@ -157,6 +194,11 @@ export class Game {
     const unlockAudio = (): void => this.audio.init();
     window.addEventListener('pointerdown', unlockAudio);
     window.addEventListener('keydown', unlockAudio);
+    // Guardar al salir o al ocultar la pestaña.
+    window.addEventListener('pagehide', () => this.saveNow());
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') this.saveNow();
+    });
     // F3 y teclas rápidas de debug (solo con el overlay abierto) fuera del mapa de acciones.
     window.addEventListener('keydown', (e) => {
       if (e.code === 'F3') {
@@ -172,10 +214,10 @@ export class Game {
   async boot(): Promise<void> {
     setBootProgress(0.15, 'Cargando motor de física…');
     this.R = await loadRapier();
-    setBootProgress(0.6, 'Preparando el escenario…');
+    setBootProgress(0.6, 'Preparando el Continental…');
     await this.loadSession(this.opts.startLevel);
     setBootProgress(1, 'Listo');
-    hideBoot();
+    hideBoot(this.opts.qa);
     this.loop.start();
     this.fsm.go('title');
     this.ready = true;
@@ -184,6 +226,8 @@ export class Game {
   async loadSession(id: LevelId): Promise<void> {
     if (!this.R) throw new Error('loadSession antes de boot()');
     const data = await loadLevelData(id);
+    this.director?.dispose();
+    this.director = null;
     this.session?.dispose();
     this.session = new LevelSession(data, {
       R: this.R,
@@ -192,8 +236,7 @@ export class Game {
       audio: this.audio,
       rng: this.rng,
       camera: this.camera,
-      upgrades: new Set(),
-      loadout: ['carbine', 'pistol', 'knife'],
+      upgrades: new Set(this.profile.upgrades),
       accuracyMult: 1,
       damageMult: 1,
     });
@@ -204,7 +247,27 @@ export class Game {
     this.renderer.prewarm();
     this.collisionView.refresh(this.session.physics);
     this.hud.setZone(data.name.toUpperCase());
+    this.hud.setObjective('');
+    this.hud.setCombatVisible(true);
+    this.audio.ambience(data.ambience);
     this.cpIndex = 0;
+    this.drillActive = false;
+    this.drillDone = false;
+    this.lastWeaponModel = 'none';
+  }
+
+  // =========================================================== guardado
+  saveNow(): void {
+    this.profile.playtimeSec += Math.floor(this.autosaveT);
+    this.autosaveT = 0;
+    saveProfile(this.store, this.profile);
+  }
+
+  private newGame(): void {
+    deleteProfile(this.store);
+    this.profile = newProfile();
+    saveProfile(this.store, this.profile);
+    void this.goToHub();
   }
 
   // =========================================================== estados
@@ -216,31 +279,73 @@ export class Game {
     this.hud.setVisible(controlling || to === 'paused' || to === 'dead');
     if (to === 'title') this.screens.show('title');
     else if (to === 'paused') this.screens.show('pause');
-    else this.screens.hide();
+    else if (to !== 'hubMenu') this.screens.hide();
     if (to !== 'dead') this.hud.hideDeath();
     if (!controlling && document.pointerLockElement && to !== 'dead') document.exitPointerLock();
     this.updateCaptureOverlay();
     void from;
   }
 
-  /** Carga (si hace falta) y empieza a jugar un nivel. */
-  async playLevel(id: LevelId, o: { drill?: boolean } = {}): Promise<void> {
-    if (this.fsm.state !== 'title' && this.fsm.state !== 'paused') return;
+  /** Entra (o vuelve) al Continental. */
+  async goToHub(): Promise<void> {
+    if (this.loading || !this.fsm.can('loading')) return;
+    this.loading = true;
     this.audio.init();
-    // El clic que llega aquí es un gesto del usuario: se pide el pointer lock antes del await.
     this.requestLock();
     this.fsm.go('loading');
-    if (id !== this.currentLevel || !this.session) await this.loadSession(id);
+    if (this.currentLevel !== 'hub' || !this.session) await this.loadSession('hub');
     const s = this.session;
-    if (!s) return;
+    if (!s) {
+      this.loading = false;
+      return;
+    }
     const sp = s.data.spawn;
     s.respawnAt(new Vector3(sp.pos[0], sp.pos[1] + 0.02, sp.pos[2]), sp.yaw);
     s.combat.respawnReset();
-    if (o.drill) s.enemies.spawnEvent('drill');
+    this.camera.setYawPitch(sp.yaw, -0.12);
+    this.camera.snap();
+    this.director?.dispose();
+    this.director = new HubDirector({
+      session: s,
+      hud: this.hud,
+      audio: this.audio,
+      profile: this.profile,
+      save: () => this.saveNow(),
+      dialog: (d) => this.openMenu(() => this.screens.showDialog(d)),
+    });
+    this.setHintsFor('hub');
+    this.fsm.go('hub');
+    this.loading = false;
+  }
+
+  /** Carga (si hace falta) y empieza a jugar un nivel de acción. */
+  async playLevel(id: LevelId, o: { drill?: boolean } = {}): Promise<void> {
+    if (this.loading || !this.fsm.can('loading')) return;
+    this.loading = true;
+    this.audio.init();
+    // El clic/tecla que llega aquí es un gesto del usuario: se pide el pointer lock antes del await.
+    this.requestLock();
+    this.fsm.go('loading');
+    if (id !== this.currentLevel || !this.session || this.director) await this.loadSession(id);
+    const s = this.session;
+    if (!s) {
+      this.loading = false;
+      return;
+    }
+    const sp = s.data.spawn;
+    s.respawnAt(new Vector3(sp.pos[0], sp.pos[1] + 0.02, sp.pos[2]), sp.yaw);
+    s.combat.respawnReset();
+    if (o.drill) {
+      s.enemies.spawnEvent('drill');
+      this.drillActive = true;
+      this.drillStart = performance.now();
+      this.hud.setObjective(HUB_TEXT.objectiveDrill);
+    }
     this.camera.setYawPitch(sp.yaw, -0.12);
     this.camera.snap();
     this.setHintsFor(id);
     this.fsm.go('playing');
+    this.loading = false;
   }
 
   /** Atajo usado por la pantalla de título y por QA. */
@@ -248,9 +353,20 @@ export class Game {
     void this.playLevel('arena');
   }
 
+  private startMission(id: MissionId): void {
+    if (id === 'practice') void this.playLevel('practice', { drill: true });
+  }
+
   private setHintsFor(id: LevelId): void {
     const lab = (a: Action): string => this.input.label(a);
-    if (id === 'arena') {
+    if (id === 'hub') {
+      this.hud.setHints([
+        { key: 'WASD', text: 'Mover' },
+        { key: lab('interact'), text: 'Hablar · leer · usar el ascensor' },
+        { key: lab('sprint'), text: 'Sprint' },
+        { key: lab('help'), text: 'Controles' },
+      ]);
+    } else if (id === 'arena') {
       this.hud.setHints([
         { key: 'WASD', text: 'Mover' },
         { key: lab('sprint'), text: 'Sprint' },
@@ -288,7 +404,93 @@ export class Game {
   }
 
   private quitToTitle(): void {
-    if (this.fsm.state === 'paused') this.fsm.go('title');
+    if (this.fsm.state !== 'paused') return;
+    this.saveNow();
+    this.fsm.go('title');
+  }
+
+  // =========================================================== menús del hub
+  private openMenu(show: () => void): void {
+    if (this.fsm.state === 'hub') this.fsm.go('hubMenu');
+    else if (this.fsm.state !== 'hubMenu') return;
+    this.session?.player.haltOnPause();
+    show();
+  }
+
+  closeMenu(): void {
+    if (this.fsm.state !== 'hubMenu') return;
+    this.screens.hide();
+    this.requestLock();
+    this.fsm.go('hub');
+  }
+
+  private buyUpgrade(id: UpgradeId): void {
+    if (!buy(this.profile, id)) {
+      this.audio.ui('error');
+      return;
+    }
+    this.audio.ui('coin');
+    this.saveNow();
+    this.session?.combat.applyOwned(new Set(this.profile.upgrades));
+    this.screens.refresh();
+  }
+
+  /** Acción de un interactivo (E). */
+  private interact(it: InteractableDef): void {
+    const p = this.profile;
+    this.audio.ui('click');
+    switch (it.action) {
+      case 'talk:charon':
+        if (!p.flags.charonMet) {
+          this.openMenu(() =>
+            this.screens.showDialog(DIALOGUE.charonFirst, () => {
+              p.flags.charonMet = true;
+              this.saveNow();
+              this.hud.setObjective(HUB_TEXT.objectiveHub);
+              this.screens.show('contracts');
+            }),
+          );
+        } else this.openMenu(() => this.screens.showDialog(DIALOGUE.charonBoard, () => this.screens.show('contracts')));
+        break;
+      case 'talk:sommelier': {
+        const first = !p.flags.sommelierMet;
+        this.openMenu(() =>
+          this.screens.showDialog(first ? DIALOGUE.sommelierFirst : DIALOGUE.sommelierRepeat, () => {
+            p.flags.sommelierMet = true;
+            this.screens.show('shop');
+          }),
+        );
+        break;
+      }
+      case 'talk:winston': {
+        const first = !p.flags.winstonMet;
+        this.openMenu(() =>
+          this.screens.showDialog(first ? DIALOGUE.winstonFirst : DIALOGUE.winstonRepeat, () => {
+            p.flags.winstonMet = true;
+            this.saveNow();
+            this.closeMenu();
+          }),
+        );
+        break;
+      }
+      case 'read:rules': {
+        const lab = (a: Action): string => this.input.label(a);
+        this.openMenu(() =>
+          this.screens.showDialog(
+            rulesPlaque({ interact: lab('interact'), fire: lab('fire'), crouch: lab('crouch'), jump: lab('jump'), takedown: lab('takedown'), reload: lab('reload'), focus: lab('focus'), sprint: lab('sprint') }),
+          ),
+        );
+        break;
+      }
+      case 'goto:practice':
+        void this.playLevel('practice', { drill: true });
+        break;
+      case 'goto:hub':
+        void this.goToHub();
+        break;
+      default:
+        console.warn('[hub] acción desconocida', it.action);
+    }
   }
 
   /** Pointer lock. Si el navegador lo rechaza, queda el aviso "Haz clic para jugar". */
@@ -354,11 +556,12 @@ export class Game {
     if (controlling) {
       this.input.padLookAxis(this.pad);
       this.camera.look(this.mouse.x, this.mouse.y, this.pad.x, this.pad.y, realDt);
+      this.autosaveT += realDt;
+      if (this.autosaveT >= AUTOSAVE_SEC) this.saveNow();
     }
 
     if (s) {
       s.combat.frameUpdate(realDt, this.audio);
-      // Foco: cámara lenta; muerte: breve cámara lenta dramática.
       this.deathSlowmo = Math.max(0, this.deathSlowmo - realDt);
       this.sim.timeScale = this.deathSlowmo > 0 ? 0.4 : s.combat.timeScale;
       this.audio.setMuffle(s.combat.focusActive ? 0.55 : 0);
@@ -370,10 +573,13 @@ export class Game {
 
     const alpha = this.manual ? 1 : this.sim.alpha;
     const scaledDt = realDt * this.sim.timeScale;
-    if (s && (controlling || this.fsm.state === 'paused' || this.fsm.state === 'dead')) {
+    const inWorld = controlling || this.fsm.state === 'paused' || this.fsm.state === 'dead' || this.fsm.state === 'hubMenu';
+    if (s && inWorld) {
       this.updatePlayerView(alpha, realDt, scaledDt);
       s.enemies.renderUpdate(alpha, scaledDt);
       s.vfx.update(scaledDt);
+      s.renderNpcs(scaledDt);
+      this.director?.frameUpdate(scaledDt);
     } else {
       this.updateAttractCamera(realDt);
     }
@@ -382,7 +588,6 @@ export class Game {
 
     this.debug.update(realDt, () => this.debugText());
     if (this.collisionView.enabled && s) this.collisionView.refresh(s.physics);
-    // Sin simulación (menús) no hay pasos que limpien los latches: se limpian por frame.
     if (!this.fsm.simulating) this.input.endStep();
     this.renderer.render();
     this.lastCpuMs = performance.now() - t0;
@@ -399,6 +604,14 @@ export class Game {
         inp.consume('pause');
         inp.consume('help');
         this.screens.closeControls();
+      }
+      return;
+    }
+    if (this.fsm.state === 'hubMenu') {
+      // Esc cierra tienda/contratos (el diálogo lo gestiona Screens con E/Enter).
+      if (inp.pressed('pause') && this.screens.current !== 'dialog') {
+        inp.consume('pause');
+        this.closeMenu();
       }
       return;
     }
@@ -462,6 +675,16 @@ export class Game {
     const s = this.session;
     if (!s) return;
     const controlling = this.fsm.controlling;
+    // Interactuar (E) tiene prioridad sobre saltar cuando hay algo delante (comparten botón A en gamepad).
+    if (controlling && this.nearInteractable && this.input.pressed('interact') && !this.director?.hostile) {
+      this.input.consume('interact');
+      this.input.consume('jump');
+      this.interact(this.nearInteractable);
+      if (!this.fsm.controlling) {
+        this.input.endStep();
+        return;
+      }
+    }
     const it = controlling ? this.buildIntent() : this.idleIntent;
     s.player.fixedUpdate(dt, it);
     const ci = controlling ? this.buildCombatIntent() : this.idleCIntent;
@@ -469,22 +692,47 @@ export class Game {
     s.combat.fixedUpdate(dt, ci, s.ctx);
     s.enemies.fixedUpdate(dt, s.updateTarget(dt));
     s.pickups.update(dt);
+    this.director?.fixedUpdate(dt);
     s.physics.step();
     this.steps++;
     if (this.opts.qa) {
       this.checkPlayerInvariants();
       this.checkCombatInvariants();
     }
-    if (s.combat.dead && this.fsm.state === 'playing') this.onPlayerDeath();
+    if (this.drillActive && !this.drillDone && s.enemies.enemies.length > 0 && s.enemies.aliveCount === 0) this.onDrillDone();
+    if (s.combat.dead && this.fsm.controlling) this.onPlayerDeath();
     this.input.endStep();
+  }
+
+  private onDrillDone(): void {
+    this.drillDone = true;
+    const p = this.profile;
+    const first = !p.flags.practiceDrillDone;
+    const timeSec = (performance.now() - this.drillStart) / 1000;
+    const s = this.session;
+    // Rango provisional hasta la Fase 4 (combat/rank.ts): sin muertes B, con muertes C.
+    recordBest(p, 'practice', { rank: s && s.combat.stats.deaths === 0 ? 'B' : 'C', score: s?.combat.style.score ?? 0, timeSec: Math.round(timeSec) });
+    if (first) {
+      p.flags.practiceDrillDone = true;
+      addCoins(p, PRACTICE_DRILL_REWARD);
+      this.hud.showToast(HUB_TEXT.drillDone(PRACTICE_DRILL_REWARD), 5);
+      this.audio.ui('coin');
+    } else {
+      this.hud.showToast(HUB_TEXT.drillRepeat, 4);
+      this.audio.ui('confirm');
+    }
+    this.hud.setObjective(HUB_TEXT.objectiveDrillDone);
+    this.saveNow();
   }
 
   private onPlayerDeath(): void {
     const s = this.session;
     if (!s) return;
+    this.deathReturn = this.fsm.state === 'hub' ? 'hub' : 'playing';
     this.fsm.go('dead');
     this.deathTimer = 0;
     this.deathSlowmo = 0.9;
+    this.director?.onPlayerDied();
     const lab = this.input.label('jump');
     this.hud.showDeath(s.combat.deathCause(this.camera.yaw), `Pulsa ${lab} o clic para reaparecer`);
   }
@@ -499,7 +747,7 @@ export class Game {
     this.camera.setYawPitch(sp.yaw, -0.12);
     this.camera.snap();
     this.hud.hideDeath();
-    this.fsm.go('playing');
+    this.fsm.go(this.deathReturn);
   }
 
   // =========================================================== vista
@@ -515,7 +763,7 @@ export class Game {
     const yaw = p.renderYaw(alpha);
     rig.root.rotation.y = yaw;
     const c = s.combat;
-    const model = WEAPON_MODEL[c.current];
+    const model: WeaponModel = c.holstered ? 'none' : WEAPON_MODEL[c.current];
     if (model !== this.lastWeaponModel) {
       this.lastWeaponModel = model;
       rig.setWeapon(model);
@@ -528,7 +776,7 @@ export class Game {
     pose.state = p.state;
     pose.posture = p.posture;
     pose.grounded = p.grounded;
-    pose.aim = p.aiming || c.weapon.cooldown > 0 ? 1 : 0;
+    pose.aim = !c.holstered && (p.aiming || c.weapon.cooldown > 0) ? 1 : 0;
     pose.aimPitch = this.camera.pitch;
     pose.stateTime = p.stateTime;
     pose.reload = c.weapon.reloadProgress;
@@ -569,7 +817,6 @@ export class Game {
     });
     d.reload = w.reloadProgress;
     d.perfect = w.perfectAvailable ? w.perfectWindow : null;
-    // Spread (grados) → px en pantalla según el FOV actual.
     const fov = (this.renderer.camera.fov * Math.PI) / 180;
     const pxPerRad = window.innerHeight / 2 / Math.tan(fov / 2);
     d.spreadPx = Math.max(4, Math.min(60, Math.tan((c.spreadDeg * Math.PI) / 180) * pxPerRad));
@@ -593,18 +840,21 @@ export class Game {
     d.focusReady = c.focus >= 30;
     d.focusKey = this.input.label('focus');
     this.hud.update(d, dt);
+    this.hud.setCrosshairVisible(!c.holstered);
     this.peekTimer -= dt;
     if (this.peekTimer <= 0) {
       this.peekTimer = 0.1;
+      this.nearInteractable = this.fsm.controlling && !this.director?.hostile ? s.nearestInteractable(this.camera.yaw) : null;
       this.hud.setPrompt(this.contextPrompt());
     }
   }
 
   private contextPrompt(): PromptSpec | null {
     const s = this.session;
-    if (!s || this.fsm.state !== 'playing') return null;
+    if (!s || !this.fsm.controlling) return null;
     const p = s.player;
     const lab = (a: Action): string => this.input.label(a);
+    if (this.nearInteractable) return { key: lab('interact'), text: this.nearInteractable.prompt };
     if (s.combat.takedownCandidate(s.ctx)) return { key: lab('takedown'), text: 'Takedown' };
     if (p.state === 'cover' && p.cover) {
       return p.cover.height === 'low'
@@ -694,6 +944,8 @@ export class Game {
       s.enemies.renderUpdate(1, FIXED_DT);
       s.vfx.update(FIXED_DT);
       s.combat.frameUpdate(FIXED_DT, this.audio);
+      this.director?.frameUpdate(FIXED_DT);
+      if (this.fsm.controlling || this.fsm.state === 'dead') this.updateHud(FIXED_DT);
     }
   }
 
@@ -713,6 +965,17 @@ export class Game {
   /** QA: reaparecer sin esperar la pantalla de muerte. */
   qaRespawn(): void {
     if (this.fsm.state === 'dead') this.respawn();
+  }
+
+  /** QA: interactúa con lo que haya delante (como pulsar E). */
+  qaInteract(): boolean {
+    const s = this.session;
+    if (!s || !this.fsm.controlling || this.director?.hostile) return false;
+    const it = s.nearestInteractable(this.camera.yaw);
+    if (!it) return false;
+    this.nearInteractable = it;
+    this.interact(it);
+    return true;
   }
 
   resetInvariants(): void {
@@ -782,6 +1045,16 @@ export class Game {
       { hotkey: 'KeyK' },
     );
     d.addCommand(
+      'coins',
+      '+10 monedas',
+      () => {
+        addCoins(this.profile, 10);
+        this.saveNow();
+        this.screens.refresh();
+      },
+      { hotkey: 'KeyI' },
+    );
+    d.addCommand(
       'nextCheckpoint',
       'Siguiente checkpoint',
       () => {
@@ -830,14 +1103,15 @@ export class Game {
       `Geometrías ${info.memory.geometries}   texturas ${info.memory.textures}`,
       `Resolución ×${this.renderer.pixelRatio.toFixed(2)}  (dinámica ×${this.renderer.dynamicScale.toFixed(1)})  preset ${this.renderer.preset}`,
       `Estado ${this.fsm.state}   nivel ${s?.data.name ?? '—'}   colliders ${s?.physics.colliderCount ?? 0}   nav ${s?.nav.nodeCount ?? 0} nodos`,
+      `Perfil: ${this.profile.coins} monedas   mejoras ${this.profile.upgrades.join(',') || '—'}   excomunicados ${this.profile.excommunicados}`,
     ];
     if (p && s) {
       const ai = s.enemies.qaStats();
       lines.push(
         `Jugador ${p.feet.x.toFixed(2)}, ${p.feet.y.toFixed(2)}, ${p.feet.z.toFixed(2)}  ${p.state}/${p.posture}  suelo=${p.grounded ? 'sí' : 'no'}  v=${p.stepSpeed(FIXED_DT).toFixed(2)} m/s`,
-        `Salud ${Math.ceil(s.combat.vitals.health)}  armadura ${Math.ceil(s.combat.vitals.armor)}  arma ${s.combat.current} ${s.combat.weapon.mag}/${s.combat.weapon.reserve}`,
+        `Salud ${Math.ceil(s.combat.vitals.health)}  armadura ${Math.ceil(s.combat.vitals.armor)}  arma ${s.combat.current} ${s.combat.weapon.mag}/${s.combat.weapon.reserve}  ${s.combat.holstered ? 'enfundada' : ''}`,
         `Enemigos vivos ${ai.alive}/${ai.total}  atascos ${ai.stuckEvents}  máx. sin avanzar ${ai.maxNoProgress.toFixed(1)} s  ${Object.entries(ai.states).map(([k, v]) => `${k}:${v}`).join(' ')}`,
-        `Cámara dist ${this.camera.distanceToHead.toFixed(2)}  yaw ${this.camera.yaw.toFixed(2)}  pitch ${this.camera.pitch.toFixed(2)}`,
+        `Hub ${this.director ? `${this.director.state} oleada ${this.director.rules.wave}` : '—'}   cámara dist ${this.camera.distanceToHead.toFixed(2)}  yaw ${this.camera.yaw.toFixed(2)}`,
         `Input mantenidas ${this.input.heldCount}  pointer lock ${this.input.pointerLocked ? 'sí' : 'no'}  dispositivo ${this.input.lastDevice}`,
       );
     }

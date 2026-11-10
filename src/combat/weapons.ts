@@ -232,3 +232,8 @@ export function suitArmor(owned: ReadonlySet<UpgradeId>): number {
 export function markersPerContract(owned: ReadonlySet<UpgradeId>): number {
   return owned.has('extraMarker') ? 4 : 3;
 }
+
+/** Equipo del jugador según las mejoras compradas (la escopeta se suma a la carabina). */
+export function loadoutFor(owned: ReadonlySet<UpgradeId>): WeaponId[] {
+  return owned.has('shotgun') ? ['carbine', 'shotgun', 'pistol', 'knife'] : ['carbine', 'pistol', 'knife'];
+}

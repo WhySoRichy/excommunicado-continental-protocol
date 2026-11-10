@@ -1,3 +1,4 @@
+import type { AmbienceKind } from '../levels/types';
 import type { Vec3Like } from '../physics/Physics';
 
 /**
@@ -63,6 +64,7 @@ export class AudioEngine {
     for (const b of [this.sfxBus, this.musicBus, this.uiBus, this.ambBus]) b.connect(this.master);
     this.noise = makeNoise(ctx, 1.5);
     this.applyVolumes();
+    this.applyAmbience();
   }
 
   setVolumes(v: Partial<AudioVolumes>): void {
@@ -180,6 +182,128 @@ export class AudioEngine {
     o.start(t);
     o.stop(t + opts.decay + 0.05);
     this.release(o);
+  }
+
+  // ======================= Alarma y ambiente =======================
+  private sirenNodes: { osc: OscillatorNode; lfo: OscillatorNode; gain: GainNode } | null = null;
+  private ambNodes: AudioScheduledSourceNode[] = [];
+  private ambGain: GainNode | null = null;
+  private ambKind: AmbienceKind = 'none';
+
+  /** Sirena del Excomunicado (barrido 430–770 Hz). */
+  siren(on: boolean): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    if (on) {
+      if (this.sirenNodes) return;
+      const osc = ctx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.value = 600;
+      const lfo = ctx.createOscillator();
+      lfo.type = 'sine';
+      lfo.frequency.value = 0.55;
+      const lfoGain = ctx.createGain();
+      lfoGain.gain.value = 170;
+      lfo.connect(lfoGain).connect(osc.frequency);
+      const f = ctx.createBiquadFilter();
+      f.type = 'lowpass';
+      f.frequency.value = 1600;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(0.14, t + 0.4);
+      osc.connect(f).connect(gain).connect(this.ambBus);
+      osc.start(t);
+      lfo.start(t);
+      this.sirenNodes = { osc, lfo, gain };
+    } else if (this.sirenNodes) {
+      const n = this.sirenNodes;
+      this.sirenNodes = null;
+      n.gain.gain.setTargetAtTime(0.0001, t, 0.15);
+      n.osc.stop(t + 0.8);
+      n.lfo.stop(t + 0.8);
+    }
+  }
+
+  get sirenOn(): boolean {
+    return this.sirenNodes !== null;
+  }
+
+  /** Ambiente por nivel (lluvia + acorde en Re menor en el hotel, zumbido en el sótano). */
+  ambience(kind: AmbienceKind): void {
+    this.ambKind = kind;
+    if (this.ctx) this.applyAmbience();
+  }
+
+  private applyAmbience(): void {
+    const ctx = this.ctx;
+    if (!ctx || !this.noise) return;
+    const t = ctx.currentTime;
+    if (this.ambGain) {
+      const g = this.ambGain;
+      g.gain.setTargetAtTime(0.0001, t, 0.3);
+      for (const n of this.ambNodes) n.stop(t + 1.5);
+      this.ambNodes = [];
+      this.ambGain = null;
+    }
+    if (this.ambKind === 'none') return;
+    const master = ctx.createGain();
+    master.gain.setValueAtTime(0.0001, t);
+    master.gain.exponentialRampToValueAtTime(1, t + 1.5);
+    master.connect(this.ambBus);
+    this.ambGain = master;
+    const noise = ctx.createBufferSource();
+    noise.buffer = this.noise;
+    noise.loop = true;
+    const nf = ctx.createBiquadFilter();
+    nf.type = 'lowpass';
+    const ng = ctx.createGain();
+    noise.connect(nf).connect(ng).connect(master);
+    noise.start(t);
+    this.ambNodes.push(noise);
+    switch (this.ambKind) {
+      case 'lobby': {
+        nf.frequency.value = 650;
+        ng.gain.value = 0.05;
+        for (const [i, freq] of [73.42, 110, 174.61].entries()) {
+          const o = ctx.createOscillator();
+          o.type = i === 1 ? 'sine' : 'sawtooth';
+          o.frequency.value = freq;
+          const lf = ctx.createBiquadFilter();
+          lf.type = 'lowpass';
+          lf.frequency.value = 300;
+          const lfo = ctx.createOscillator();
+          lfo.frequency.value = 0.07 + i * 0.03;
+          const lg = ctx.createGain();
+          lg.gain.value = 110;
+          lfo.connect(lg).connect(lf.frequency);
+          const g = ctx.createGain();
+          g.gain.value = 0.03;
+          o.connect(lf).connect(g).connect(master);
+          o.start(t);
+          lfo.start(t);
+          this.ambNodes.push(o, lfo);
+        }
+        break;
+      }
+      case 'range': {
+        nf.frequency.value = 400;
+        ng.gain.value = 0.03;
+        const hum = ctx.createOscillator();
+        hum.type = 'triangle';
+        hum.frequency.value = 50;
+        const hg = ctx.createGain();
+        hg.gain.value = 0.025;
+        hum.connect(hg).connect(master);
+        hum.start(t);
+        this.ambNodes.push(hum);
+        break;
+      }
+      default:
+        nf.frequency.value = 900;
+        ng.gain.value = 0.045;
+        break;
+    }
   }
 
   // ======================= SFX =======================

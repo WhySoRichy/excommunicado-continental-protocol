@@ -73,12 +73,16 @@ export class EnemyManager implements Tactics {
     for (const d of this.deps.level.enemies) if (!d.spawnOn) this.spawn(d);
   }
 
-  /** Aparecen los enemigos asociados a un evento (refuerzos, oleadas). Devuelve cuántos. */
-  spawnEvent(event: string): number {
+  /**
+   * Aparecen los enemigos asociados a un evento (refuerzos, oleadas). Devuelve cuántos.
+   * `aggressive`: asaltan (se acercan a 8 m en vez de disparar desde la puerta).
+   */
+  spawnEvent(event: string, aggressive = false): number {
     let n = 0;
     for (const d of this.deps.level.enemies) {
       if (d.spawnOn === event) {
-        this.spawn({ ...d, id: `${d.id}#${++this.spawnCounter}` });
+        const e = this.spawn({ ...d, id: `${d.id}#${++this.spawnCounter}` });
+        e.brain.aggressive = aggressive;
         n++;
       }
     }
@@ -148,6 +152,14 @@ export class EnemyManager implements Tactics {
 
   renderUpdate(alpha: number, dt: number): void {
     for (const e of this.enemies) e.renderUpdate(alpha, dt);
+  }
+
+  /** Retira a todos los enemigos (vivos y caídos): fin del Excomunicado. */
+  despawnAll(): void {
+    for (const e of this.enemies) e.dispose();
+    this.enemies.length = 0;
+    this.byHandle.clear();
+    for (const c of this.cover) c.claimedBy = null;
   }
 
   /** Reaparición del jugador: los vivos vuelven a su punto con salud completa. */

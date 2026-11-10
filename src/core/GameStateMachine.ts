@@ -18,12 +18,12 @@ export const TRANSITIONS: Readonly<Record<GameStateId, readonly GameStateId[]>> 
   boot: ['title', 'loading'],
   title: ['loading'],
   loading: ['hub', 'playing', 'briefing', 'title'],
-  hub: ['hubMenu', 'paused', 'loading', 'playing', 'briefing'],
+  hub: ['hubMenu', 'paused', 'loading', 'playing', 'briefing', 'dead'],
   hubMenu: ['hub', 'briefing', 'loading'],
   briefing: ['loading', 'hub', 'playing'],
   playing: ['paused', 'dead', 'results', 'loading', 'hub'],
   paused: ['hub', 'playing', 'loading', 'title'],
-  dead: ['playing', 'results', 'loading'],
+  dead: ['playing', 'hub', 'results', 'loading'],
   results: ['loading', 'title'],
 };
 

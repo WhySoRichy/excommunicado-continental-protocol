@@ -310,8 +310,11 @@ export class NavGrid {
     return ix + iz * this.nx;
   }
 
-  /** Nodo más cercano a un punto (busca en anillos hasta `maxRadius` m). Prefiere alturas cercanas. */
-  nearestNode(x: number, y: number, z: number, maxRadius = 2.5): number {
+  /**
+   * Nodo más cercano a un punto (busca en anillos hasta `maxRadius` m). Prefiere alturas cercanas.
+   * Con `comp` solo considera nodos de esa componente (evita islas: tapas de muebles, repisas).
+   */
+  nearestNode(x: number, y: number, z: number, maxRadius = 2.5, comp = -1): number {
     const cell = this.opts.cell;
     const ix = Math.floor((x - this.minX) / cell);
     const iz = Math.floor((z - this.minZ) / cell);
@@ -328,6 +331,7 @@ export class NavGrid {
           const col = jx + jz * this.nx;
           for (let k = this.colStart[col]!; k < this.colStart[col + 1]!; k++) {
             const n = this.colNodes[k]!;
+            if (comp >= 0 && this.comp[n] !== comp) continue;
             const ddx = this.nodeX[n]! - x;
             const ddz = this.nodeZ[n]! - z;
             const ddy = (this.nodeY[n]! - y) * 2.5;

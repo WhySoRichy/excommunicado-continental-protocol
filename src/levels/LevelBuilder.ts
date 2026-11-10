@@ -147,6 +147,7 @@ export function buildLevel(data: LevelData, scene: Scene, physics: PhysicsWorld,
   };
 
   for (const b of data.boxes) {
+    if (b.invisible) continue; // solo collider (NPC, barreras)
     const ob = boxToOriented(b);
     accFor(b.mat, b.shadow ?? true, ob.center.x, ob.center.z).appendBox(ob, texScaleOf(b.mat));
   }

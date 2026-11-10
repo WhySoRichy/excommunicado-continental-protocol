@@ -316,7 +316,8 @@ export class Enemy {
     const f = this.mover.feet;
     this.replanCooldown = 0.35;
     const a = nav.nearestNode(f.x, f.y, f.z, 2);
-    const b = nav.nearestNode(goal.x, goal.y, goal.z, 3);
+    // La meta se busca en la MISMA componente que el enemigo: nunca apunta a una isla inalcanzable.
+    const b = a >= 0 ? nav.nearestNode(goal.x, goal.y, goal.z, 3, nav.comp[a]!) : -1;
     const raw = a >= 0 && b >= 0 ? nav.findPath(a, b) : null;
     this.pathGoal.copy(goal);
     if (!raw) {

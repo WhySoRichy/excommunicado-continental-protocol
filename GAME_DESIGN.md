@@ -146,6 +146,7 @@ Hay cinco subnotas de 0 a 100: **tiempo** (frente al par), **precisión** (impac
 - Matar a un civil limita el rango a C.
 
 ### 5.2 Economía: Monedas Continental
+- Fondos iniciales: 8 monedas (cortesía del Continental), para que la armería tenga sentido antes del primer contrato. El simulacro del campo de práctica da 2 monedas la primera vez.
 - Recompensa base: Kairos 6, Muelle 9 8, Torre Meridian 10.
 - Multiplicador por rango: S ×2, A ×1,5, B ×1,25, C ×1, D ×0,75. La primera vez suma +3.
 - En el Gauntlet: 1 moneda por cada 2 oleadas.

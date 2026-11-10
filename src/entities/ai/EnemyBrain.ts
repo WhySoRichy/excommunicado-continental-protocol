@@ -117,6 +117,10 @@ export class EnemyBrain {
   private stuckCount = 0;
   /** Conciencia elevada tras una búsqueda (detecta más rápido). */
   private vigilant = 0;
+  /** Asalto (oleadas del Excomunicado): se acerca en vez de disparar desde lejos. */
+  aggressive = false;
+  /** Distancia máxima de combate cuando el enemigo asalta. */
+  static readonly ASSAULT_RANGE = 8;
 
   constructor(
     readonly def: EnemyTypeDef,
@@ -373,7 +377,8 @@ export class EnemyBrain {
       }
     }
     // Mantener la distancia preferida.
-    const [mn, mx] = this.def.engage;
+    const [mn, engageMax] = this.def.engage;
+    const mx = this.aggressive ? Math.min(engageMax, EnemyBrain.ASSAULT_RANGE) : engageMax;
     this.retreatIn -= dt;
     if (p.distance > mx || !p.canSee) {
       this.moveTo(this.lastKnown, true, cmd, p, t);

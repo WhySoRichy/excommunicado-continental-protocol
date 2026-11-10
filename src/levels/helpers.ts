@@ -10,6 +10,7 @@ export interface BoxOpts {
   cover?: CoverKind;
   shadow?: boolean;
   noWalk?: boolean;
+  invisible?: boolean;
   tag?: string;
   rotY?: number;
 }
@@ -21,6 +22,7 @@ function withOpts(b: BoxDef, o?: BoxOpts): BoxDef {
   if (o.cover !== undefined) out.cover = o.cover;
   if (o.shadow !== undefined) out.shadow = o.shadow;
   if (o.noWalk !== undefined) out.noWalk = o.noWalk;
+  if (o.invisible !== undefined) out.invisible = o.invisible;
   if (o.tag !== undefined) out.tag = o.tag;
   if (o.rotY !== undefined) out.rotY = o.rotY;
   return out;

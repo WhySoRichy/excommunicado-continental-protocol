@@ -13,7 +13,7 @@ import type { EnemyManager } from './EnemyManager';
 import type { Pickups } from './Pickups';
 import { STYLE_LABELS, type StyleAction, StyleMeter } from './StyleMeter';
 import { WeaponState } from './WeaponState';
-import { applyUpgrades, suitArmor, type UpgradeId, type WeaponId, WEAPONS } from './weapons';
+import { applyUpgrades, loadoutFor, suitArmor, type UpgradeId, type WeaponId, WEAPONS } from './weapons';
 
 export interface CombatIntent {
   fireHeld: boolean;
@@ -93,6 +93,8 @@ export class PlayerCombat {
   owned: ReadonlySet<UpgradeId>;
   switchT = 0;
   holstered = false;
+  /** Se llama al pulsar disparar con el arma enfundada (zona neutral). */
+  onFireWhileHolstered: (() => void) | null = null;
   focus = 40;
   focusActive = false;
   takedown: TakedownState | null = null;
@@ -135,6 +137,23 @@ export class PlayerCombat {
     const w = this.weapons.get(this.current);
     if (!w) throw new Error(`Arma no disponible: ${this.current}`);
     return w;
+  }
+
+  /** Aplica en caliente las mejoras compradas (tienda del hub): armas, equipo y traje. */
+  applyOwned(owned: ReadonlySet<UpgradeId>): void {
+    this.owned = owned;
+    this.loadout = loadoutFor(owned);
+    for (const id of this.loadout) {
+      const def = applyUpgrades(WEAPONS[id], owned);
+      const w = this.weapons.get(id);
+      if (w) w.setDef(def);
+      else this.weapons.set(id, new WeaponState(def));
+    }
+    const maxArmor = suitArmor(owned);
+    if (maxArmor !== this.vitals.maxArmor) {
+      this.vitals.maxArmor = maxArmor;
+      this.vitals.armor = maxArmor;
+    }
   }
 
   /** Escala de tiempo deseada (Foco). */
@@ -250,7 +269,8 @@ export class PlayerCombat {
     const wants = w.def.auto ? it.fireHeld : it.firePressed;
     if (wants && canAct) {
       if (this.holstered) {
-        // En zona neutral el arma está enfundada: lo gestiona el director del hub.
+        // Zona neutral: el director del hub decide (desenfundar con aviso).
+        if (it.firePressed) this.onFireWhileHolstered?.();
       } else if (w.isGun) {
         if (w.mag === 0 && !w.reloading) {
           if (it.firePressed) ctx.audio.empty();
@@ -281,6 +301,8 @@ export class PlayerCombat {
       const i = this.loadout.indexOf(this.current);
       target = this.loadout[(i + it.cycle + this.loadout.length) % this.loadout.length] ?? null;
     }
+    // La tecla 1 alterna entre las primarias (carabina ⇄ escopeta) si se compró la escopeta.
+    if (target === 'carbine' && this.weapons.has('shotgun') && (this.current === 'carbine' || !this.weapons.has('carbine'))) target = 'shotgun';
     if (!target || target === this.current || !this.weapons.has(target)) return;
     this.weapon.cancelReload();
     this.current = target;

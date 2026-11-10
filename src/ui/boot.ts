@@ -8,13 +8,25 @@ export function setBootProgress(p: number, label: string): void {
   document.getElementById('boot')?.setAttribute('aria-valuenow', String(Math.round(p * 100)));
 }
 
-export function hideBoot(): void {
+/**
+ * Quita la pantalla de carga. Usa la Web Animations API: su promesa `finished` se
+ * resuelve por tiempo aunque el hilo esté ocupado (los eventos `transitionend` no llegan
+ * si la transición nunca empieza). Con `instant` o movimiento reducido se quita de inmediato.
+ */
+export function hideBoot(instant = false): void {
   const el = document.getElementById('boot');
   if (!el) return;
-  el.classList.add('boot-done');
-  el.addEventListener('transitionend', () => el.remove(), { once: true });
-  // Si la transición no se dispara (pestaña oculta), se oculta igualmente.
   el.style.pointerEvents = 'none';
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (instant || reduced || typeof el.animate !== 'function') {
+    el.remove();
+    return;
+  }
+  const anim = el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 450, easing: 'ease', fill: 'forwards' });
+  anim.finished.then(
+    () => el.remove(),
+    () => el.remove(),
+  );
 }
 
 /** Error fatal visible (nunca se traga un error en silencio). */
