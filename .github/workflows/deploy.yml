@@ -51,18 +51,19 @@ jobs:
           path: qa-screenshots
           if-no-files-found: ignore
 
+      # Pages solo existe en repos públicos (plan gratuito): en privado la CI prueba y construye, sin desplegar.
       - name: Configurar Pages
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && !github.event.repository.private
         uses: actions/configure-pages@v6
 
       - name: Subir artefacto de Pages
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && !github.event.repository.private
         uses: actions/upload-pages-artifact@v5
         with:
           path: dist
 
   deploy:
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && !github.event.repository.private
     needs: test-and-build
     runs-on: ubuntu-latest
     environment:
