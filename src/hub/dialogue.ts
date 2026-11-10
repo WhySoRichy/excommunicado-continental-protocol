@@ -63,6 +63,9 @@ export function rulesPlaque(keys: { interact: string; fire: string; crouch: stri
 
 /** Avisos cortos del hub. */
 export const HUB_TEXT = {
+  intelNeutral: 'Zona neutral: aquí nadie dispara. Desenfundar es un aviso; disparar, Excomunicado (multa del 30 % y oleadas).',
+  intelHostile: 'EXCOMUNICADO: sobrevive a las oleadas hasta que Winston te readmita.',
+  intelContracts: 'Contratos con Charon (recepción) · armería con el Sommelier · simulacro en el sótano.',
   warnDraw: 'Regla I: aquí no se hace negocio. Disparar dentro del Continental = EXCOMUNICADO.',
   holstered: 'Arma enfundada.',
   excommunicado: (lost: number) => `EXCOMUNICADO. La Alta Mesa cobra ${lost} monedas. El hotel es hostil.`,

@@ -172,6 +172,8 @@ export interface QaApi {
   setSettings(patch: Partial<Settings>): void;
   /** "Saltar tutorial" del contrato en curso. */
   skipTutorial(): void;
+  /** Mide la salida de audio durante `seconds` de frames reales. */
+  audioMeter(seconds: number): Promise<{ running: boolean; rmsMean: number; rmsMax: number; peakMax: number; mood: string | null; intensity: number }>;
 }
 
 export interface MissionSnapshot {
@@ -507,6 +509,25 @@ export function installQa(game: Game): void {
     }),
     setSettings: (patch) => game.applySettings({ ...game.settings, ...patch }),
     skipTutorial: () => game.mission?.skipLearn(),
+    audioMeter: (seconds) =>
+      new Promise((resolve) => {
+        const a = game.audio;
+        const end = performance.now() + seconds * 1000;
+        let sum = 0;
+        let n = 0;
+        let rmsMax = 0;
+        let peakMax = 0;
+        const tick = (): void => {
+          const m = a.meter();
+          sum += m.rms;
+          n++;
+          rmsMax = Math.max(rmsMax, m.rms);
+          peakMax = Math.max(peakMax, m.peak);
+          if (performance.now() < end) requestAnimationFrame(tick);
+          else resolve({ running: a.ready, rmsMean: n ? sum / n : 0, rmsMax, peakMax, mood: a.musicState.mood, intensity: a.musicState.intensity });
+        };
+        requestAnimationFrame(tick);
+      }),
     killEnemy: (id) => {
       const s = game.session;
       const e = s?.enemies.enemies.find((x) => x.id === id || x.id.startsWith(`${id}#`));

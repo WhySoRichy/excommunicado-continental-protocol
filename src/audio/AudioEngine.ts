@@ -1,4 +1,5 @@
-import type { AmbienceKind } from '../levels/types';
+import type { AmbienceKind, MusicMood } from '../levels/types';
+import { MusicPlayer } from './MusicPlayer';
 import type { Vec3Like } from '../physics/Physics';
 
 /**
@@ -15,6 +16,10 @@ export interface AudioVolumes {
 
 export type ShotSound = 'carbine' | 'pistol' | 'pistolSilenced' | 'shotgun' | 'enemyPistol' | 'enemySmg' | 'enemyRifle' | 'enemyShotgun';
 
+/** Ganancia del bus de música respecto a su volumen y atenuación en menús. */
+const MUSIC_BUS = 0.8;
+const MUSIC_DUCK = 0.4;
+
 export class AudioEngine {
   ctx: AudioContext | null = null;
   private master!: GainNode;
@@ -29,6 +34,14 @@ export class AudioEngine {
   private voices = 0;
   private readonly maxVoices = 28;
   private muffle = 0;
+  /** Música adaptativa (existe tras el primer gesto). */
+  private music: MusicPlayer | null = null;
+  private pendingMood: MusicMood | null = null;
+  private pendingIntensity = 0;
+  private musicDucked = false;
+  /** Medidor de la salida final (QA y gate de mezcla). */
+  private analyser: AnalyserNode | null = null;
+  private meterBuf: Float32Array<ArrayBuffer> | null = null;
 
   get ready(): boolean {
     return this.ctx !== null && this.ctx.state === 'running';
@@ -57,12 +70,19 @@ export class AudioEngine {
     this.master.connect(this.lowpass);
     this.lowpass.connect(comp);
     comp.connect(ctx.destination);
+    this.analyser = ctx.createAnalyser();
+    this.analyser.fftSize = 2048;
+    this.meterBuf = new Float32Array(this.analyser.fftSize);
+    comp.connect(this.analyser);
     this.sfxBus = ctx.createGain();
     this.musicBus = ctx.createGain();
     this.uiBus = ctx.createGain();
     this.ambBus = ctx.createGain();
     for (const b of [this.sfxBus, this.musicBus, this.uiBus, this.ambBus]) b.connect(this.master);
     this.noise = makeNoise(ctx, 1.5);
+    this.music = new MusicPlayer(ctx, this.musicBus, this.noise);
+    this.music.setMood(this.pendingMood);
+    this.music.setIntensity(this.pendingIntensity);
     this.applyVolumes();
     this.applyAmbience();
   }
@@ -81,9 +101,54 @@ export class AudioEngine {
     const t = this.ctx.currentTime;
     this.master.gain.setTargetAtTime(this.volumes.master, t, 0.02);
     this.sfxBus.gain.setTargetAtTime(this.volumes.sfx, t, 0.02);
-    this.musicBus.gain.setTargetAtTime(this.volumes.music * 0.8, t, 0.05);
+    this.musicBus.gain.setTargetAtTime(this.volumes.music * MUSIC_BUS * (this.musicDucked ? MUSIC_DUCK : 1), t, 0.15);
     this.uiBus.gain.setTargetAtTime(this.volumes.ui, t, 0.02);
     this.ambBus.gain.setTargetAtTime(this.volumes.sfx * 0.6, t, 0.05);
+  }
+
+  // ======================= Música =======================
+  /** Ambiente musical (null = silencio). Se recuerda aunque el audio aún no esté iniciado. */
+  setMusic(mood: MusicMood | null): void {
+    this.pendingMood = mood;
+    this.music?.setMood(mood);
+  }
+
+  setMusicIntensity(k: number): void {
+    this.pendingIntensity = k;
+    this.music?.setIntensity(k);
+  }
+
+  /** Baja la música en menús y pausa. */
+  duckMusic(on: boolean): void {
+    if (on === this.musicDucked) return;
+    this.musicDucked = on;
+    this.applyVolumes();
+  }
+
+  /** Programa las notas de la ventana siguiente (llamar cada frame). */
+  updateMusic(): void {
+    if (this.ready) this.music?.update();
+  }
+
+  get musicState(): { mood: MusicMood | null; intensity: number } {
+    return { mood: this.music?.currentMood ?? this.pendingMood, intensity: this.music?.currentIntensity ?? 0 };
+  }
+
+  /** RMS y pico de la salida final ahora mismo (0..1+). */
+  meter(): { rms: number; peak: number } {
+    const a = this.analyser;
+    const buf = this.meterBuf;
+    if (!a || !buf || !this.ready) return { rms: 0, peak: 0 };
+    a.getFloatTimeDomainData(buf);
+    let sum = 0;
+    let peak = 0;
+    for (let i = 0; i < buf.length; i++) {
+      const v = buf[i]!;
+      sum += v * v;
+      const av = Math.abs(v);
+      if (av > peak) peak = av;
+    }
+    return { rms: Math.sqrt(sum / buf.length), peak };
   }
 
   /** Filtro paso bajo global (Foco, daño fuerte). 0 = limpio, 1 = muy apagado. */

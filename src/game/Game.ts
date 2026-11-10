@@ -1,5 +1,6 @@
 import { Vector3 } from 'three';
 import { AudioEngine } from '../audio/AudioEngine';
+import { type IntensityInput, musicIntensity } from '../audio/music';
 import { type CombatIntent, emptyCombatIntent } from '../combat/PlayerCombat';
 import { STYLE_RANKS } from '../combat/StyleMeter';
 import type { UpgradeId, WeaponId } from '../combat/weapons';
@@ -19,8 +20,9 @@ import { DIALOGUE, HUB_TEXT, rulesPlaque } from '../hub/dialogue';
 import { addCoins, buy } from '../hub/economy';
 import { HubDirector } from '../hub/HubDirector';
 import { loadLevelData } from '../levels/registry';
-import type { EnemyType, InteractableDef, LevelId } from '../levels/types';
+import type { EnemyType, InteractableDef, LevelId, MusicMood } from '../levels/types';
 import { GAUNTLET_BLOCK } from '../missions/gauntlet';
+import { formatObjective } from '../missions/tutorial';
 import { MissionDirector, type MissionOutcome } from '../missions/MissionDirector';
 import { type MissionId, MISSIONS } from '../missions/types';
 import { loadRapier, QueryGroups, type Rapier } from '../physics/Physics';
@@ -28,6 +30,7 @@ import { GameRenderer, type QualityPreset } from '../render/Renderer';
 import { hideBoot, setBootProgress } from '../ui/boot';
 import { h } from '../ui/dom';
 import { Hud, type HudData, type PromptSpec } from '../ui/Hud';
+import type { IntelView } from '../ui/Intel';
 import { type ResultsView, Screens } from '../ui/Screens';
 import { CameraRig, DEFAULT_CAMERA } from './CameraRig';
 import { LevelSession } from './LevelSession';
@@ -135,6 +138,8 @@ export class Game {
   private aimLatched = false;
   /** Nivel cuyas pistas están en pantalla (se repintan al reasignar teclas). */
   private hintsFor: LevelId | null = null;
+  private intelShown = false;
+  private readonly musicIn: IntensityInput = { fighting: 0, searching: 0, boss: false, escape: false, hostile: false, onMission: false };
 
   constructor(gameRoot: HTMLElement, uiRoot: HTMLElement, opts: GameOptions) {
     this.opts = opts;
@@ -499,22 +504,27 @@ export class Game {
   private setHintsFor(id: LevelId): void {
     this.hintsFor = id;
     const lab = (a: Action): string => this.input.label(a);
+    // Siempre la tecla asignada de verdad (también las de movimiento y armas).
+    const move = formatObjective('{move}', lab);
+    const slots = `${lab('weapon1')} / ${lab('weapon2')} / ${lab('weapon3')}`;
     if (id === 'hub') {
       this.hud.setHints([
-        { key: 'WASD', text: 'Mover' },
+        { key: move, text: 'Mover' },
         { key: lab('interact'), text: 'Hablar · leer · usar el ascensor' },
+        { key: lab('intel'), text: 'Intel (mantener)' },
         { key: lab('sprint'), text: 'Sprint' },
         { key: lab('help'), text: 'Controles' },
       ]);
     } else if (id === 'arena') {
       this.hud.setHints([
-        { key: 'WASD', text: 'Mover' },
+        { key: move, text: 'Mover' },
         { key: lab('sprint'), text: 'Sprint' },
         { key: lab('crouch'), text: 'Agacharse · deslizar (corriendo) · cubrirse (junto a pared)' },
         { key: lab('jump'), text: 'Saltar · vault sobre obstáculos bajos' },
         { key: `2× ${lab('jump')} / ${lab('dodge')}`, text: 'Esquiva (voltereta)' },
         { key: lab('aim'), text: 'Apuntar' },
         { key: lab('shoulder'), text: 'Cambiar de hombro' },
+        { key: lab('intel'), text: 'Intel (mantener)' },
         { key: lab('help'), text: 'Controles' },
       ]);
     } else {
@@ -522,9 +532,10 @@ export class Game {
         { key: lab('fire'), text: 'Disparar' },
         { key: lab('aim'), text: 'Apuntar' },
         { key: lab('reload'), text: 'Recargar (otra vez en la zona dorada = perfecta)' },
-        { key: '1 / 2 / 3', text: 'Carabina · pistola · cuchillo' },
+        { key: slots, text: 'Carabina · pistola · cuchillo' },
         { key: lab('takedown'), text: 'Takedown (cerca del enemigo)' },
         { key: lab('focus'), text: 'Foco: cámara lenta' },
+        { key: lab('intel'), text: 'Intel (mantener)' },
         { key: lab('help'), text: 'Controles' },
       ]);
     }
@@ -695,6 +706,8 @@ export class Game {
     this.renderer.checkResize();
     this.input.pollGamepad();
     this.handleFrameActions(realDt);
+    this.updateIntel();
+    this.updateMusic();
 
     const s = this.session;
     const controlling = this.fsm.controlling;
@@ -742,6 +755,74 @@ export class Game {
     this.stats.push(realDt * 1000, this.lastCpuMs);
     this.renderer.updateDynamicResolution(this.stats.avgFrameMs(60), realDt);
     void now;
+  }
+
+  /** Música adaptativa: ambiente por nivel y modo; intensidad según lo que hacen los enemigos. */
+  private updateMusic(): void {
+    const s = this.session;
+    const st = this.fsm.state;
+    let mood: MusicMood | null = null;
+    if (st === 'title') mood = 'hub';
+    else if (s && st !== 'boot' && st !== 'loading') mood = this.mission?.id === 'gauntlet' ? 'gauntlet' : this.director?.hostile ? 'tension' : s.data.music;
+    this.audio.setMusic(mood);
+    const x = this.musicIn;
+    x.fighting = 0;
+    x.searching = 0;
+    if (s && st !== 'title') {
+      for (const e of s.enemies.enemies) {
+        if (!e.alive) continue;
+        const a = e.state;
+        if (a === 'combat' || a === 'cover' || a === 'flank') x.fighting++;
+        else if (a === 'search' || a === 'suspicious') x.searching++;
+      }
+    }
+    const o = this.mission?.current;
+    x.boss = o?.kind === 'boss';
+    x.escape = o?.kind === 'escape';
+    x.hostile = !!this.director?.hostile || (this.mission?.id === 'gauntlet' && this.mission.gauntletBreak <= 0);
+    x.onMission = !!this.mission || this.currentLevel === 'practice' || this.currentLevel === 'arena';
+    const menu = st === 'paused' || st === 'results' || st === 'briefing' || st === 'hubMenu' || st === 'title';
+    this.audio.setMusicIntensity(menu ? Math.min(0.2, musicIntensity(x)) : musicIntensity(x));
+    this.audio.duckMusic(menu);
+    this.audio.updateMusic();
+  }
+
+  /** Intel: visible mientras se mantiene su tecla y se controla al personaje. */
+  private updateIntel(): void {
+    const want = this.fsm.controlling && this.input.isDown('intel');
+    if (want === this.intelShown) return;
+    this.intelShown = want;
+    this.hud.setIntel(want ? this.intelView() : null);
+  }
+
+  private intelView(): IntelView {
+    const s = this.session;
+    const m = this.mission;
+    const data = s?.data;
+    const types = new Set<EnemyType>();
+    if (m?.id === 'gauntlet') for (const t of ['thug', 'escort', 'marksman', 'heavy'] as const) types.add(t);
+    else if (m) for (const e of data?.enemies ?? []) types.add(e.type);
+    else if (this.director?.hostile) for (const e of data?.enemies ?? []) if (e.spawnOn?.startsWith('excom-')) types.add(e.type);
+    const notes: string[] = [];
+    if (m) {
+      const def = MISSIONS[m.id];
+      notes.push(def.briefing[1] ?? '');
+      notes.push(def.briefing[2] ?? '');
+      if (data?.mission?.alarm && !m.alarmDisabled) notes.push(m.alarmSounded ? 'La alarma ya ha sonado.' : 'Si alguien da la voz de alarma llegan refuerzos. Busca el panel para desactivarla.');
+    } else if (this.currentLevel === 'hub') {
+      notes.push(this.director?.hostile ? HUB_TEXT.intelHostile : HUB_TEXT.intelNeutral);
+      notes.push(HUB_TEXT.intelContracts);
+    }
+    return {
+      title: m ? MISSIONS[m.id].name : (data?.name ?? ''),
+      place: m ? MISSIONS[m.id].place : (data?.subtitle ?? ''),
+      objective: m ? m.currentText : '',
+      markers: m ? { used: m.markersUsed, total: m.markersTotal } : null,
+      notes: notes.filter((n) => n.length > 0),
+      enemies: [...types],
+      civilians: (data?.civilians.length ?? 0) > 0,
+      alive: s && (m || this.director?.hostile) ? s.enemies.aliveCount : null,
+    };
   }
 
   /** Acciones de nivel de frame (pausa, ayuda, hombro, reaparecer). Se consumen para no repetirse. */

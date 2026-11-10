@@ -1,4 +1,5 @@
 import { h, keycap, setText, setVisible } from './dom';
+import { buildIntel, type IntelView } from './Intel';
 
 export interface PromptSpec {
   key: string;
@@ -57,6 +58,7 @@ export class Hud {
   private readonly markers: HTMLDivElement;
   private readonly hints: HTMLDivElement;
   private hintsEnabled = true;
+  private readonly intel: HTMLDivElement;
   private readonly vitals: HTMLDivElement;
   private readonly armorBar: HTMLDivElement;
   private readonly healthBar: HTMLDivElement;
@@ -161,7 +163,9 @@ export class Hud {
     this.toast = h('div', { class: 'toast', role: 'status' });
     this.toast.hidden = true;
 
-    this.root.append(this.vignette, this.beacon, this.beaconArrow, this.crosshair, this.hitmark, this.dmgRing, this.prompt, this.zone, this.objective, this.markers, this.hints, this.vitals, this.weaponPanel, this.reloadBar, this.style, this.focusBox, this.toast, this.death);
+    this.intel = h('div', { class: 'intel-wrap' });
+    this.intel.hidden = true;
+    this.root.append(this.vignette, this.beacon, this.beaconArrow, this.crosshair, this.hitmark, this.dmgRing, this.prompt, this.zone, this.objective, this.markers, this.hints, this.vitals, this.weaponPanel, this.reloadBar, this.style, this.focusBox, this.toast, this.death, this.intel);
     this.root.hidden = true;
     uiRoot.appendChild(this.root);
   }
@@ -231,6 +235,17 @@ export class Hud {
   }
 
   private markersKey = '';
+
+  /** Intel (mantener Tab): se construye al abrirla, no cada frame. */
+  setIntel(v: IntelView | null): void {
+    if (v) this.intel.replaceChildren(buildIntel(v));
+    else this.intel.replaceChildren();
+    this.intel.hidden = !v;
+  }
+
+  get intelOpen(): boolean {
+    return !this.intel.hidden;
+  }
 
   /** Ajuste de accesibilidad: ocultar la columna de pistas de teclas. */
   setHintsEnabled(on: boolean): void {
