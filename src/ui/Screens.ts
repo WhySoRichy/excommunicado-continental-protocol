@@ -4,10 +4,29 @@ import type { Input } from '../core/Input';
 import type { Profile } from '../core/Save';
 import { canBuy, SHOP } from '../hub/economy';
 import type { Dialogue } from '../hub/dialogue';
-import { MISSION_ORDER, type MissionId, MISSIONS } from '../missions/types';
+import { MISSION_ORDER, type MissionDef, type MissionId, MISSIONS } from '../missions/types';
 import { button, h, keycap } from './dom';
 
-export type ScreenId = 'title' | 'confirmNew' | 'pause' | 'controls' | 'dialog' | 'shop' | 'contracts';
+export type ScreenId = 'title' | 'confirmNew' | 'pause' | 'controls' | 'dialog' | 'shop' | 'contracts' | 'briefing' | 'results';
+
+/** Datos que pinta la pantalla de resultados. */
+export interface ResultsView {
+  missionName: string;
+  success: boolean;
+  failReason: string;
+  rank: string;
+  total: number;
+  capped: boolean;
+  subs: Array<{ label: string; value: number | null }>;
+  timeSec: number;
+  kills: number;
+  markersUsed: number;
+  markersTotal: number;
+  coins: number;
+  achievements: Array<{ name: string; coins: number }>;
+  newBest: boolean;
+  styleScore: number;
+}
 
 export interface ScreenCallbacks {
   onContinue(): void;
@@ -70,10 +89,13 @@ export class Screens {
     this.root.hidden = true;
     uiRoot.appendChild(this.root);
     window.addEventListener('keydown', (e) => {
-      if (e.repeat || this.current !== 'dialog') return;
-      if (e.code === 'KeyE' || e.code === 'Enter' || e.code === 'Space') {
+      if (e.repeat) return;
+      if (this.current === 'dialog' && (e.code === 'KeyE' || e.code === 'Enter' || e.code === 'Space')) {
         e.preventDefault();
         this.advanceDialog();
+      } else if (this.current === 'briefing' && e.code === 'Enter' && this.briefing) {
+        e.preventDefault();
+        this.briefing.onStart();
       }
     });
   }
@@ -133,6 +155,20 @@ export class Screens {
     if (this.current) this.show(this.current);
   }
 
+  /** Briefing de 3 líneas: objetivo, regla especial, rango objetivo. */
+  showBriefing(m: MissionDef, onStart: () => void, onBack: () => void): void {
+    this.briefing = { m, onStart, onBack };
+    this.show('briefing');
+  }
+
+  showResults(r: ResultsView, onRetry: () => void, onHub: () => void): void {
+    this.results = { r, onRetry, onHub };
+    this.show('results');
+  }
+
+  private briefing: { m: MissionDef; onStart: () => void; onBack: () => void } | null = null;
+  private results: { r: ResultsView; onRetry: () => void; onHub: () => void } | null = null;
+
   private build(id: ScreenId): HTMLElement {
     switch (id) {
       case 'title':
@@ -149,7 +185,66 @@ export class Screens {
         return this.buildShop();
       case 'contracts':
         return this.buildContracts();
+      case 'briefing':
+        return this.buildBriefing();
+      case 'results':
+        return this.buildResults();
     }
+  }
+
+  private buildBriefing(): HTMLElement {
+    const b = this.briefing;
+    if (!b) return h('section', { class: 'screen' });
+    const [objective, rule, target] = b.m.briefing;
+    return h('section', { class: 'screen screen-briefing', role: 'dialog', ariaLabel: `Briefing: ${b.m.name}` }, [
+      h('div', { class: 'brief-kicker', text: 'CONTRATO' }),
+      h('h2', { class: 'screen-heading', text: b.m.name.toUpperCase() }),
+      h('div', { class: 'brief-place', text: b.m.place }),
+      h('ol', { class: 'brief-lines' }, [
+        h('li', {}, [h('b', { text: 'Objetivo. ' }), objective]),
+        h('li', {}, [h('b', { text: 'Regla. ' }), rule]),
+        h('li', {}, [h('b', { text: 'Meta. ' }), target]),
+      ]),
+      h('div', { class: 'menu menu-row' }, [button('Empezar', b.onStart, 'btn btn-primary'), button('Volver', b.onBack)]),
+      h('p', { class: 'screen-hint' }, ['Pulsa ', keycap('Enter'), ' para empezar.']),
+    ]);
+  }
+
+  private buildResults(): HTMLElement {
+    const x = this.results;
+    if (!x) return h('section', { class: 'screen' });
+    const r = x.r;
+    const mm = Math.floor(r.timeSec / 60);
+    const ss = Math.floor(r.timeSec % 60);
+    const subs = r.subs.map((s) =>
+      h('div', { class: 'sub' }, [
+        h('span', { class: 'sub-label', text: s.label }),
+        h('div', { class: 'sub-bar' }, [h('div', { class: 'sub-fill', style: { width: `${s.value ?? 0}%` } })]),
+        h('span', { class: 'sub-value', text: s.value === null ? '—' : String(Math.round(s.value)) }),
+      ]),
+    );
+    const extras: HTMLElement[] = [];
+    if (r.success) {
+      extras.push(h('div', { class: 'coins coins-big' }, [h('span', { class: 'coin-icon', text: '◉' }), h('b', { class: 'coin-count', text: `+${r.coins}` }), ' Monedas Continental']));
+      if (r.newBest) extras.push(h('div', { class: 'results-best', text: 'Nuevo mejor resultado' }));
+      if (r.achievements.length) {
+        extras.push(h('div', { class: 'achv-title', text: 'Logros' }));
+        for (const a of r.achievements) extras.push(h('div', { class: 'achv', text: `${a.name}${a.coins ? ` · +${a.coins}` : ''}` }));
+      }
+    } else {
+      extras.push(h('p', { class: 'results-fail', text: r.failReason }));
+    }
+    return h('section', { class: `screen screen-results ${r.success ? 'ok' : 'fail'}`, role: 'dialog', ariaLabel: 'Resultados del contrato' }, [
+      h('div', { class: 'brief-kicker', text: r.success ? 'CONTRATO CUMPLIDO' : 'CONTRATO FALLIDO' }),
+      h('h2', { class: 'screen-heading', text: r.missionName.toUpperCase() }),
+      h('div', { class: 'results-grid' }, [
+        h('div', { class: 'rank-box', dataset: { rank: r.rank } }, [h('div', { class: 'rank-letter', text: r.success ? r.rank : '—' }), h('div', { class: 'rank-total', text: r.success ? `${Math.round(r.total)} / 100${r.capped ? ' · limitado a C' : ''}` : '' })]),
+        h('div', { class: 'subs' }, subs),
+      ]),
+      h('div', { class: 'results-line', text: `Tiempo ${mm}:${String(ss).padStart(2, '0')} · Bajas ${r.kills} · Estilo ${r.styleScore.toLocaleString('es')} · Marcadores usados ${r.markersUsed}/${r.markersTotal}` }),
+      ...extras,
+      h('div', { class: 'menu menu-row' }, [button('Volver al Continental', x.onHub, 'btn btn-primary'), button(r.success ? 'Repetir contrato' : 'Reintentar', x.onRetry)]),
+    ]);
   }
 
   private buildTitle(): HTMLElement {

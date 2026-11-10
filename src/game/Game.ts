@@ -9,23 +9,24 @@ import { Input, type InputEvent, type Vec2 } from '../core/Input';
 import { AnimationLoop, FIXED_DT, FixedStepAccumulator } from '../core/Loop';
 import { wrapAngle } from '../core/math';
 import { Rng } from '../core/rng';
-import { BrowserStore, deleteProfile, type KeyValueStore, loadProfile, newProfile, type Profile, PROFILE_KEY, recordBest, saveProfile } from '../core/Save';
+import { BrowserStore, deleteProfile, type KeyValueStore, loadProfile, newProfile, type Profile, PROFILE_KEY, saveProfile } from '../core/Save';
 import { CollisionDebugView, DebugOverlay } from '../debug/DebugOverlay';
 import { FrameStats } from '../debug/FrameStats';
 import { idlePose, type RigPose, type WeaponModel } from '../entities/CharacterRig';
 import { emptyIntent, type PlayerIntent } from '../entities/PlayerController';
 import { DIALOGUE, HUB_TEXT, rulesPlaque } from '../hub/dialogue';
-import { addCoins, buy, PRACTICE_DRILL_REWARD } from '../hub/economy';
+import { addCoins, buy } from '../hub/economy';
 import { HubDirector } from '../hub/HubDirector';
 import { loadLevelData } from '../levels/registry';
 import type { EnemyType, InteractableDef, LevelId } from '../levels/types';
-import type { MissionId } from '../missions/types';
+import { MissionDirector, type MissionOutcome } from '../missions/MissionDirector';
+import { type MissionId, MISSIONS } from '../missions/types';
 import { loadRapier, QueryGroups, type Rapier } from '../physics/Physics';
 import { GameRenderer, type QualityPreset } from '../render/Renderer';
 import { hideBoot, setBootProgress } from '../ui/boot';
 import { h } from '../ui/dom';
 import { Hud, type HudData, type PromptSpec } from '../ui/Hud';
-import { Screens } from '../ui/Screens';
+import { type ResultsView, Screens } from '../ui/Screens';
 import { CameraRig } from './CameraRig';
 import { LevelSession } from './LevelSession';
 
@@ -50,6 +51,11 @@ export interface QaInvariants {
 }
 
 const WEAPON_MODEL: Record<WeaponId, WeaponModel> = { carbine: 'rifle', shotgun: 'shotgun', pistol: 'pistol', knife: 'knife' };
+/** Nivel que se carga para cada contrato. */
+const MISSION_LEVEL: Record<MissionId, LevelId> = { practice: 'practice', nightclub: 'nightclub', docks: 'docks', rooftop: 'rooftop', gauntlet: 'hub' };
+const SUB_LABELS = { time: 'Tiempo', accuracy: 'Precisión', damage: 'Daño recibido', variety: 'Variedad', civilians: 'Civiles ilesos' } as const;
+/** Margen (fracción de media pantalla) donde se pega la flecha de la baliza fuera de pantalla. */
+const BEACON_EDGE = 0.88;
 const SLOT_ACTIONS: Record<WeaponId, Action> = { carbine: 'weapon1', shotgun: 'weapon1', pistol: 'weapon2', knife: 'weapon3' };
 /** Tiempo mínimo en la pantalla de muerte antes de poder reaparecer. */
 const DEATH_MIN = 1.2;
@@ -58,6 +64,7 @@ const AUTOSAVE_SEC = 30;
 
 const _head = new Vector3();
 const _feet = new Vector3();
+const _beacon = new Vector3();
 const _orbitTarget = new Vector3(0, 1, 0);
 
 export class Game {
@@ -90,9 +97,12 @@ export class Game {
   /** Inconsistencias de estado de combate detectadas por QA (deben quedar en 0). */
   combatInconsistencies = 0;
   currentLevel: LevelId;
-  /** El simulacro del campo de práctica está en curso. */
-  drillActive = false;
-  drillDone = false;
+  /** Contrato en curso (null en el hub y en la arena). */
+  mission: MissionDirector | null = null;
+  lastMission: MissionId | null = null;
+  outcome: MissionOutcome | null = null;
+  /** Interactivos de misión ya usados (no vuelven a mostrar prompt). */
+  readonly usedInteractables = new Set<string>();
 
   private readonly intent: PlayerIntent = emptyIntent();
   private readonly idleIntent: PlayerIntent = emptyIntent();
@@ -115,7 +125,8 @@ export class Game {
   private loading = false;
   private autosaveT = 0;
   private nearInteractable: InteractableDef | null = null;
-  private drillStart = 0;
+  /** Progreso de una interacción mantenida (s). */
+  private holdT = 0;
 
   constructor(gameRoot: HTMLElement, uiRoot: HTMLElement, opts: GameOptions) {
     this.opts = opts;
@@ -178,6 +189,7 @@ export class Game {
       aimOverEnemy: false,
       hitKind: 'none',
       hitT: 0,
+      aimOverCivilian: false,
       damage: Array.from({ length: 6 }, () => ({ angle: 0, k: 0 })),
       multiplier: 1,
       rankName: STYLE_RANKS[0],
@@ -228,6 +240,9 @@ export class Game {
     const data = await loadLevelData(id);
     this.director?.dispose();
     this.director = null;
+    this.mission = null;
+    this.usedInteractables.clear();
+    this.holdT = 0;
     this.session?.dispose();
     this.session = new LevelSession(data, {
       R: this.R,
@@ -239,6 +254,8 @@ export class Game {
       upgrades: new Set(this.profile.upgrades),
       accuracyMult: 1,
       damageMult: 1,
+      onEnemyAlert: (e) => this.mission?.onEnemyAlert(e),
+      onCivilianHurt: (killed) => this.mission?.onCivilianHurt(killed),
     });
     this.currentLevel = id;
     this.renderer.setExposure(data.ambient.exposure);
@@ -248,11 +265,10 @@ export class Game {
     this.collisionView.refresh(this.session.physics);
     this.hud.setZone(data.name.toUpperCase());
     this.hud.setObjective('');
+    this.hud.setMarkers(0, 0);
     this.hud.setCombatVisible(true);
     this.audio.ambience(data.ambience);
     this.cpIndex = 0;
-    this.drillActive = false;
-    this.drillDone = false;
     this.lastWeaponModel = 'none';
   }
 
@@ -318,7 +334,10 @@ export class Game {
     this.loading = false;
   }
 
-  /** Carga (si hace falta) y empieza a jugar un nivel de acción. */
+  /**
+   * Carga un nivel como SANDBOX (sin contrato): la arena de pruebas y, en QA, el campo de
+   * práctica con el simulacro ya en marcha (`drill`). Los contratos reales van por `startContract`.
+   */
   async playLevel(id: LevelId, o: { drill?: boolean } = {}): Promise<void> {
     if (this.loading || !this.fsm.can('loading')) return;
     this.loading = true;
@@ -326,7 +345,7 @@ export class Game {
     // El clic/tecla que llega aquí es un gesto del usuario: se pide el pointer lock antes del await.
     this.requestLock();
     this.fsm.go('loading');
-    if (id !== this.currentLevel || !this.session || this.director) await this.loadSession(id);
+    if (id !== this.currentLevel || !this.session || this.director || this.mission) await this.loadSession(id);
     const s = this.session;
     if (!s) {
       this.loading = false;
@@ -335,12 +354,7 @@ export class Game {
     const sp = s.data.spawn;
     s.respawnAt(new Vector3(sp.pos[0], sp.pos[1] + 0.02, sp.pos[2]), sp.yaw);
     s.combat.respawnReset();
-    if (o.drill) {
-      s.enemies.spawnEvent('drill');
-      this.drillActive = true;
-      this.drillStart = performance.now();
-      this.hud.setObjective(HUB_TEXT.objectiveDrill);
-    }
+    if (o.drill) s.enemies.spawnEvent('drill');
     this.camera.setYawPitch(sp.yaw, -0.12);
     this.camera.snap();
     this.setHintsFor(id);
@@ -354,7 +368,83 @@ export class Game {
   }
 
   private startMission(id: MissionId): void {
-    if (id === 'practice') void this.playLevel('practice', { drill: true });
+    if (MISSIONS[id].available) void this.startContract(id);
+  }
+
+  /** Contrato real: nivel nuevo, director de misión y briefing de 3 líneas antes de jugar. */
+  async startContract(id: MissionId): Promise<void> {
+    if (this.loading || !this.fsm.can('loading')) return;
+    this.loading = true;
+    this.audio.init();
+    this.fsm.go('loading');
+    await this.loadSession(MISSION_LEVEL[id]);
+    const s = this.session;
+    if (!s) {
+      this.loading = false;
+      return;
+    }
+    this.lastMission = id;
+    this.outcome = null;
+    this.mission = new MissionDirector({
+      session: s,
+      hud: this.hud,
+      audio: this.audio,
+      profile: this.profile,
+      save: () => this.saveNow(),
+      onFinished: (o) => this.onMissionFinished(o),
+    });
+    this.hud.setMarkers(0, this.mission.markersTotal);
+    this.setHintsFor(s.data.id);
+    this.fsm.go('briefing');
+    this.screens.showBriefing(
+      MISSIONS[id],
+      () => this.beginContract(),
+      () => void this.goToHub(),
+    );
+    this.loading = false;
+  }
+
+  /** "Empezar" en el briefing. */
+  beginContract(): void {
+    if (this.fsm.state !== 'briefing') return;
+    this.screens.hide();
+    this.requestLock();
+    this.fsm.go('playing');
+  }
+
+  private onMissionFinished(o: MissionOutcome): void {
+    this.outcome = o;
+    if (this.fsm.state === 'playing' || this.fsm.state === 'dead') this.fsm.go('results');
+    const subs: ResultsView['subs'] = [
+      { label: SUB_LABELS.time, value: o.rank.subs.time },
+      { label: SUB_LABELS.accuracy, value: o.rank.subs.accuracy },
+      { label: SUB_LABELS.damage, value: o.rank.subs.damage },
+      { label: SUB_LABELS.variety, value: o.rank.subs.variety },
+    ];
+    if (o.rank.subs.civilians !== null) subs.push({ label: SUB_LABELS.civilians, value: o.rank.subs.civilians });
+    const view: ResultsView = {
+      missionName: MISSIONS[o.mission].name,
+      success: o.success,
+      failReason: o.failReason,
+      rank: o.rank.rank,
+      total: o.rank.total,
+      capped: o.rank.capped,
+      subs,
+      timeSec: o.timeSec,
+      kills: o.kills,
+      markersUsed: o.markersUsed,
+      markersTotal: o.markersTotal,
+      coins: o.coinsReward,
+      achievements: o.achievements.map((a) => ({ name: a.name, coins: a.coins })),
+      newBest: o.newBest,
+      styleScore: this.session?.combat.style.score ?? 0,
+    };
+    this.audio.ui(o.success ? 'coin' : 'error');
+    this.screens.showResults(
+      view,
+      () => void this.startContract(o.mission),
+      () => void this.goToHub(),
+    );
   }
 
   private setHintsFor(id: LevelId): void {
@@ -483,13 +573,19 @@ export class Game {
         break;
       }
       case 'goto:practice':
-        void this.playLevel('practice', { drill: true });
+        void this.startContract('practice');
         break;
       case 'goto:hub':
         void this.goToHub();
         break;
       default:
-        console.warn('[hub] acción desconocida', it.action);
+        if (this.mission) {
+          // Interactivo de misión (terminal, cargamento, panel de alarma).
+          this.mission.onInteract(it.id);
+          this.usedInteractables.add(it.id);
+          this.nearInteractable = null;
+          this.audio.ui('confirm');
+        } else console.warn('[hub] acción desconocida', it.action);
     }
   }
 
@@ -577,9 +673,11 @@ export class Game {
     if (s && inWorld) {
       this.updatePlayerView(alpha, realDt, scaledDt);
       s.enemies.renderUpdate(alpha, scaledDt);
+      s.civilians?.renderUpdate(alpha, scaledDt);
       s.vfx.update(scaledDt);
       s.renderNpcs(scaledDt);
       this.director?.frameUpdate(scaledDt);
+      if (controlling) this.updateBeacon();
     } else {
       this.updateAttractCamera(realDt);
     }
@@ -615,6 +713,7 @@ export class Game {
       }
       return;
     }
+    if (this.fsm.state === 'briefing' || this.fsm.state === 'results') return;
     if (this.fsm.state === 'dead') {
       this.deathTimer += realDt;
       if (this.deathTimer >= DEATH_MIN && (inp.pressed('jump') || inp.pressed('fire') || inp.pressed('interact'))) {
@@ -676,53 +775,46 @@ export class Game {
     if (!s) return;
     const controlling = this.fsm.controlling;
     // Interactuar (E) tiene prioridad sobre saltar cuando hay algo delante (comparten botón A en gamepad).
-    if (controlling && this.nearInteractable && this.input.pressed('interact') && !this.director?.hostile) {
-      this.input.consume('interact');
-      this.input.consume('jump');
-      this.interact(this.nearInteractable);
-      if (!this.fsm.controlling) {
-        this.input.endStep();
-        return;
+    const near = this.nearInteractable;
+    if (controlling && near && !this.director?.hostile) {
+      const hold = near.hold ?? 0;
+      if (hold > 0) {
+        if (this.input.isDown('interact')) {
+          this.input.consume('jump');
+          this.holdT += dt;
+          if (this.holdT >= hold) {
+            this.holdT = 0;
+            this.interact(near);
+          }
+        } else this.holdT = 0;
+      } else if (this.input.pressed('interact')) {
+        this.input.consume('interact');
+        this.input.consume('jump');
+        this.interact(near);
+        if (!this.fsm.controlling) {
+          this.input.endStep();
+          return;
+        }
       }
-    }
+    } else this.holdT = 0;
     const it = controlling ? this.buildIntent() : this.idleIntent;
     s.player.fixedUpdate(dt, it);
     const ci = controlling ? this.buildCombatIntent() : this.idleCIntent;
     if (s.infiniteAmmo) s.combat.weapon.mag = Math.max(s.combat.weapon.mag, 1);
     s.combat.fixedUpdate(dt, ci, s.ctx);
     s.enemies.fixedUpdate(dt, s.updateTarget(dt));
+    s.civilians?.fixedUpdate(dt);
     s.pickups.update(dt);
     this.director?.fixedUpdate(dt);
+    if (this.fsm.state === 'playing') this.mission?.fixedUpdate(dt);
     s.physics.step();
     this.steps++;
     if (this.opts.qa) {
       this.checkPlayerInvariants();
       this.checkCombatInvariants();
     }
-    if (this.drillActive && !this.drillDone && s.enemies.enemies.length > 0 && s.enemies.aliveCount === 0) this.onDrillDone();
     if (s.combat.dead && this.fsm.controlling) this.onPlayerDeath();
     this.input.endStep();
-  }
-
-  private onDrillDone(): void {
-    this.drillDone = true;
-    const p = this.profile;
-    const first = !p.flags.practiceDrillDone;
-    const timeSec = (performance.now() - this.drillStart) / 1000;
-    const s = this.session;
-    // Rango provisional hasta la Fase 4 (combat/rank.ts): sin muertes B, con muertes C.
-    recordBest(p, 'practice', { rank: s && s.combat.stats.deaths === 0 ? 'B' : 'C', score: s?.combat.style.score ?? 0, timeSec: Math.round(timeSec) });
-    if (first) {
-      p.flags.practiceDrillDone = true;
-      addCoins(p, PRACTICE_DRILL_REWARD);
-      this.hud.showToast(HUB_TEXT.drillDone(PRACTICE_DRILL_REWARD), 5);
-      this.audio.ui('coin');
-    } else {
-      this.hud.showToast(HUB_TEXT.drillRepeat, 4);
-      this.audio.ui('confirm');
-    }
-    this.hud.setObjective(HUB_TEXT.objectiveDrillDone);
-    this.saveNow();
   }
 
   private onPlayerDeath(): void {
@@ -734,20 +826,61 @@ export class Game {
     this.deathSlowmo = 0.9;
     this.director?.onPlayerDied();
     const lab = this.input.label('jump');
+    if (this.mission) {
+      const canRespawn = this.mission.onPlayerDied();
+      this.hud.setMarkers(this.mission.markersUsed, this.mission.markersTotal);
+      if (!canRespawn) return; // el director ya cerró el contrato: pantalla de resultados
+      const left = this.mission.markersLeft;
+      this.hud.showDeath(s.combat.deathCause(this.camera.yaw), `Gastas un marcador de sangre (${left} restante${left === 1 ? '' : 's'}). Pulsa ${lab} o clic para volver al último punto de control.`);
+      return;
+    }
     this.hud.showDeath(s.combat.deathCause(this.camera.yaw), `Pulsa ${lab} o clic para reaparecer`);
   }
 
   private respawn(): void {
     const s = this.session;
     if (!s || this.fsm.state !== 'dead') return;
-    const sp = s.data.spawn;
-    s.respawnAt(new Vector3(sp.pos[0], sp.pos[1] + 0.02, sp.pos[2]), sp.yaw);
+    const m = this.mission;
+    const pos = m ? m.respawnPos : new Vector3(s.data.spawn.pos[0], s.data.spawn.pos[1], s.data.spawn.pos[2]);
+    const yaw = m ? m.respawnYaw : s.data.spawn.yaw;
+    s.respawnAt(new Vector3(pos.x, pos.y + 0.02, pos.z), yaw);
     s.combat.respawnReset();
     s.enemies.resetAlive();
-    this.camera.setYawPitch(sp.yaw, -0.12);
+    this.camera.setYawPitch(yaw, -0.12);
     this.camera.snap();
     this.hud.hideDeath();
     this.fsm.go(this.deathReturn);
+  }
+
+  /** Baliza del objetivo: proyecta el punto a pantalla; fuera de vista, flecha en el borde. */
+  private updateBeacon(): void {
+    const s = this.session;
+    const m = this.mission;
+    if (!s || !m || !m.beacon(_beacon)) {
+      this.hud.setBeacon(null);
+      return;
+    }
+    const distance = _beacon.distanceTo(s.player.feet);
+    const cam = this.renderer.camera;
+    const w = this.renderer.canvas.clientWidth || window.innerWidth;
+    const hgt = this.renderer.canvas.clientHeight || window.innerHeight;
+    _beacon.project(cam);
+    const behind = _beacon.z > 1;
+    let nx = behind ? -_beacon.x : _beacon.x;
+    let ny = behind ? -_beacon.y : _beacon.y;
+    const onScreen = !behind && Math.abs(nx) <= BEACON_EDGE && Math.abs(ny) <= BEACON_EDGE;
+    if (onScreen) {
+      this.hud.setBeacon({ x: ((nx + 1) / 2) * w, y: ((1 - ny) / 2) * hgt, onScreen: true, angle: 0, distance });
+      return;
+    }
+    // Pega la flecha al rectángulo de margen conservando la dirección desde el centro.
+    const k = Math.max(Math.abs(nx), Math.abs(ny)) / BEACON_EDGE;
+    if (k > 1e-6) {
+      nx /= k;
+      ny /= k;
+    }
+    const angle = (Math.atan2(nx, ny) * 180) / Math.PI;
+    this.hud.setBeacon({ x: ((nx + 1) / 2) * w, y: ((1 - ny) / 2) * hgt, onScreen: false, angle, distance });
   }
 
   // =========================================================== vista
@@ -822,6 +955,7 @@ export class Game {
     d.spreadPx = Math.max(4, Math.min(60, Math.tan((c.spreadDeg * Math.PI) / 180) * pxPerRad));
     d.blocked = c.blocked;
     d.aimOverEnemy = c.aimOver === 'enemy';
+    d.aimOverCivilian = c.aimOver === 'civilian';
     d.hitKind = c.hitMarker.kind;
     d.hitT = c.hitMarker.t;
     for (let i = 0; i < d.damage.length; i++) {
@@ -844,7 +978,9 @@ export class Game {
     this.peekTimer -= dt;
     if (this.peekTimer <= 0) {
       this.peekTimer = 0.1;
-      this.nearInteractable = this.fsm.controlling && !this.director?.hostile ? s.nearestInteractable(this.camera.yaw) : null;
+      const prev = this.nearInteractable;
+      this.nearInteractable = this.fsm.controlling && !this.director?.hostile ? s.nearestInteractable(this.camera.yaw, this.usedInteractables) : null;
+      if (this.nearInteractable !== prev) this.holdT = 0;
       this.hud.setPrompt(this.contextPrompt());
     }
   }
@@ -854,7 +990,12 @@ export class Game {
     if (!s || !this.fsm.controlling) return null;
     const p = s.player;
     const lab = (a: Action): string => this.input.label(a);
-    if (this.nearInteractable) return { key: lab('interact'), text: this.nearInteractable.prompt };
+    const near = this.nearInteractable;
+    if (near) {
+      const hold = near.hold ?? 0;
+      if (hold > 0) return { key: `Mantén ${lab('interact')}`, text: this.holdT > 0 ? `${near.prompt} · ${Math.min(99, Math.round((this.holdT / hold) * 100))} %` : near.prompt };
+      return { key: lab('interact'), text: near.prompt };
+    }
     if (s.combat.takedownCandidate(s.ctx)) return { key: lab('takedown'), text: 'Takedown' };
     if (p.state === 'cover' && p.cover) {
       return p.cover.height === 'low'
@@ -945,7 +1086,10 @@ export class Game {
       s.vfx.update(FIXED_DT);
       s.combat.frameUpdate(FIXED_DT, this.audio);
       this.director?.frameUpdate(FIXED_DT);
-      if (this.fsm.controlling || this.fsm.state === 'dead') this.updateHud(FIXED_DT);
+      if (this.fsm.controlling || this.fsm.state === 'dead') {
+        this.updateHud(FIXED_DT);
+        this.updateBeacon();
+      }
     }
   }
 
@@ -967,11 +1111,11 @@ export class Game {
     if (this.fsm.state === 'dead') this.respawn();
   }
 
-  /** QA: interactúa con lo que haya delante (como pulsar E). */
+  /** QA: interactúa con lo que haya delante (como pulsar E, o mantenerla hasta el final). */
   qaInteract(): boolean {
     const s = this.session;
     if (!s || !this.fsm.controlling || this.director?.hostile) return false;
-    const it = s.nearestInteractable(this.camera.yaw);
+    const it = s.nearestInteractable(this.camera.yaw, this.usedInteractables);
     if (!it) return false;
     this.nearInteractable = it;
     this.interact(it);

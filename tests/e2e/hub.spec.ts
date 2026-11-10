@@ -66,29 +66,50 @@ test.describe('Fase 3 · El Continental', () => {
     expect((await page.evaluate(() => window.__EXCOM__!.profile())).flags.charonMet).toBe(true);
     await page.screenshot({ path: shotPath('fase3-contratos') });
     await page.locator('.contract[data-mission="practice"] button').click();
+    // Briefing de 3 líneas → Enter → jugando con el primer objetivo y su baliza.
+    await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('briefing');
+    await expect(page.locator('.brief-lines li')).toHaveCount(3);
+    await page.keyboard.press('Enter');
     await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('playing');
     expect(await page.evaluate(() => window.__EXCOM__!.level())).toBe('practice');
-    expect(await page.evaluate(() => window.__EXCOM__!.drill().active)).toBe(true);
-    // Completar el simulacro da monedas la primera vez; el ascensor devuelve al hotel.
+    const m0 = await page.evaluate(() => window.__EXCOM__!.mission()!);
+    expect(m0.index).toBe(0);
+    expect(m0.objective).toContain('patio');
+    expect(m0.beacon).not.toBeNull();
+    expect(m0.markersTotal).toBe(3);
+    await expect(page.locator('#hud .beacon, #hud .beacon-arrow').locator('visible=true')).toHaveCount(1);
+    // Llegar al patio activa el checkpoint y aparecen los 6 maniquíes.
     const before = (await page.evaluate(() => window.__EXCOM__!.profile())).coins;
-    await page.evaluate(() => {
+    const m1 = await page.evaluate(() => {
       const q = window.__EXCOM__!;
       q.setManual(true);
+      q.teleport(4, 0, -11, 0);
+      q.step(10, {});
+      return { m: q.mission()!, enemies: q.enemies().filter((e) => e.alive).length };
+    });
+    expect(m1.m.index).toBe(1);
+    expect(m1.enemies).toBe(6);
+    expect(m1.m.respawn.z).toBeCloseTo(-11, 0);
+    await page.screenshot({ path: shotPath('fase4-practica-objetivo') });
+    // Al caer el último, pantalla de resultados con rango, monedas y logros.
+    await page.evaluate(() => {
+      const q = window.__EXCOM__!;
       q.runDebug('killAll');
       q.step(5, {});
     });
+    await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('results');
+    const out = await page.evaluate(() => window.__EXCOM__!.outcome()!);
+    expect(out.success).toBe(true);
+    expect(['S', 'A', 'B', 'C', 'D']).toContain(out.rank);
+    expect(out.coins).toBeGreaterThanOrEqual(5);
+    expect(out.achievements).toContain('global.first');
+    await expect(page.locator('.rank-letter')).toHaveText(out.rank);
+    await page.screenshot({ path: shotPath('fase4-resultados') });
     const after = await page.evaluate(() => window.__EXCOM__!.profile());
-    expect(after.coins).toBe(before + 2);
-    expect(after.flags.practiceDrillDone).toBe(true);
+    expect(after.coins).toBe(before + out.coins);
     expect(after.completed).toContain('practice');
-    await page.evaluate(() => {
-      const q = window.__EXCOM__!;
-      q.checkpoint('start');
-      q.setLook(Math.PI, -0.1);
-      q.step(12, {});
-    });
-    await expect.poll(() => page.evaluate(() => window.__EXCOM__!.prompt())).toContain('Subir al Continental');
-    await page.evaluate(() => window.__EXCOM__!.interact());
+    expect(after.best.practice?.rank).toBe(out.rank);
+    await page.getByRole('button', { name: 'Volver al Continental' }).click();
     await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('hub');
     expect(await page.evaluate(() => window.__EXCOM__!.level())).toBe('hub');
   });

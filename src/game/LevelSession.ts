@@ -5,8 +5,9 @@ import { Pickups } from '../combat/Pickups';
 import { type CombatCtx, PlayerCombat } from '../combat/PlayerCombat';
 import { loadoutFor, type UpgradeId } from '../combat/weapons';
 import type { Rng } from '../core/rng';
-import type { PlayerTarget } from '../entities/Enemy';
+import type { Enemy, PlayerTarget } from '../entities/Enemy';
 import { CharacterRig, PLAYER_COLORS } from '../entities/CharacterRig';
+import { CivilianManager } from '../entities/Civilian';
 import { Npc, NPC_LOOKS } from '../entities/Npc';
 import { PlayerController } from '../entities/PlayerController';
 import { buildLevel, type LevelRuntime } from '../levels/LevelBuilder';
@@ -27,6 +28,10 @@ export interface SessionDeps {
   upgrades: ReadonlySet<UpgradeId>;
   accuracyMult: number;
   damageMult: number;
+  /** Un enemigo dio la voz de alarma (misiones con panel de alarma). */
+  onEnemyAlert?(e: Enemy): void;
+  /** Un civil fue herido o abatido por el jugador. */
+  onCivilianHurt?(killed: boolean): void;
 }
 
 /**
@@ -46,6 +51,7 @@ export class LevelSession {
   readonly ctx: CombatCtx;
   readonly target: PlayerTarget;
   readonly npcs: Npc[] = [];
+  readonly civilians: CivilianManager | null;
   /** God mode de debug (el daño se ignora). */
   god = false;
   infiniteAmmo = false;
@@ -88,12 +94,16 @@ export class LevelSession {
       onShotAtPlayer: (enemy, hit, dmg) => {
         if (hit && !this.god) this.combat.takeHit(enemy, dmg, this.ctx);
       },
+      onEnemyAlert: (e) => deps.onEnemyAlert?.(e),
     });
+    this.civilians = data.civilians.length > 0 ? new CivilianManager(data.civilians, this.physics, this.nav, scene, deps.rng) : null;
+    if (this.civilians) this.civilians.onHurt = (_c, killed) => deps.onCivilianHurt?.(killed);
     this.ctx = {
       physics: this.physics,
       camera: deps.camera,
       player: this.player,
       enemies: this.enemies,
+      civilians: this.civilians,
       vfx: this.vfx,
       audio: deps.audio,
       rng: deps.rng,
@@ -136,13 +146,14 @@ export class LevelSession {
   }
 
   /** Interactivo más cercano al alcance y delante del jugador (según el yaw de la cámara). */
-  nearestInteractable(camYaw: number): InteractableDef | null {
+  nearestInteractable(camYaw: number, used?: ReadonlySet<string>): InteractableDef | null {
     const f = this.player.feet;
     const fx = -Math.sin(camYaw);
     const fz = -Math.cos(camYaw);
     let best: InteractableDef | null = null;
     let bestD = Number.POSITIVE_INFINITY;
     for (const it of this.data.interactables) {
+      if (used?.has(it.id)) continue;
       const dx = it.pos[0] - f.x;
       const dz = it.pos[2] - f.z;
       const d = Math.hypot(dx, dz);
@@ -168,6 +179,7 @@ export class LevelSession {
 
   dispose(): void {
     for (const n of this.npcs) n.dispose();
+    this.civilians?.dispose();
     this.enemies.dispose();
     this.pickups.dispose();
     this.vfx.dispose();

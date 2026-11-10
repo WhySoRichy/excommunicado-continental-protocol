@@ -93,12 +93,12 @@ export const practice: LevelData = {
     { id: 'perch', pos: [14, 1.8, -33.5], yaw: Math.PI, radius: 2, label: 'Plataforma' },
   ],
   enemies: [
-    { id: 'd-thug-a', type: 'thug', pos: [-4, 0, -33], yaw: Math.PI, spawnOn: 'drill', patrol: [[-4, 0, -33], [-6, 0, -27]] },
-    { id: 'd-thug-b', type: 'thug', pos: [6, 0, -33], yaw: Math.PI, spawnOn: 'drill' },
-    { id: 'd-escort-a', type: 'escort', pos: [12, 0, -17], yaw: Math.PI, spawnOn: 'drill' },
-    { id: 'd-escort-b', type: 'escort', pos: [-6, 0, -18], yaw: Math.PI, spawnOn: 'drill' },
-    { id: 'd-heavy', type: 'heavy', pos: [1, 0, -34], yaw: Math.PI, spawnOn: 'drill' },
-    { id: 'd-marksman', type: 'marksman', pos: [16, 1.8, -34.2], yaw: Math.PI * 0.85, stationary: true, spawnOn: 'drill' },
+    { id: 'd-thug-a', type: 'thug', pos: [-4, 0, -33], yaw: Math.PI, spawnOn: 'drill', group: 'drill', patrol: [[-4, 0, -33], [-6, 0, -27]] },
+    { id: 'd-thug-b', type: 'thug', pos: [6, 0, -33], yaw: Math.PI, spawnOn: 'drill', group: 'drill' },
+    { id: 'd-escort-a', type: 'escort', pos: [12, 0, -17], yaw: Math.PI, spawnOn: 'drill', group: 'drill' },
+    { id: 'd-escort-b', type: 'escort', pos: [-6, 0, -18], yaw: Math.PI, spawnOn: 'drill', group: 'drill' },
+    { id: 'd-heavy', type: 'heavy', pos: [1, 0, -34], yaw: Math.PI, spawnOn: 'drill', group: 'drill' },
+    { id: 'd-marksman', type: 'marksman', pos: [16, 1.8, -34.2], yaw: Math.PI * 0.85, stationary: true, spawnOn: 'drill', group: 'drill' },
   ],
   civilians: [],
   pickups: [
@@ -111,4 +111,11 @@ export const practice: LevelData = {
   music: 'practice',
   ambience: 'range',
   weather: null,
+  mission: {
+    id: 'practice',
+    objectives: [
+      { id: 'yard', kind: 'reach', text: 'Baja al patio del simulacro', at: [4, 0, -11], radius: 3, checkpoint: 'yard' },
+      { id: 'clear', kind: 'eliminate', text: 'Elimina a los 6 maniquíes armados', group: 'drill', onStart: 'drill' },
+    ],
+  },
 };

@@ -49,16 +49,19 @@ describe('rango del contrato', () => {
     expect(varietyScore(9)).toBe(100);
   });
 
-  it('cada marcador gastado resta 15; el estilo suma hasta 10', () => {
-    const a = computeRank({ ...base, styleBest: 1 });
-    const b = computeRank({ ...base, styleBest: 8 });
+  it('cada marcador gastado resta 15; el estilo suma hasta 10 (sin pasar de 100)', () => {
+    // Base media (precisión 50 %) para que el tope de 100 no enmascare las diferencias.
+    const mid: MissionStats = { ...base, shotsHit: 20 };
+    const a = computeRank({ ...mid, styleBest: 1 });
+    const b = computeRank({ ...mid, styleBest: 8 });
     expect(b.styleBonus).toBe(10);
     expect(a.styleBonus).toBe(0);
     expect(b.total - a.total).toBeCloseTo(10, 0);
-    const m = computeRank({ ...base, markersUsed: 1 });
+    const m = computeRank({ ...mid, markersUsed: 1 });
     expect(m.markerPenalty).toBe(15);
-    expect(base.markersUsed).toBe(0);
-    expect(computeRank(base).total - m.total).toBeCloseTo(15, 0);
+    expect(computeRank(mid).total - m.total).toBeCloseTo(15, 0);
+    // La nota nunca supera 100 aunque sobre bonus.
+    expect(computeRank({ ...base, styleBest: 8 }).total).toBe(100);
   });
 
   it('civiles: sin civiles el peso se reparte; herir baja la nota; matar limita a C', () => {

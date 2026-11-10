@@ -22,6 +22,7 @@ export interface HudData {
   spreadPx: number;
   blocked: boolean;
   aimOverEnemy: boolean;
+  aimOverCivilian: boolean;
   hitKind: 'none' | 'body' | 'head' | 'kill' | 'armor';
   hitT: number;
   /** Ángulos (rad, 0 = delante, + izquierda) de los indicadores de daño y su intensidad 0..1. */
@@ -49,6 +50,11 @@ export class Hud {
   private readonly promptText: HTMLSpanElement;
   private readonly zone: HTMLDivElement;
   private readonly objective: HTMLDivElement;
+  private readonly beacon: HTMLDivElement;
+  private readonly beaconDist: HTMLSpanElement;
+  private readonly beaconArrow: HTMLDivElement;
+  private readonly beaconArrowDist: HTMLSpanElement;
+  private readonly markers: HTMLDivElement;
   private readonly hints: HTMLDivElement;
   private readonly vitals: HTMLDivElement;
   private readonly armorBar: HTMLDivElement;
@@ -95,6 +101,14 @@ export class Hud {
     this.zone = h('div', { class: 'zone-label' });
     this.objective = h('div', { class: 'objective', role: 'status', ariaLabel: 'Objetivo actual' });
     this.objective.hidden = true;
+    this.beaconDist = h('span', { class: 'beacon-dist' });
+    this.beacon = h('div', { class: 'beacon', ariaLabel: 'Baliza del objetivo' }, [h('i', { class: 'beacon-diamond' }), this.beaconDist]);
+    this.beacon.hidden = true;
+    this.beaconArrowDist = h('span', { class: 'beacon-dist' });
+    this.beaconArrow = h('div', { class: 'beacon-arrow' }, [h('i', { class: 'beacon-tri' }), this.beaconArrowDist]);
+    this.beaconArrow.hidden = true;
+    this.markers = h('div', { class: 'markers', ariaLabel: 'Marcadores de sangre' });
+    this.markers.hidden = true;
     this.hints = h('div', { class: 'hints' });
 
     this.armorBar = h('div', { class: 'bar-fill armor' });
@@ -146,7 +160,7 @@ export class Hud {
     this.toast = h('div', { class: 'toast', role: 'status' });
     this.toast.hidden = true;
 
-    this.root.append(this.vignette, this.crosshair, this.hitmark, this.dmgRing, this.prompt, this.zone, this.objective, this.hints, this.vitals, this.weaponPanel, this.reloadBar, this.style, this.focusBox, this.toast, this.death);
+    this.root.append(this.vignette, this.beacon, this.beaconArrow, this.crosshair, this.hitmark, this.dmgRing, this.prompt, this.zone, this.objective, this.markers, this.hints, this.vitals, this.weaponPanel, this.reloadBar, this.style, this.focusBox, this.toast, this.death);
     this.root.hidden = true;
     uiRoot.appendChild(this.root);
   }
@@ -174,7 +188,48 @@ export class Hud {
   setObjective(text: string): void {
     setText(this.objective, text);
     setVisible(this.objective, text.length > 0);
+    if (!text) this.setBeacon(null);
   }
+
+  /**
+   * Baliza del objetivo: marcador en pantalla con distancia si el punto está a la vista;
+   * si no, flecha en el borde que apunta hacia él. `null` la oculta.
+   */
+  setBeacon(b: { x: number; y: number; onScreen: boolean; angle: number; distance: number } | null): void {
+    if (!b) {
+      setVisible(this.beacon, false);
+      setVisible(this.beaconArrow, false);
+      return;
+    }
+    const dist = `${Math.round(b.distance)} m`;
+    if (b.onScreen) {
+      setVisible(this.beaconArrow, false);
+      setVisible(this.beacon, true);
+      this.beacon.style.transform = `translate(${Math.round(b.x)}px, ${Math.round(b.y)}px)`;
+      setText(this.beaconDist, dist);
+    } else {
+      setVisible(this.beacon, false);
+      setVisible(this.beaconArrow, true);
+      this.beaconArrow.style.transform = `translate(${Math.round(b.x)}px, ${Math.round(b.y)}px) rotate(${b.angle.toFixed(1)}deg)`;
+      setText(this.beaconArrowDist, dist);
+      this.beaconArrowDist.style.transform = `rotate(${(-b.angle).toFixed(1)}deg)`;
+    }
+  }
+
+  /** Contador de marcadores de sangre (vidas). Vacío = oculto. */
+  setMarkers(used: number, total: number): void {
+    if (total <= 0) {
+      setVisible(this.markers, false);
+      return;
+    }
+    setVisible(this.markers, true);
+    const key = `${used}/${total}`;
+    if (this.markersKey === key) return;
+    this.markersKey = key;
+    this.markers.replaceChildren(h('span', { class: 'markers-label', text: 'MARCADORES' }), ...Array.from({ length: total }, (_, i) => h('i', { class: `marker${i < total - used ? ' on' : ''}` })));
+  }
+
+  private markersKey = '';
 
   setHints(lines: PromptSpec[]): void {
     this.hints.replaceChildren(...lines.map((l) => h('div', { class: 'hint' }, [keycap(l.key), h('span', { text: l.text })])));
@@ -259,6 +314,7 @@ export class Hud {
     this.set(this.crosshair, '--gap', `${Math.round(d.spreadPx)}px`);
     this.crosshair.classList.toggle('blocked', d.blocked);
     this.crosshair.classList.toggle('enemy', d.aimOverEnemy && !d.blocked);
+    this.crosshair.classList.toggle('civilian', d.aimOverCivilian && !d.blocked);
     this.hitmark.className = `hitmark ${d.hitT > 0 ? `on ${d.hitKind}` : ''}`;
 
     // Indicadores de daño.

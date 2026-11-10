@@ -1,3 +1,5 @@
+import type { MissionId } from '../missions/types';
+
 /**
  * Esquema de datos de nivel. Es la ÚNICA fuente de verdad: de estos datos se
  * generan los meshes, los colliders de Rapier, la grilla de navegación y la
@@ -217,6 +219,39 @@ export interface TriggerDef {
   once?: boolean;
 }
 
+export type ObjectiveKind = 'reach' | 'eliminate' | 'interact' | 'survive' | 'escape' | 'boss';
+
+/** Objetivo de misión (se cumplen en orden). */
+export interface ObjectiveDef {
+  id: string;
+  kind: ObjectiveKind;
+  /** Texto del HUD ("Sube al VIP"). */
+  text: string;
+  /** reach/escape: zona objetivo (centro, radio). Para los demás, posición de la baliza. */
+  at?: Vec3;
+  radius?: number;
+  /** eliminate: grupo de enemigos (`EnemySpawnDef.group`); 'all' = todos los que haya vivos. */
+  group?: string;
+  /** interact: ids de interactables que hay que usar (todos). */
+  targets?: string[];
+  /** survive/escape: segundos. */
+  seconds?: number;
+  /** boss: id del enemigo jefe. */
+  enemyId?: string;
+  /** Eventos de aparición (`spawnOn`) al empezar / completar el objetivo. */
+  onStart?: string;
+  onComplete?: string;
+  /** Checkpoint que se activa al completar. */
+  checkpoint?: string;
+}
+
+export interface MissionBlock {
+  id: MissionId;
+  objectives: ObjectiveDef[];
+  /** Hay un panel de alarma: el primer enemigo en dar la voz de alarma trae refuerzos (`spawnOn: 'alarm'`). */
+  alarm?: boolean;
+}
+
 export type MusicMood = 'hub' | 'tension' | 'club' | 'docks' | 'tower' | 'gauntlet' | 'practice';
 export type AmbienceKind = 'lobby' | 'club' | 'harbor' | 'wind' | 'range' | 'none';
 
@@ -243,4 +278,6 @@ export interface LevelData {
   music: MusicMood;
   ambience: AmbienceKind;
   weather?: 'rain' | null;
+  /** Guion de misión (solo niveles de contrato). */
+  mission?: MissionBlock;
 }

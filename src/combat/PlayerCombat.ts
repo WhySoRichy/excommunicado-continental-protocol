@@ -2,6 +2,7 @@ import { Vector3 } from 'three';
 import type { AudioEngine } from '../audio/AudioEngine';
 import { DEG2RAD } from '../core/math';
 import type { Rng } from '../core/rng';
+import type { CivilianManager } from '../entities/Civilian';
 import type { Enemy } from '../entities/Enemy';
 import type { PlayerController } from '../entities/PlayerController';
 import type { CameraRig } from '../game/CameraRig';
@@ -35,6 +36,7 @@ export interface CombatCtx {
   camera: CameraRig;
   player: PlayerController;
   enemies: EnemyManager;
+  civilians: CivilianManager | null;
   vfx: Vfx;
   audio: AudioEngine;
   rng: Rng;
@@ -115,7 +117,7 @@ export class PlayerCombat {
   /** La línea boca-del-arma → punto apuntado está tapada (mira gris). */
   blocked = false;
   /** Qué hay bajo la mira. */
-  aimOver: 'none' | 'enemy' = 'none';
+  aimOver: 'none' | 'enemy' | 'civilian' = 'none';
   spreadDeg = 0;
   /** Recoil visual para la pose (decae). */
   recoilVis = 0;
@@ -340,7 +342,8 @@ export class PlayerCombat {
     const range = w.isGun ? w.def.range : 4;
     this.aimPoint(ctx, range, _aim);
     const overEnemy = this.hit.hit ? ctx.enemies.enemyFromCollider(this.hit.collider) : null;
-    this.aimOver = overEnemy && overEnemy.alive ? 'enemy' : 'none';
+    const overCiv = this.hit.hit && !overEnemy ? ctx.civilians?.fromCollider(this.hit.collider) : null;
+    this.aimOver = overEnemy && overEnemy.alive ? 'enemy' : overCiv && overCiv.alive ? 'civilian' : 'none';
     this.muzzleOf(ctx.player, true, _muzzle);
     _dir.subVectors(_aim, _muzzle);
     const len = _dir.length();
@@ -372,6 +375,7 @@ export class PlayerCombat {
       if (hit) {
         _end.copy(this.hit.point as Vector3);
         const enemy = ctx.enemies.enemyFromCollider(this.hit.collider);
+        const civ = enemy ? null : ctx.civilians?.fromCollider(this.hit.collider);
         if (enemy && enemy.alive) {
           anyEnemyHit = true;
           const zone = zoneFromHeight(_end.y, enemy.feet.y, enemy.height);
@@ -379,6 +383,10 @@ export class PlayerCombat {
           const res = enemy.applyHit(dmg, zone, p.feet, d.headMult);
           ctx.vfx.impact(_end, this.hit.normal, 'blood', 5);
           this.onHit(enemy, zone, res.killed, res.toHeavyArmor > res.toHealth, this.hit.distance, 'gun', ctx);
+        } else if (civ && civ.alive && ctx.civilians) {
+          // Civil alcanzado: sin estilo ni marcador; la penalización la aplica el director de misión.
+          ctx.vfx.impact(_end, this.hit.normal, 'blood', 4);
+          ctx.civilians.hit(civ, d.damage * falloff(this.hit.distance, d.falloffStart, d.falloffEnd));
         } else {
           ctx.vfx.impact(_end, this.hit.normal, 'spark', 6);
           ctx.vfx.decal(_end, this.hit.normal);
@@ -397,6 +405,7 @@ export class PlayerCombat {
     ctx.camera.addTrauma(d.id === 'shotgun' ? 0.22 : 0.07);
     this.recoilVis = 1;
     ctx.enemies.noise(p.feet, d.noise);
+    ctx.civilians?.noise(p.feet, Math.max(d.noise, 12));
   }
 
   private onHit(enemy: Enemy, zone: string, killed: boolean, armored: boolean, dist: number, method: 'gun' | 'knife' | 'takedown', ctx: CombatCtx): void {

@@ -5,6 +5,7 @@ import { FIXED_DT } from '../core/Loop';
 import { deleteProfile, type Profile } from '../core/Save';
 import { addCoins } from '../hub/economy';
 import type { Game, QaInvariants } from '../game/Game';
+import type { MissionId } from '../missions/types';
 
 /**
  * API de QA expuesta en `window.__EXCOM__` (solo con ?qa=1 o en dev).
@@ -141,7 +142,35 @@ export interface QaApi {
   advanceDialog(): void;
   closeMenu(): void;
   buy(id: UpgradeId): boolean;
-  drill(): { active: boolean; done: boolean };
+  // --- Contratos ---
+  startContract(id: MissionId): Promise<void>;
+  /** "Empezar" en el briefing. */
+  beginContract(): void;
+  mission(): MissionSnapshot | null;
+  /** Último resultado de contrato (tras la pantalla de resultados). */
+  outcome(): { mission: string; success: boolean; rank: string; total: number; coins: number; achievements: string[]; failReason: string } | null;
+  /** Pulsa un botón de la pantalla actual por su texto. */
+  clickButton(label: string): boolean;
+  civilians(): Array<{ id: string; alive: boolean; state: string; x: number; z: number; health: number }>;
+}
+
+export interface MissionSnapshot {
+  id: string;
+  index: number;
+  total: number;
+  objective: string;
+  kind: string;
+  finished: boolean;
+  markersUsed: number;
+  markersTotal: number;
+  time: number;
+  alarmSounded: boolean;
+  alarmDisabled: boolean;
+  civiliansHurt: number;
+  civiliansKilled: number;
+  escapeLeft: number;
+  beacon: { x: number; y: number; z: number } | null;
+  respawn: { x: number; y: number; z: number };
 }
 
 declare global {
@@ -389,7 +418,43 @@ export function installQa(game: Game): void {
       btn?.click();
       return game.profile.coins < before;
     },
-    drill: () => ({ active: game.drillActive, done: game.drillDone }),
+    startContract: (id) => game.startContract(id),
+    beginContract: () => game.beginContract(),
+    mission: () => {
+      const m = game.mission;
+      if (!m) return null;
+      const o = m.current;
+      const b = m.beacon(new Vector3());
+      return {
+        id: m.id,
+        index: m.index,
+        total: m.objectives.length,
+        objective: o?.text ?? '',
+        kind: o?.kind ?? '',
+        finished: m.finished,
+        markersUsed: m.markersUsed,
+        markersTotal: m.markersTotal,
+        time: m.time,
+        alarmSounded: m.alarmSounded,
+        alarmDisabled: m.alarmDisabled,
+        civiliansHurt: m.civiliansHurt,
+        civiliansKilled: m.civiliansKilled,
+        escapeLeft: m.escapeLeft,
+        beacon: b ? { x: b.x, y: b.y, z: b.z } : null,
+        respawn: { x: m.respawnPos.x, y: m.respawnPos.y, z: m.respawnPos.z },
+      };
+    },
+    outcome: () => {
+      const o = game.outcome;
+      if (!o) return null;
+      return { mission: o.mission, success: o.success, rank: o.rank.rank, total: o.rank.total, coins: o.coinsReward, achievements: o.achievements.map((a) => a.id), failReason: o.failReason };
+    },
+    clickButton: (label) => {
+      const btn = [...document.querySelectorAll<HTMLButtonElement>('#screens button')].find((b) => b.textContent?.trim() === label);
+      btn?.click();
+      return !!btn;
+    },
+    civilians: () => (game.session?.civilians?.list ?? []).map((c) => ({ id: c.id, alive: c.alive, state: c.state, x: c.feet.x, z: c.feet.z, health: c.vitals.health })),
   };
   window.__EXCOM__ = api;
 }

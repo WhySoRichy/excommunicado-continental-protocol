@@ -1050,3 +1050,256 @@ body {
 .shop-status.poor {
   color: #ff9a8a;
 }
+
+/* ===== Baliza, marcadores, briefing y resultados ===== */
+.beacon,
+.beacon-arrow {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  will-change: transform;
+}
+
+.beacon[hidden],
+.beacon-arrow[hidden],
+.markers[hidden] {
+  display: none;
+}
+
+.beacon {
+  margin-left: -14px;
+  margin-top: -14px;
+}
+
+.beacon-diamond {
+  width: 20px;
+  height: 20px;
+  background: var(--c-gold);
+  transform: rotate(45deg) scale(0.75);
+  box-shadow: 0 0 10px rgba(212, 175, 55, 0.8), 0 0 2px #000;
+  animation: beacon-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes beacon-pulse {
+  50% {
+    transform: rotate(45deg) scale(1);
+  }
+}
+
+.beacon-dist {
+  font: 700 0.72rem var(--font-ui);
+  color: var(--c-gold-soft);
+  text-shadow: 0 1px 2px #000, 0 0 4px #000;
+}
+
+.beacon-arrow {
+  margin-left: -16px;
+  margin-top: -16px;
+  width: 32px;
+  height: 32px;
+  justify-content: center;
+}
+
+.beacon-tri {
+  width: 0;
+  height: 0;
+  border-left: 11px solid transparent;
+  border-right: 11px solid transparent;
+  border-bottom: 18px solid var(--c-gold);
+  filter: drop-shadow(0 0 3px #000);
+}
+
+.markers {
+  position: absolute;
+  left: 18px;
+  bottom: 118px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0.3rem 0.6rem;
+  background: rgba(14, 16, 20, 0.7);
+  border-radius: 4px;
+}
+
+.markers-label {
+  margin-right: 0.3rem;
+  font: 700 0.62rem var(--font-ui);
+  letter-spacing: 0.18em;
+  color: var(--c-text-dim);
+}
+
+.marker {
+  width: 12px;
+  height: 12px;
+  background: #3a3f49;
+  border-radius: 2px;
+  transform: rotate(45deg) scale(0.8);
+}
+
+.marker.on {
+  background: #c8102e;
+  box-shadow: 0 0 6px rgba(200, 16, 46, 0.8);
+}
+
+.menu-row {
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.brief-kicker {
+  font: 700 0.75rem var(--font-ui);
+  letter-spacing: 0.3em;
+  color: var(--c-text-dim);
+}
+
+.brief-place {
+  margin-top: -0.6rem;
+  font-size: 0.9rem;
+  color: var(--c-text-dim);
+}
+
+.brief-lines {
+  max-width: 620px;
+  margin: 0.4rem 0;
+  padding-left: 1.3rem;
+  font-size: 1.05rem;
+  line-height: 1.55;
+}
+
+.brief-lines li + li {
+  margin-top: 0.4rem;
+}
+
+.brief-lines b {
+  color: var(--c-gold-soft);
+}
+
+.results-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 1.4rem;
+  align-items: center;
+  width: min(680px, 90vw);
+}
+
+.rank-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 150px;
+  height: 150px;
+  border: 2px solid var(--c-gold);
+  border-radius: 10px;
+  background: rgba(212, 175, 55, 0.08);
+}
+
+.rank-letter {
+  font: 700 5.2rem/1 var(--font-title);
+  color: var(--c-gold);
+  text-shadow: 0 0 18px rgba(212, 175, 55, 0.45);
+}
+
+.rank-box[data-rank='S'] .rank-letter {
+  color: #fff1b8;
+  text-shadow: 0 0 26px rgba(255, 220, 120, 0.9);
+}
+
+.screen-results.fail .rank-box {
+  border-color: var(--c-alarm);
+}
+
+.rank-total {
+  font-size: 0.8rem;
+  color: var(--c-text-dim);
+}
+
+.subs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.sub {
+  display: grid;
+  grid-template-columns: 120px 1fr 36px;
+  gap: 0.6rem;
+  align-items: center;
+  font-size: 0.88rem;
+}
+
+.sub-label {
+  color: var(--c-text-dim);
+}
+
+.sub-bar {
+  height: 8px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.sub-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #b8912a, var(--c-gold));
+}
+
+.sub-value {
+  text-align: right;
+  font-weight: 600;
+}
+
+.results-line {
+  font-size: 0.88rem;
+  color: var(--c-text-dim);
+}
+
+.coins-big .coin-count {
+  font-size: 1.8rem;
+}
+
+.results-best {
+  font: 700 0.8rem var(--font-ui);
+  letter-spacing: 0.2em;
+  color: var(--c-ok);
+}
+
+.achv-title {
+  margin-top: 0.2rem;
+  font: 700 0.72rem var(--font-ui);
+  letter-spacing: 0.22em;
+  color: var(--c-text-dim);
+}
+
+.achv {
+  font-size: 0.92rem;
+  color: var(--c-gold-soft);
+}
+
+.results-fail {
+  margin: 0;
+  color: #ff9a8a;
+}
+
+.crosshair.civilian .ch,
+.crosshair.civilian .ch-dot {
+  background: #5ee6c8;
+}
+
+.crosshair.civilian::before {
+  content: 'NO DISPARAR';
+  position: absolute;
+  left: -46px;
+  top: 22px;
+  width: 92px;
+  font: 700 0.62rem var(--font-ui);
+  letter-spacing: 0.12em;
+  text-align: center;
+  color: #5ee6c8;
+  text-shadow: 0 1px 2px #000;
+}
