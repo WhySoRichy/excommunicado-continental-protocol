@@ -8,7 +8,8 @@ import { showFatal } from './ui/boot';
 const params = new URLSearchParams(window.location.search);
 const qa = params.has('qa') || import.meta.env.DEV;
 const presetParam = params.get('preset');
-const preset: QualityPreset = presetParam === 'low' || presetParam === 'high' ? presetParam : 'medium';
+// `?preset=` fuerza un preset (QA/perf); si no, manda el de Ajustes.
+const preset: QualityPreset | undefined = presetParam === 'low' || presetParam === 'medium' || presetParam === 'high' ? presetParam : undefined;
 const levelParam = params.get('level');
 const startLevel: LevelId = levelParam === 'arena' || levelParam === 'practice' ? levelParam : 'hub';
 const pointerLock = !qa || params.get('lock') === '1';

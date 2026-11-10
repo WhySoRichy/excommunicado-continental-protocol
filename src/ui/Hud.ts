@@ -56,6 +56,7 @@ export class Hud {
   private readonly beaconArrowDist: HTMLSpanElement;
   private readonly markers: HTMLDivElement;
   private readonly hints: HTMLDivElement;
+  private hintsEnabled = true;
   private readonly vitals: HTMLDivElement;
   private readonly armorBar: HTMLDivElement;
   private readonly healthBar: HTMLDivElement;
@@ -231,9 +232,15 @@ export class Hud {
 
   private markersKey = '';
 
+  /** Ajuste de accesibilidad: ocultar la columna de pistas de teclas. */
+  setHintsEnabled(on: boolean): void {
+    this.hintsEnabled = on;
+    this.hints.hidden = !on || this.hints.childElementCount === 0;
+  }
+
   setHints(lines: PromptSpec[]): void {
     this.hints.replaceChildren(...lines.map((l) => h('div', { class: 'hint' }, [keycap(l.key), h('span', { text: l.text })])));
-    this.hints.hidden = lines.length === 0;
+    this.hints.hidden = !this.hintsEnabled || lines.length === 0;
   }
 
   setPrompt(p: PromptSpec | null): void {

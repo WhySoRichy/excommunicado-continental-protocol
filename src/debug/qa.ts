@@ -6,6 +6,7 @@ import { deleteProfile, type Profile } from '../core/Save';
 import { addCoins } from '../hub/economy';
 import type { Game, QaInvariants } from '../game/Game';
 import type { MissionId } from '../missions/types';
+import type { Settings } from '../core/Settings';
 
 /**
  * API de QA expuesta en `window.__EXCOM__` (solo con ?qa=1 o en dev).
@@ -31,6 +32,7 @@ export interface PlayerSnapshot {
   speed: number;
   yaw: number;
   invulnerable: boolean;
+  aiming: boolean;
   cover: string | null;
   edge: number;
   stats: Record<string, number>;
@@ -154,6 +156,9 @@ export interface QaApi {
   civilians(): Array<{ id: string; alive: boolean; state: string; x: number; z: number; health: number }>;
   /** Mata a un enemigo en silencio (sin ruido ni alerta): prepara escenarios. */
   killEnemy(id: string): boolean;
+  /** Ajustes actuales y estado derivado (cámara, render, audio). */
+  settings(): { settings: Settings; cameraFov: number; mouseSens: number; brightness: string; preset: string; uiScale: string; volumes: { master: number; music: number } };
+  setSettings(patch: Partial<Settings>): void;
 }
 
 export interface MissionSnapshot {
@@ -263,6 +268,7 @@ export function installQa(game: Game): void {
         speed: p.stepSpeed(FIXED_DT),
         yaw: p.yaw,
         invulnerable: p.invulnerable,
+        aiming: p.aiming,
         cover: p.cover?.height ?? null,
         edge: p.cover?.edge ?? 0,
         stats: { ...p.stats },
@@ -475,6 +481,16 @@ export function installQa(game: Game): void {
       btn?.click();
       return !!btn;
     },
+    settings: () => ({
+      settings: game.settings,
+      cameraFov: game.camera.settings.fov,
+      mouseSens: game.camera.settings.mouseSens,
+      brightness: game.renderer.canvas.style.filter,
+      preset: game.renderer.preset,
+      uiScale: document.documentElement.style.getPropertyValue('--ui-scale'),
+      volumes: game.audio.getVolumes(),
+    }),
+    setSettings: (patch) => game.applySettings({ ...game.settings, ...patch }),
     killEnemy: (id) => {
       const s = game.session;
       const e = s?.enemies.enemies.find((x) => x.id === id || x.id.startsWith(`${id}#`));

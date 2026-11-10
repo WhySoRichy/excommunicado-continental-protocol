@@ -1345,3 +1345,106 @@ body {
   max-width: 360px;
   margin: 0 auto 8px;
 }
+
+/* Ajustes: pestañas, filas con control y valor, tabla de teclas */
+.screen-settings {
+  width: min(720px, calc(100vw - 32px));
+}
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+  margin-bottom: 14px;
+}
+.tab {
+  font: inherit;
+  font-size: 0.9em;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--c-line);
+  background: var(--c-graphite-2);
+  color: var(--c-text-dim);
+  cursor: pointer;
+}
+.tab.active,
+.tab:focus-visible {
+  color: var(--c-graphite);
+  background: var(--c-gold);
+  border-color: var(--c-gold);
+  outline: none;
+}
+.settings-body {
+  display: grid;
+  gap: 8px;
+  max-height: min(52vh, 440px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.setting-row {
+  display: grid;
+  grid-template-columns: 1fr minmax(120px, 220px) 64px;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--c-graphite-2);
+}
+.setting-row:has(.toggle),
+.setting-row:has(.segmented) {
+  grid-template-columns: 1fr auto;
+}
+.setting-label {
+  color: var(--c-text);
+}
+.setting-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--c-gold-soft);
+}
+.slider {
+  width: 100%;
+  accent-color: var(--c-gold);
+}
+.toggle.on,
+.segmented .on {
+  background: var(--c-gold);
+  color: var(--c-graphite);
+  border-color: var(--c-gold);
+}
+.segmented {
+  display: flex;
+  gap: 4px;
+}
+.keys-table td.keys {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.btn.capturing {
+  outline: 2px solid var(--c-gold);
+  animation: pulse-cap 0.9s ease-in-out infinite alternate;
+}
+@keyframes pulse-cap {
+  to {
+    background: var(--c-gold);
+    color: var(--c-graphite);
+  }
+}
+.settings-note {
+  min-height: 1.4em;
+  margin: 10px 0 0;
+  text-align: center;
+  color: var(--c-gold-soft);
+  font-size: 0.9em;
+}
+@media (max-width: 560px) {
+  .setting-row {
+    grid-template-columns: 1fr;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn.capturing {
+    animation: none;
+  }
+}

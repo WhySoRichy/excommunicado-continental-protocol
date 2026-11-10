@@ -1,13 +1,30 @@
 import type { UpgradeId } from '../combat/weapons';
-import { ACTION_LABELS, type Action } from '../core/actions';
+import { ACTION_LABELS, type Action, codeLabel, REBINDABLE } from '../core/actions';
 import type { Input } from '../core/Input';
 import type { Profile } from '../core/Save';
+import { defaultSettings, type NumericSetting, type QualityPresetId, rebind, SETTING_RANGES, type Settings } from '../core/Settings';
 import { canBuy, SHOP } from '../hub/economy';
 import type { Dialogue } from '../hub/dialogue';
 import { MISSION_ORDER, type MissionDef, type MissionId, MISSIONS } from '../missions/types';
 import { button, h, keycap } from './dom';
 
-export type ScreenId = 'title' | 'confirmNew' | 'pause' | 'controls' | 'dialog' | 'shop' | 'contracts' | 'briefing' | 'results';
+export type ScreenId = 'title' | 'confirmNew' | 'pause' | 'controls' | 'settings' | 'dialog' | 'shop' | 'contracts' | 'briefing' | 'results';
+
+type SettingsTab = 'controls' | 'video' | 'access' | 'keys';
+type BoolSetting = 'invertY' | 'aimToggle' | 'dynamicResolution' | 'hints';
+const SETTINGS_TABS: ReadonlyArray<[SettingsTab, string]> = [
+  ['controls', 'Controles'],
+  ['video', 'Vídeo y audio'],
+  ['access', 'Accesibilidad'],
+  ['keys', 'Teclas'],
+];
+const PRESET_LABELS: ReadonlyArray<[QualityPresetId, string]> = [
+  ['low', 'Bajo'],
+  ['medium', 'Medio'],
+  ['high', 'Alto'],
+];
+const pct = (v: number): string => `${Math.round(v * 100)} %`;
+const times = (v: number): string => `×${v.toFixed(2)}`;
 
 /** Datos que pinta la pantalla de resultados. */
 export interface ResultsView {
@@ -42,6 +59,8 @@ export interface ScreenCallbacks {
   onCloseMenu(): void;
   onBuy(id: UpgradeId): void;
   onStartMission(id: MissionId): void;
+  settings(): Settings;
+  onSettingsChange(s: Settings): void;
   hasSave(): boolean;
   inHub(): boolean;
   profile(): Profile;
@@ -80,6 +99,10 @@ export class Screens {
   private dialog: Dialogue | null = null;
   private dialogIndex = 0;
   private onDialogEnd: (() => void) | null = null;
+  private settingsTab: SettingsTab = 'controls';
+  /** Acción esperando tecla nueva (pestaña Teclas). */
+  private rebinding: Action | null = null;
+  private settingsNote = '';
 
   constructor(
     uiRoot: HTMLElement,
@@ -107,7 +130,9 @@ export class Screens {
   }
 
   show(id: ScreenId): void {
-    if (id === 'controls') this.back = this.current;
+    // Controles y Ajustes son subpantallas: recuerdan desde dónde se abrieron (título o pausa).
+    if ((id === 'controls' || id === 'settings') && this.current !== id) this.back = this.current;
+    if (id !== 'settings') this.cancelRebind();
     this.current = id;
     this.root.hidden = false;
     this.root.replaceChildren(this.build(id));
@@ -117,6 +142,7 @@ export class Screens {
   }
 
   hide(): void {
+    this.cancelRebind();
     this.current = null;
     this.dialog = null;
     this.root.hidden = true;
@@ -124,10 +150,18 @@ export class Screens {
     delete this.root.dataset.screen;
   }
 
-  closeControls(): void {
-    if (this.back && this.back !== 'controls') this.show(this.back);
-    else this.hide();
+  /** Cierra Controles o Ajustes y vuelve a la pantalla de origen. */
+  closeSub(): void {
+    const back = this.back;
     this.back = null;
+    if (back && back !== 'controls' && back !== 'settings') this.show(back);
+    else this.hide();
+  }
+
+  private cancelRebind(): void {
+    if (!this.rebinding) return;
+    this.rebinding = null;
+    this.input.captureNextCode(null);
   }
 
   /** Diálogo de NPC. `onEnd` se llama al pasar la última línea (p. ej. abrir la tienda). */
@@ -181,6 +215,8 @@ export class Screens {
         return this.buildPause();
       case 'controls':
         return this.buildControls();
+      case 'settings':
+        return this.buildSettings();
       case 'dialog':
         return this.buildDialog();
       case 'shop':
@@ -286,6 +322,7 @@ export class Screens {
     if (hasSave) menu.push(button('Continuar', () => this.cb.onContinue(), 'btn btn-primary'));
     menu.push(button('Nueva partida', () => (hasSave ? this.show('confirmNew') : this.cb.onNewGame()), hasSave ? 'btn' : 'btn btn-primary'));
     menu.push(button('Controles', () => this.show('controls')));
+    menu.push(button('Ajustes', () => this.show('settings')));
     if (this.devButtons) {
       menu.push(button('Simulacro directo (QA)', () => this.cb.onPlayPractice(), 'btn btn-dev'));
       menu.push(button('Arena de pruebas (QA)', () => this.cb.onPlayArena(), 'btn btn-dev'));
@@ -306,7 +343,7 @@ export class Screens {
   }
 
   private buildPause(): HTMLElement {
-    const menu = [button('Reanudar', () => this.cb.onResume(), 'btn btn-primary'), button('Controles', () => this.show('controls'))];
+    const menu = [button('Reanudar', () => this.cb.onResume(), 'btn btn-primary'), button('Controles', () => this.show('controls')), button('Ajustes', () => this.show('settings'))];
     if (!this.cb.inHub()) menu.push(button('Volver al Continental', () => this.cb.onReturnToHub()));
     menu.push(button('Salir al título', () => this.cb.onQuitToTitle()));
     return h('section', { class: 'screen screen-pause', role: 'dialog', ariaLabel: 'Pausa' }, [
@@ -326,8 +363,181 @@ export class Screens {
       h('h2', { class: 'screen-heading', text: dev === 'pad' ? 'CONTROLES · GAMEPAD' : 'CONTROLES · TECLADO Y RATÓN' }),
       h('table', { class: 'controls-table' }, [h('tbody', {}, rows)]),
       h('p', { class: 'screen-hint', text: `${ACTION_LABELS.crouch}: C hace una cosa u otra según el contexto; el aviso en pantalla te dice cuál.` }),
-      h('div', { class: 'menu' }, [button('Volver', () => this.closeControls(), 'btn btn-primary')]),
+      h('div', { class: 'menu' }, [button('Volver', () => this.closeSub(), 'btn btn-primary')]),
     ]);
+  }
+
+  // ------------------------------------------------------------ Ajustes
+  private updateSettings(patch: Partial<Settings>): void {
+    this.cb.onSettingsChange({ ...this.cb.settings(), ...patch });
+  }
+
+  /** Repinta Ajustes y devuelve el foco al control tocado (navegable con teclado). */
+  private reshowSettings(focusSel: string): void {
+    this.show('settings');
+    this.root.querySelector<HTMLElement>(focusSel)?.focus({ preventScroll: true });
+  }
+
+  private buildSettings(): HTMLElement {
+    const tabBar = h(
+      'div',
+      { class: 'tabs', role: 'tablist', ariaLabel: 'Secciones de ajustes' },
+      SETTINGS_TABS.map(([id, label]) => {
+        const b = button(
+          label,
+          () => {
+            this.settingsTab = id;
+            this.settingsNote = '';
+            this.cancelRebind();
+            this.reshowSettings(`[data-tab="${id}"]`);
+          },
+          `tab${id === this.settingsTab ? ' active' : ''}`,
+        );
+        b.setAttribute('role', 'tab');
+        b.setAttribute('aria-selected', String(id === this.settingsTab));
+        b.dataset.tab = id;
+        return b;
+      }),
+    );
+    let body: HTMLElement[];
+    switch (this.settingsTab) {
+      case 'controls':
+        body = [
+          this.slider('Sensibilidad del ratón', 'mouseSens', 0.05, times),
+          this.slider('Sensibilidad del mando', 'padSens', 0.05, times),
+          this.toggle('Invertir eje Y', 'invertY'),
+          this.toggle('Apuntar: pulsar para alternar (en vez de mantener)', 'aimToggle'),
+          this.slider('Campo de visión', 'fov', 1, (v) => `${Math.round(v)}°`),
+        ];
+        break;
+      case 'video':
+        body = [
+          this.presetRow(),
+          this.toggle('Resolución dinámica', 'dynamicResolution'),
+          this.slider('Brillo', 'brightness', 0.05, pct),
+          this.slider('Volumen general', 'master', 0.05, pct),
+          this.slider('Música', 'music', 0.05, pct),
+          this.slider('Efectos', 'sfx', 0.05, pct),
+          this.slider('Interfaz', 'ui', 0.05, pct),
+        ];
+        break;
+      case 'access':
+        body = [
+          this.slider('Sacudida de cámara', 'shake', 0.05, pct),
+          this.slider('Tamaño de la interfaz', 'uiScale', 0.05, pct),
+          this.toggle('Mostrar pistas de teclas', 'hints'),
+        ];
+        break;
+      case 'keys':
+        body = [this.keysTable(), h('p', { class: 'screen-hint', text: 'Esc y F3 están reservadas. El clic izquierdo no se puede capturar: "Restablecer" lo devuelve a Disparar.' })];
+        break;
+    }
+    return h('section', { class: 'screen screen-settings', role: 'dialog', ariaLabel: 'Ajustes' }, [
+      h('h2', { class: 'screen-heading', text: 'AJUSTES' }),
+      tabBar,
+      h('div', { class: 'settings-body', role: 'tabpanel' }, body),
+      h('p', { class: 'settings-note', text: this.settingsNote, role: 'status' }),
+      h('div', { class: 'menu menu-row' }, [
+        button('Volver', () => this.closeSub(), 'btn btn-primary'),
+        button('Restablecer', () => {
+          this.cb.onSettingsChange(defaultSettings());
+          this.settingsNote = 'Ajustes de fábrica restaurados.';
+          this.reshowSettings('[data-tab]');
+        }),
+      ]),
+    ]);
+  }
+
+  private slider(label: string, key: NumericSetting, step: number, fmt: (v: number) => string): HTMLElement {
+    const value = this.cb.settings()[key];
+    const [lo, hi] = SETTING_RANGES[key];
+    const input = h('input', { class: 'slider', ariaLabel: label, dataset: { setting: key } });
+    input.type = 'range';
+    input.min = String(lo);
+    input.max = String(hi);
+    input.step = String(step);
+    input.value = String(value);
+    const out = h('span', { class: 'setting-value', text: fmt(value) });
+    input.addEventListener('input', () => {
+      const v = Number(input.value);
+      out.textContent = fmt(v);
+      this.updateSettings({ [key]: v });
+    });
+    return h('label', { class: 'setting-row' }, [h('span', { class: 'setting-label', text: label }), input, out]);
+  }
+
+  private toggle(label: string, key: BoolSetting): HTMLElement {
+    const on = this.cb.settings()[key];
+    const b = button(
+      on ? 'Sí' : 'No',
+      () => {
+        this.updateSettings({ [key]: !this.cb.settings()[key] });
+        this.reshowSettings(`[data-setting="${key}"]`);
+      },
+      `btn btn-small toggle${on ? ' on' : ''}`,
+    );
+    b.setAttribute('aria-pressed', String(on));
+    b.setAttribute('aria-label', label);
+    b.dataset.setting = key;
+    return h('div', { class: 'setting-row' }, [h('span', { class: 'setting-label', text: label }), b]);
+  }
+
+  private presetRow(): HTMLElement {
+    const cur = this.cb.settings().preset;
+    const group = h(
+      'div',
+      { class: 'segmented', role: 'radiogroup', ariaLabel: 'Calidad gráfica' },
+      PRESET_LABELS.map(([id, label]) => {
+        const b = button(
+          label,
+          () => {
+            this.updateSettings({ preset: id });
+            this.reshowSettings(`[data-preset="${id}"]`);
+          },
+          `btn btn-small${id === cur ? ' on' : ''}`,
+        );
+        b.setAttribute('role', 'radio');
+        b.setAttribute('aria-checked', String(id === cur));
+        b.dataset.preset = id;
+        return b;
+      }),
+    );
+    return h('div', { class: 'setting-row' }, [h('span', { class: 'setting-label', text: 'Calidad gráfica' }), group]);
+  }
+
+  private keysTable(): HTMLElement {
+    const s = this.cb.settings();
+    const rows = REBINDABLE.map((a) => {
+      const kbm = s.bindings[a].filter((c) => !c.startsWith('Pad'));
+      const waiting = this.rebinding === a;
+      const btn = button(waiting ? 'Pulsa una tecla…' : 'Cambiar', () => this.startRebind(a), `btn btn-small${waiting ? ' capturing' : ''}`);
+      btn.dataset.rebind = a;
+      return h('tr', { dataset: { action: a } }, [h('th', { text: ACTION_LABELS[a] }), h('td', { class: 'keys' }, [...new Set(kbm.map(codeLabel))].map((l) => keycap(l))), h('td', {}, [btn])]);
+    });
+    return h('table', { class: 'controls-table keys-table' }, [h('tbody', {}, rows)]);
+  }
+
+  private startRebind(a: Action): void {
+    this.rebinding = a;
+    this.settingsNote = `Pulsa la tecla nueva para «${ACTION_LABELS[a]}». Esc cancela.`;
+    this.reshowSettings(`[data-rebind="${a}"]`);
+    this.input.captureNextCode((code) => {
+      this.rebinding = null;
+      if (code === 'Escape') this.settingsNote = 'Cambio cancelado.';
+      else {
+        const r = rebind(this.cb.settings().bindings, a, code);
+        if (!r.ok) this.settingsNote = r.reason === 'reserved' ? `${codeLabel(code)} está reservada.` : 'Esa acción no se puede reasignar.';
+        else {
+          this.updateSettings({ bindings: r.bindings });
+          const moved = r.displaced ? r.bindings[r.displaced].find((c) => !c.startsWith('Pad')) : undefined;
+          this.settingsNote =
+            r.displaced && moved
+              ? `${codeLabel(code)} → ${ACTION_LABELS[a]}. «${ACTION_LABELS[r.displaced]}» pasa a ${codeLabel(moved)}.`
+              : `${codeLabel(code)} → ${ACTION_LABELS[a]}.`;
+        }
+      }
+      this.reshowSettings(`[data-rebind="${a}"]`);
+    });
   }
 
   private buildDialog(): HTMLElement {

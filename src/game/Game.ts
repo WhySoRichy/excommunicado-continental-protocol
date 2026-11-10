@@ -10,6 +10,7 @@ import { AnimationLoop, FIXED_DT, FixedStepAccumulator } from '../core/Loop';
 import { wrapAngle } from '../core/math';
 import { Rng } from '../core/rng';
 import { BrowserStore, deleteProfile, type KeyValueStore, loadProfile, newProfile, type Profile, PROFILE_KEY, saveProfile } from '../core/Save';
+import { loadSettings, saveSettings, type Settings } from '../core/Settings';
 import { CollisionDebugView, DebugOverlay } from '../debug/DebugOverlay';
 import { FrameStats } from '../debug/FrameStats';
 import { idlePose, type RigPose, type WeaponModel } from '../entities/CharacterRig';
@@ -28,12 +29,13 @@ import { hideBoot, setBootProgress } from '../ui/boot';
 import { h } from '../ui/dom';
 import { Hud, type HudData, type PromptSpec } from '../ui/Hud';
 import { type ResultsView, Screens } from '../ui/Screens';
-import { CameraRig } from './CameraRig';
+import { CameraRig, DEFAULT_CAMERA } from './CameraRig';
 import { LevelSession } from './LevelSession';
 
 export interface GameOptions {
   qa: boolean;
-  preset: QualityPreset;
+  /** Preset forzado por la URL (`?preset=`); si falta, se usa el de Ajustes. */
+  preset?: QualityPreset;
   startLevel: LevelId;
   /** Usar pointer lock real (por defecto: sí fuera de QA; `?lock=1` lo fuerza en QA). */
   pointerLock: boolean;
@@ -85,6 +87,7 @@ export class Game {
   readonly rng = new Rng(7);
   readonly store: KeyValueStore;
   profile: Profile;
+  settings: Settings;
   R: Rapier | null = null;
   session: LevelSession | null = null;
   director: HubDirector | null = null;
@@ -128,6 +131,10 @@ export class Game {
   private nearInteractable: InteractableDef | null = null;
   /** Progreso de una interacción mantenida (s). */
   private holdT = 0;
+  /** Apuntar en modo alternar (Ajustes): estado actual. */
+  private aimLatched = false;
+  /** Nivel cuyas pistas están en pantalla (se repintan al reasignar teclas). */
+  private hintsFor: LevelId | null = null;
 
   constructor(gameRoot: HTMLElement, uiRoot: HTMLElement, opts: GameOptions) {
     this.opts = opts;
@@ -136,7 +143,8 @@ export class Game {
     const loaded = loadProfile(this.store);
     this.profile = loaded.profile;
     if (loaded.status === 'reset-corrupt') console.warn('[save] la partida guardada estaba corrupta; se empezó una nueva (copia en localStorage).');
-    this.renderer = new GameRenderer(gameRoot, opts.preset);
+    this.settings = loadSettings(this.store);
+    this.renderer = new GameRenderer(gameRoot, opts.preset ?? this.settings.preset);
     this.input = new Input(this.renderer.canvas);
     this.input.attach();
     this.input.on((e) => this.onInputEvent(e));
@@ -156,6 +164,8 @@ export class Game {
         onCloseMenu: () => this.closeMenu(),
         onBuy: (id) => this.buyUpgrade(id),
         onStartMission: (id) => this.startMission(id),
+        settings: () => this.settings,
+        onSettingsChange: (s) => this.applySettings(s),
         hasSave: () => this.store.get(PROFILE_KEY) !== null,
         inHub: () => this.currentLevel === 'hub',
         profile: () => this.profile,
@@ -203,6 +213,7 @@ export class Game {
       focusKey: 'Q',
     };
     this.registerDebugCommands();
+    this.applySettings(this.settings, false);
     // El primer gesto del usuario desbloquea el audio (política de autoplay).
     const unlockAudio = (): void => this.audio.init();
     window.addEventListener('pointerdown', unlockAudio);
@@ -280,6 +291,29 @@ export class Game {
     saveProfile(this.store, this.profile);
   }
 
+  /** Aplica unos ajustes en caliente (y los guarda). El preset de la URL manda hasta que el jugador lo cambie. */
+  applySettings(s: Settings, persist = true): void {
+    const prev = this.settings;
+    this.settings = s;
+    const cs = this.camera.settings;
+    cs.mouseSens = DEFAULT_CAMERA.mouseSens * s.mouseSens;
+    cs.padSens = DEFAULT_CAMERA.padSens * s.padSens;
+    cs.invertY = s.invertY;
+    cs.fov = s.fov;
+    cs.shake = s.shake;
+    if (persist && s.preset !== prev.preset && s.preset !== this.renderer.preset) this.renderer.applyPreset(s.preset);
+    this.renderer.dynamicResolution = s.dynamicResolution;
+    if (!s.dynamicResolution) this.renderer.dynamicScale = 1;
+    this.renderer.setBrightness(s.brightness);
+    this.audio.setVolumes({ master: s.master, music: s.music, sfx: s.sfx, ui: s.ui });
+    this.input.setBindings(s.bindings);
+    document.documentElement.style.setProperty('--ui-scale', String(s.uiScale));
+    this.hud.setHintsEnabled(s.hints);
+    if (!s.aimToggle) this.aimLatched = false;
+    if (this.hintsFor) this.setHintsFor(this.hintsFor);
+    if (persist) saveSettings(this.store, s);
+  }
+
   private newGame(): void {
     deleteProfile(this.store);
     this.profile = newProfile();
@@ -291,6 +325,7 @@ export class Game {
   private onStateChange(to: GameStateId, from: GameStateId): void {
     const controlling = to === 'hub' || to === 'playing';
     this.input.capturing = controlling;
+    if (!controlling) this.aimLatched = false;
     this.input.endStep();
     this.sim.reset();
     this.hud.setVisible(controlling || to === 'paused' || to === 'dead');
@@ -453,6 +488,7 @@ export class Game {
   }
 
   private setHintsFor(id: LevelId): void {
+    this.hintsFor = id;
     const lab = (a: Action): string => this.input.label(a);
     if (id === 'hub') {
       this.hud.setHints([
@@ -702,11 +738,11 @@ export class Game {
   /** Acciones de nivel de frame (pausa, ayuda, hombro, reaparecer). Se consumen para no repetirse. */
   private handleFrameActions(realDt: number): void {
     const inp = this.input;
-    if (this.screens.current === 'controls') {
-      if (inp.pressed('pause') || inp.pressed('help')) {
+    if (this.screens.current === 'controls' || this.screens.current === 'settings') {
+      if (inp.pressed('pause') || (this.screens.current === 'controls' && inp.pressed('help'))) {
         inp.consume('pause');
         inp.consume('help');
-        this.screens.closeControls();
+        this.screens.closeSub();
       }
       return;
     }
@@ -746,6 +782,11 @@ export class Game {
     }
   }
 
+  /** Apuntar: mantener el botón o, con el ajuste de alternar, el estado conmutado. */
+  private aimHeld(): boolean {
+    return this.settings.aimToggle ? this.aimLatched : this.input.isDown('aim');
+  }
+
   private buildIntent(): PlayerIntent {
     const it = this.intent;
     const inp = this.input;
@@ -754,7 +795,8 @@ export class Game {
     it.moveY = this.move.y;
     it.camYaw = this.camera.yaw;
     it.sprint = inp.isDown('sprint');
-    it.aim = inp.isDown('aim');
+    if (this.settings.aimToggle && inp.pressed('aim')) this.aimLatched = !this.aimLatched;
+    it.aim = this.aimHeld();
     it.crouchPressed = inp.pressed('crouch');
     it.jumpPressed = inp.pressed('jump');
     it.dodgePressed = inp.pressed('dodge');
@@ -766,7 +808,7 @@ export class Game {
     const inp = this.input;
     c.fireHeld = inp.isDown('fire');
     c.firePressed = inp.pressed('fire');
-    c.aim = inp.isDown('aim');
+    c.aim = this.aimHeld();
     c.reloadPressed = inp.pressed('reload');
     c.takedownPressed = inp.pressed('takedown');
     c.focusPressed = inp.pressed('focus');
@@ -856,6 +898,7 @@ export class Game {
     s.respawnAt(new Vector3(pos.x, pos.y + 0.02, pos.z), yaw);
     s.combat.respawnReset();
     s.enemies.resetAlive();
+    this.aimLatched = false;
     this.camera.setYawPitch(yaw, -0.12);
     this.camera.snap();
     this.hud.hideDeath();
