@@ -86,14 +86,6 @@ test('capturas del README', async ({ page }) => {
   });
   await settle(page, 1);
   await shot(page, '05-torre-meridian');
-
-  // Ajustes (teclas) desde la pausa.
-  await page.evaluate(() => window.__EXCOM__!.setManual(false));
-  await page.keyboard.press('Escape');
-  await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('paused');
-  await page.getByRole('button', { name: 'Ajustes' }).click();
-  await page.getByRole('tab', { name: 'Teclas' }).click();
-  await shot(page, '07-ajustes');
 });
 
 test('fotogramas del GIF: el simulacro a tiros', async ({ page }) => {
