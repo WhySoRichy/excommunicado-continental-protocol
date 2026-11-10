@@ -2,7 +2,7 @@ import type { UpgradeId } from '../combat/weapons';
 import type { Profile } from '../core/Save';
 import { MISSIONS, type MissionId, type Rank } from '../missions/types';
 
-/** Economía de Monedas Continental (lógica pura). GAME_DESIGN §5.2. */
+/** Economía de Monedas Continental (lógica pura). DISENO §5.2. */
 export interface ShopItem {
   id: UpgradeId;
   name: string;
@@ -54,8 +54,6 @@ export const RANK_MULTIPLIER: Record<Rank, number> = { S: 2, A: 1.5, B: 1.25, C:
 export const FIRST_TIME_BONUS = 3;
 /** Multa de la Alta Mesa al ser Excomunicado: se pierde el 30 % de las monedas. */
 export const EXCOMMUNICADO_FINE = 0.3;
-/** Recompensa del simulacro (solo la primera vez que se completa). */
-export const PRACTICE_DRILL_REWARD = 2;
 
 /** Monedas por completar un contrato con un rango. */
 export function contractReward(id: MissionId, rank: Rank, firstTime: boolean): number {

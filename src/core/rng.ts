@@ -45,5 +45,3 @@ export class Rng {
   }
 }
 
-/** RNG global de gameplay. Los niveles lo resiembran al cargar. */
-export const gameRng = new Rng(1337);

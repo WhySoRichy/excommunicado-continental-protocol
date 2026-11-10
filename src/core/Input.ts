@@ -204,7 +204,7 @@ export class Input {
     this.consumed.clear();
   }
 
-  /** Suelta TODO (R6). */
+  /** Suelta todas las teclas y botones (R6). */
   reset(): void {
     this.down.clear();
     this.padDown.clear();

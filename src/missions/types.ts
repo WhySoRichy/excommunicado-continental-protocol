@@ -1,4 +1,4 @@
-/** Catálogo de contratos (datos). GAME_DESIGN §2.3 y §5.2. */
+/** Catálogo de contratos (datos). DISENO §2.3 y §5.2. */
 export type MissionId = 'practice' | 'nightclub' | 'docks' | 'rooftop' | 'gauntlet';
 export type Rank = 'D' | 'C' | 'B' | 'A' | 'S';
 

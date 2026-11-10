@@ -1,5 +1,5 @@
 /**
- * Acciones de juego y asignaciones por defecto (GAME_DESIGN §7). Los códigos son
+ * Acciones de juego y asignaciones por defecto (DISENO §7). Los códigos son
  * `KeyboardEvent.code`, `Mouse0..4`, `WheelUp/WheelDown` y `Pad0..Pad16`
  * (mapeo estándar de la Gamepad API).
  */
@@ -40,7 +40,7 @@ export const DEFAULT_BINDINGS: Bindings = {
   moveLeft: ['KeyA', 'ArrowLeft'],
   moveRight: ['KeyD', 'ArrowRight'],
   jump: ['Space', 'Pad0'],
-  // Ctrl NO se asigna por defecto: Ctrl+W cierra la pestaña y la página no puede impedirlo (PLAN.md).
+  // Ctrl NO se asigna por defecto: Ctrl+W cierra la pestaña y la página no puede impedirlo (docs/ARQUITECTURA.md).
   dodge: ['AltLeft', 'AltRight', 'Pad5'],
   sprint: ['ShiftLeft', 'ShiftRight', 'Pad10'],
   crouch: ['KeyC', 'Pad3'],

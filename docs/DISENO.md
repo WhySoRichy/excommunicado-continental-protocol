@@ -1,6 +1,8 @@
-# GAME DESIGN — EXCOMMUNICADO: CONTINENTAL PROTOCOL
+# Diseño del juego
 
-> Juego de acción en tercera persona en el navegador. Proyecto de fans sin fines de lucro, no afiliado ni respaldado por los titulares de la franquicia John Wick. Modelos, música y texturas son 100 % propios y procedurales.
+**EXCOMMUNICADO: CONTINENTAL PROTOCOL** es un juego de acción en tercera persona para el navegador. Proyecto de fans sin fines de lucro, no afiliado ni respaldado por los titulares de la franquicia John Wick. Modelos, música y texturas son propios y procedurales.
+
+La parte técnica está en [ARQUITECTURA.md](ARQUITECTURA.md).
 
 ## 1. Fantasía y pilares
 
@@ -65,17 +67,17 @@ Cada contrato sigue el flujo **briefing** (3 líneas: objetivo, regla especial, 
 | Caminar apuntando | 2,6 m/s |
 | Agachado | 2,2 m/s, cápsula de 1,14 m |
 | Deslizar (C corriendo) | 0,7 s con impulso que decae; termina agachado; enfriamiento 0,5 s |
-| Esquiva / voltereta | 0,5 s a 7,5 m/s con **i-frames de 0,05 a 0,35 s**; enfriamiento 0,35 s; en el aire es un "dive" (una vez por salto) |
+| Esquiva / voltereta | 0,5 s a 7,6 m/s con **i-frames de 0,05 a 0,36 s**; enfriamiento 0,35 s; en el aire es un "dive" (una vez por salto) |
 | Salto | 0,95 m de altura |
-| Vault | Automático con Espacio frente a obstáculos de 0,45 a 1,25 m de alto y hasta 1,5 m de fondo; si no hay espacio detrás, se sube encima |
+| Vault | Con Espacio frente a obstáculos de 0,42 a 1,28 m de alto (a menos de 1 m) y hasta 1,6 m de fondo; si no hay espacio detrás, se sube encima |
 | Cobertura | C junto a una pared o caja. Te mueves pegado al borde y no te caes del final; al apuntar sales a disparar. Las balas del frente hacen −50 % de daño |
 | Levantarse | Solo si hay espacio sobre la cabeza (si no, sigues agachado: nunca quedas trabado en el techo) |
 
 **Cámara:**
-- Pivote en la cabeza, desplazado 0,55 m sobre el hombro (V cambia de hombro).
-- Distancia de 2,9 m (1,6 m al apuntar). FOV de 68° (52° al apuntar).
+- Pivote en la cabeza, desplazado 0,7 m sobre el hombro (V cambia de hombro).
+- Distancia de 3,1 m (2,2 m al apuntar y 3,4 m corriendo). FOV de 68° por defecto (ajustable), un 30 % menos al apuntar.
 - La colisión usa *sphere casts* de cabeza → hombro → cámara. Se acerca al instante si algo tapa y se aleja suavemente al despejarse.
-- El personaje se transparenta si la cámara queda a menos de 0,8 m.
+- El personaje se oculta si la cámara queda a menos de 0,55 m de la cabeza.
 
 **Gamepad:** stick izquierdo para moverse y derecho para mirar, con zona muerta radial y curva de respuesta.
 
@@ -104,7 +106,7 @@ Cada contrato sigue el flujo **briefing** (3 líneas: objetivo, regla especial, 
 | Escolta | Amarillo | SMG en ráfagas, 5 de daño | 90 | **Flanquea** | Grito "¡Por la izquierda!" e icono de flecha |
 | Tirador | Rojo | Rifle, 35 de daño | 70 | Fijo en altura, cubre zonas | **Láser rojo visible 1,2 s** con pitido creciente antes del disparo |
 | Blindado | Azul acero | Escopeta, 4×6 de daño | 120 + 150 de armadura | Avanza lento; el cuerpo recibe solo el 20 % del daño | Levanta el arma y parpadea en rojo 0,6 s |
-| Jefe | Magenta | Patrón propio | 400+ | Fases, invoca escoltas | Barrido láser en abanico, cuenta atrás visible |
+| Jefe | Magenta | SMG en ráfagas | 420 + 120 de armadura | Fases: al 50 % y al 20 % se arrodilla e invoca escoltas | El rim se enciende antes de cada ráfaga |
 
 Un headshot mata de un tiro a matón, escolta y tirador. Esa regla es simple y premia la precisión.
 
@@ -180,32 +182,32 @@ Hay cinco subnotas de 0 a 100: **tiempo** (frente al par), **precisión** (impac
 
 ## 6. Claridad y onboarding
 
-- **Título:** Continuar / Nueva partida / Controles / Ajustes / Créditos.
-- **Tutorial jugable (unos 3 min) en el Campo de Práctica.** Cada paso se valida y muestra la tecla asignada real, o el botón del gamepad si es el último dispositivo usado:
-  1. Moverse al marcador.
-  2. Mirar a la diana.
-  3. Sprint.
-  4. Vault sobre la caja.
-  5. Cobertura tras la barricada.
-  6. Apuntar y disparar a 3 dianas.
-  7. Recargar (con la recarga perfecta explicada).
-  8. Cambiar de arma.
-  9. Takedown al maniquí.
-  10. Esquivar el láser de la torreta de práctica.
-  11. Foco más 3 maniquíes móviles.
-  12. "Vuelve con Charon".
+- **Título:** Continuar / Nueva partida / Controles / Ajustes.
+- **Tutorial jugable (unos 3 min) en el Campo de Práctica.** Cada paso se valida con lo que hace el jugador y el texto muestra la tecla asignada real. Se puede saltar desde el briefing, y el rango del contrato solo cuenta el simulacro posterior:
+  1. Caminar y mirar.
+  2. Correr.
+  3. Vault sobre la caja.
+  4. Deslizarse.
+  5. Esquivar.
+  6. Cubrirse tras el muro alto.
+  7. Apuntar y disparar en los carriles.
+  8. Recargar (con la recarga perfecta explicada).
+  9. Cambiar de arma.
+  10. Activar el Foco.
+  11. Takedown a un maniquí aturdido.
+  12. Bajar al patio y eliminar a los 6 maniquíes armados.
 - **HUD siempre legible:**
-  - Objetivo con distancia arriba, brújula con el objetivo y baliza dorada en el mundo (flecha en el borde si está fuera de pantalla).
+  - Objetivo arriba y baliza dorada en el mundo con la distancia (flecha en el borde si está fuera de pantalla).
   - Abajo a la izquierda: integridad (armadura y salud) y marcadores.
   - Abajo a la derecha: arma, munición y slots.
-  - A la derecha: Style Meter y feed de acciones. A la izquierda: barra de Foco.
-  - En el centro: mira dinámica, hit markers (blanco cuerpo, rojo headshot, calavera kill) e indicadores direccionales de daño.
-- **Prompts contextuales** solo cuando aplican: "[E] Hablar con Charon", "[F] Takedown", "[C] Cubrirse".
+  - Arriba a la derecha: zona, Style Meter y feed de acciones. A la izquierda: barra de Foco.
+  - En el centro: mira dinámica, hit markers distintos para cuerpo, cabeza y baja, e indicadores direccionales de daño.
+- **Avisos contextuales** solo cuando aplican: "[E] Hablar con Charon", "[F] Takedown", "[C] Cubrirse".
 - **Causa de muerte**, por ejemplo: "Te disparó un Tirador desde tu derecha (24 m)", con los marcadores restantes.
-- **Pausa:** Reanudar, Controles, Ajustes, Reiniciar contrato, Volver al Continental, Salir al título. H muestra los controles en cualquier momento y Tab muestra la intel (objetivos, desafíos y leyenda de enemigos).
+- **Pausa:** Reanudar, Controles, Ajustes, Volver al Continental (fuera del hub) y Salir al título. H muestra los controles en cualquier momento y, manteniendo Tab, la Intel (objetivo, marcadores, reglas del contrato y leyenda de enemigos).
 - **Accesibilidad:**
-  - Escala de UI, sensibilidad, invertir Y y FOV.
-  - Brillo y exposición, menos sacudida de cámara, y apuntar o agacharse en modo mantener o alternar.
+  - Escala de UI, sensibilidad (ratón y mando), invertir Y y FOV.
+  - Brillo, sacudida de cámara regulable (desactivada si el sistema pide movimiento reducido) y apuntar en modo mantener o alternar.
   - Reasignación de teclas, menús navegables con teclado y textos con alto contraste.
   - Los tipos de enemigo se distinguen por color **e** icono.
 
@@ -229,7 +231,7 @@ Hay cinco subnotas de 0 a 100: **tiempo** (frente al par), **precisión** (impac
 | Pausa / Controles | Esc / H | Start |
 | Debug | F3 | — |
 
-> Ctrl no se asigna por defecto porque `Ctrl+W` cierra la pestaña del navegador (ver `PLAN.md`).
+> Ctrl no se asigna por defecto porque `Ctrl+W` cierra la pestaña del navegador (ver [ARQUITECTURA.md](ARQUITECTURA.md#6-controles-decisiones)).
 
 ## 8. Dirección visual
 

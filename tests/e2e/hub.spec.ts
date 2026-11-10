@@ -32,7 +32,7 @@ test.describe('Fase 3 · El Continental', () => {
     const hud = await page.evaluate(() => window.__EXCOM__!.hud());
     expect(hud.zone).toContain('ZONA NEUTRAL');
     expect(hud.objective).toContain('Charon');
-    // Frente al mostrador de Charon aparece el prompt con la tecla real.
+    // Frente al mostrador de Charon aparece el aviso con la tecla real.
     await page.evaluate(() => {
       const q = window.__EXCOM__!;
       q.checkpoint('desk');
@@ -195,13 +195,14 @@ test.describe('Fase 3 · El Continental', () => {
       const q = window.__EXCOM__!;
       q.press('fire');
       q.step(3, {});
-      return { hub: q.hub()!, c: q.combat()!, hud: q.hud(), coins: q.profile().coins, excom: q.profile().excommunicados, enemies: q.enemies().filter((e) => e.alive).length };
+      return { hub: q.hub()!, c: q.combat()!, hud: q.hud(), coins: q.profile().coins, excom: q.profile().excommunicados, achievements: q.profile().achievements, enemies: q.enemies().filter((e) => e.alive).length };
     });
     expect(ex.c.stats.shotsFired).toBe(1);
     expect(ex.hub.state).toBe('excommunicado');
     expect(ex.hub.wave).toBe(1);
     expect(ex.coins).toBe(14);
     expect(ex.excom).toBe(1);
+    expect(ex.achievements).toContain('global.excommunicado');
     expect(ex.hub.alarmIntensity).toBeGreaterThan(0);
     expect(ex.hud.zone).toContain('EXCOMUNICADO');
     expect(ex.hud.objective).toContain('oleada 1');

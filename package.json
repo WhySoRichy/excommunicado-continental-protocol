@@ -1,11 +1,30 @@
 {
   "name": "excommunicado-continental-protocol",
-  "private": true,
-  "version": "0.1.0",
-  "description": "Juego 3D de acción en tercera persona en el navegador, proyecto de fans inspirado en el universo de John Wick.",
-  "type": "module",
+  "version": "1.0.0",
+  "description": "Juego de acción en tercera persona para el navegador inspirado en el universo de John Wick. TypeScript, Three.js y Rapier.",
+  "author": "WhySoRichy",
   "license": "MIT",
+  "homepage": "https://whysorichy.github.io/excommunicado-continental-protocol/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/WhySoRichy/excommunicado-continental-protocol.git"
+  },
+  "bugs": {
+    "url": "https://github.com/WhySoRichy/excommunicado-continental-protocol/issues"
+  },
+  "keywords": [
+    "threejs",
+    "rapier",
+    "typescript",
+    "webgl",
+    "game",
+    "third-person",
+    "vite"
+  ],
+  "private": true,
+  "type": "module",
   "scripts": {
+    "start": "vite build && vite preview --open",
     "dev": "vite",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
     "build": "npm run typecheck && vite build",
@@ -23,11 +42,12 @@
   "devDependencies": {
     "@playwright/test": "1.65.0",
     "@types/node": "26.6.6",
-    "@types/pngjs": "6.0.5",
     "@types/three": "0.187.0",
-    "pngjs": "7.0.0",
     "typescript": "7.0.2",
     "vite": "8.3.7",
     "vitest": "5.1.0"
+  },
+  "engines": {
+    "node": ">=22.12.0"
   }
 }

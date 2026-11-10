@@ -323,7 +323,7 @@ test.describe('Fase 1 · movimiento', () => {
     await frames(page, 0.3);
     await expect.poll(() => page.evaluate(() => window.__EXCOM__!.prompt())).toContain('Cubrirse');
     await page.screenshot({ path: shotPath('fase1-prompt-cover') });
-    // En cobertura alta, el prompt explica cómo asomarse/salir.
+    // En cobertura alta, el aviso explica cómo asomarse/salir.
     await page.evaluate(() => window.__EXCOM__!.step(2, { crouch: true }));
     await frames(page, 0.3);
     await expect.poll(() => page.evaluate(() => window.__EXCOM__!.prompt())).toContain('Asomarse');

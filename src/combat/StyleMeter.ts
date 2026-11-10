@@ -1,5 +1,5 @@
 /**
- * Style Meter (gamificación central, GAME_DESIGN §5). Lógica PURA.
+ * Style Meter (gamificación central, DISENO §5). Lógica PURA.
  * - Cada acción suma puntos al medidor; al llenarse sube el multiplicador (×1..×8).
  * - Variedad: repetir una acción de las 3 últimas rinde ×0,5 (o ×0,25 si aparece 2+ veces).
  * - Decae tras 2,5 s sin acciones; recibir daño resta medidor y puede bajar un nivel.
@@ -65,12 +65,6 @@ export interface StyleAward {
   multiplier: number;
   leveledUp: boolean;
 }
-
-/**
- * Orden de prioridad para elegir la acción "principal" de una baja (la más vistosa).
- * Los bonus (multiKill, noDamageKill, doubleTap) se registran aparte.
- */
-export const KILL_PRIORITY: readonly StyleAction[] = ['takedown', 'knifeKill', 'dodgeKill', 'headshot', 'coverKill', 'focusKill', 'longShot', 'kill'];
 
 export class StyleMeter {
   multiplier = 1;

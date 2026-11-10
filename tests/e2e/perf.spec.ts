@@ -7,7 +7,7 @@ import { isCI, openGame } from './helpers';
 /**
  * Fase 6 · Presupuesto de rendimiento. Sin GPU integrada a mano, se mide lo que la limita:
  * draw calls, triángulos y programas por nivel (preset medio), la CPU por frame con la CPU
- * frenada 4× (portátil modesto) y el tamaño del bundle. Ver PLAN.md (metodología).
+ * frenada (portátil modesto) y el tamaño del bundle. Metodología en docs/ARQUITECTURA.md.
  */
 const BUDGET = {
   calls: 260,

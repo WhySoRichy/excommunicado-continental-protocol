@@ -8,7 +8,7 @@ export const PLAYER_RADIUS = 0.32;
 export const STAND_HALF = 0.58; // 1,80 m
 export const CROUCH_HALF = 0.25; // 1,14 m
 
-/** Parámetros de movimiento (GAME_DESIGN §3). Todo en m, s, rad. */
+/** Parámetros de movimiento (DISENO §3). Todo en m, s, rad. */
 export const MOVE = {
   run: 4.6,
   sprint: 7.0,

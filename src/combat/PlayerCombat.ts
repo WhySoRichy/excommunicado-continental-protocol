@@ -484,7 +484,7 @@ export class PlayerCombat {
     this.onHit(best, 'body', res.killed, false, bestD, 'knife', ctx);
   }
 
-  /** Enemigo al alcance del takedown (para el prompt contextual y la acción). */
+  /** Enemigo al alcance del takedown (para el aviso contextual y la acción). */
   takedownCandidate(ctx: CombatCtx): Enemy | null {
     const p = ctx.player;
     if (p.state !== 'ground' && p.state !== 'cover') return null;

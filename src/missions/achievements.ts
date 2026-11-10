@@ -2,7 +2,7 @@ import type { MissionStats } from '../combat/rank';
 import type { Profile } from '../core/Save';
 import type { MissionId, Rank } from './types';
 
-/** Logros y desafíos (GAME_DESIGN §5.3). Dan monedas una sola vez. */
+/** Logros y desafíos (DISENO §5.3). Dan monedas una sola vez. */
 export interface MissionRunSummary {
   mission: MissionId;
   rank: Rank;

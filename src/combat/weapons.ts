@@ -1,6 +1,6 @@
 import type { WeaponModel } from '../entities/CharacterRig';
 
-/** Definiciones de armas (datos). Valores en grados, metros, segundos. GAME_DESIGN §4.1. */
+/** Definiciones de armas (datos). Valores en grados, metros, segundos. DISENO §4.1. */
 export type WeaponId = 'carbine' | 'shotgun' | 'pistol' | 'knife';
 
 export interface WeaponDef {
@@ -201,7 +201,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   },
 };
 
-/** Mejoras de la armería (GAME_DESIGN §5.2). */
+/** Mejoras de la armería (DISENO §5.2). */
 export type UpgradeId = 'extMag' | 'suppressor' | 'hollowPoint' | 'compensator' | 'suit1' | 'suit2' | 'suit3' | 'tacticalKnife' | 'shotgun' | 'extraMarker';
 
 /** Aplica las mejoras compradas a una definición (pura: devuelve una copia). */

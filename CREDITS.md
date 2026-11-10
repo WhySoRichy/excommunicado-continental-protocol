@@ -2,8 +2,7 @@
 
 ## Proyecto
 
-- **Diseño, dirección y QA:** WhySoRichy, para la asignatura de Programación Avanzada.
-- **Programación:** asistida por Claude (Anthropic) mediante Claude Code.
+Proyecto de **WhySoRichy** para la asignatura de Programación Avanzada.
 
 ## Contenido
 
@@ -31,7 +30,6 @@ No se usan logos, música, modelos, texturas ni capturas de la franquicia John W
 | [TypeScript](https://www.typescriptlang.org/) | 7.0.2 | Apache-2.0 |
 | [Vitest](https://vitest.dev/) | 5.1.0 | MIT |
 | [Playwright](https://playwright.dev/) | 1.65.0 | Apache-2.0 |
-| [pngjs](https://github.com/pngjs/pngjs) | 7.0.0 | MIT |
 | [FFmpeg](https://ffmpeg.org/) (solo para montar el GIF del README; no se distribuye) | 9.0 | LGPL/GPL |
 
 ## Inspiración

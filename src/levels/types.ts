@@ -203,7 +203,7 @@ export interface InteractableDef {
   kind: InteractableKind;
   pos: Vec3;
   radius: number;
-  /** Texto del prompt contextual, p. ej. "Hablar con Charon". */
+  /** Texto del aviso contextual, p. ej. "Hablar con Charon". */
   prompt: string;
   /** Acción que interpreta el director del nivel. */
   action: string;

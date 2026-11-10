@@ -1,123 +1,148 @@
-# EXCOMMUNICADO: CONTINENTAL PROTOCOL
+<div align="center">
 
-Juego de acción en tercera persona para el navegador, inspirado en el universo de John Wick: gun-fu, contratos y las reglas del Continental. Está hecho con **TypeScript estricto, Three.js y Rapier**, y todo el contenido es procedural: no hay modelos, texturas, música ni sonidos de terceros.
+# EXCOMMUNICADO
 
-> **Proyecto de fans sin ánimo de lucro.** No está afiliado ni respaldado por Lionsgate, 87Eleven ni los titulares de la franquicia John Wick. No usa material con copyright (logos, música, modelos o capturas) ni el parecido de ningún actor. Los nombres y marcas citados pertenecen a sus dueños.
+### Continental Protocol
 
-![El simulacro de combate a tiros](docs/media/gameplay.gif)
+Acción en tercera persona para el navegador, inspirada en el universo de John Wick.<br>
+Gun-fu, contratos y las reglas del Continental, hecho con TypeScript, Three.js y Rapier.
 
-**Jugar:** `https://whysorichy.github.io/excommunicado-continental-protocol/` (GitHub Pages; ver [Despliegue](#despliegue)).
+[![CI y despliegue](https://github.com/WhySoRichy/excommunicado-continental-protocol/actions/workflows/deploy.yml/badge.svg)](https://github.com/WhySoRichy/excommunicado-continental-protocol/actions/workflows/deploy.yml)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
+![Three.js](https://img.shields.io/badge/Three.js-0.187-000000?logo=threedotjs&logoColor=white)
+![Rapier](https://img.shields.io/badge/F%C3%ADsica-Rapier_0.21-D4AF37)
+![Vite](https://img.shields.io/badge/Vite-8-646CFF?logo=vite&logoColor=white)
+![Licencia MIT](https://img.shields.io/badge/Licencia-MIT-2EA44F)
+
+**[Jugar en el navegador](https://whysorichy.github.io/excommunicado-continental-protocol/)**
+&nbsp;&middot;&nbsp; [Instalación](INSTALACION.md)
+&nbsp;&middot;&nbsp; [Diseño](docs/DISENO.md)
+&nbsp;&middot;&nbsp; [Arquitectura](docs/ARQUITECTURA.md)
+
+<img src="docs/media/gameplay.gif" alt="El simulacro de combate" width="760">
+
+</div>
+
+---
+
+## El juego
+
+Eres el Huésped, un asesino retirado al que han vuelto a llamar. El hotel Continental es territorio neutral: ahí se habla, se compra y se aceptan contratos, pero no se dispara. Fuera, cada contrato se puntúa por estilo, precisión y economía de movimiento.
 
 | | |
 |---|---|
-| ![Título](docs/media/01-titulo.png) | ![El Continental](docs/media/02-continental.png) |
-| ![Club Kairos](docs/media/03-club-kairos.png) | ![Muelle 9](docs/media/04-muelle-9.png) |
-| ![Torre Meridian](docs/media/05-torre-meridian.png) | ![Intel](docs/media/06-intel.png) |
+| **El Continental** | Hub con Charon (contratos), el Sommelier (armería) y Winston. Romper la Regla I tiene consecuencias: Excomunicado, multa del 30 % de tus monedas, alarma y tres oleadas que asaltan el hotel |
+| **Simulacro de combate** | Tutorial jugable de unos 3 minutos que enseña cada movimiento con la tecla que tengas asignada, y después 6 maniquíes armados |
+| **Club Kairos** | Una pista llena de civiles que no hay que tocar, un panel de alarma que conviene desactivar y Vance en el VIP |
+| **Muelle 9** | Contenedores apilados con tiradores, tres cargamentos que destruir y la huida en bote |
+| **Torre Meridian** | Tres azoteas a distinta altura, el Juez con fases y 45 segundos para escapar |
+| **Gauntlet** | Oleadas infinitas en el vestíbulo, una sola vida y un top 10 local |
 
-## Qué hay en el juego
+Cada contrato termina con un **rango de D a S** (tiempo, precisión, daño recibido, variedad y civiles). Los **marcadores de sangre** hacen de vidas, y las monedas se gastan en mejoras: cargador extendido, silenciador, trajes balísticos, escopeta y más. Hay 16 logros.
 
-- **El Continental (hub):** zona neutral con Charon (contratos), el Sommelier (armería) y Winston. Disparar dentro rompe la Regla I: Excomunicado, multa del 30 %, alarma y tres oleadas que asaltan el hotel.
-- **Contratos** (se desbloquean en orden):
-  - **Simulacro de combate:** tutorial jugable de 3 minutos y 6 maniquíes armados.
-  - **Club Kairos:** 12 civiles que no hay que tocar, un panel de alarma y Vance en el VIP.
-  - **Muelle 9:** contenedores con tiradores, tres cargamentos que destruir y la huida en bote.
-  - **Torre Meridian:** tres azoteas, el Juez con fases (se arrodilla y se le remata con un takedown) y 45 s de escape.
-- **Gauntlet "Excomunicado":** oleadas infinitas en el vestíbulo con una sola vida y un top 10 local.
-- **Rango D–S** por contrato (tiempo, precisión, daño recibido, variedad y civiles), con **marcadores de sangre** como vidas, monedas, mejoras y 16 logros.
-- **Combate:** carabina, pistola, escopeta y cuchillo. También takedowns con doble tap, recarga perfecta, Foco (cámara lenta), cobertura, vault, deslizamiento y voltereta.
-- **Accesibilidad y ajustes:**
-  - Reasignación de teclas; los prompts muestran siempre la tecla real.
-  - Sensibilidad, invertir Y, apuntar alternando y FOV.
-  - Brillo, preset gráfico y volúmenes.
-  - Sacudida de cámara, tamaño de la interfaz y pistas.
-  - La leyenda de enemigos usa glifo además de color y se respeta el "movimiento reducido" del sistema.
+En combate tienes carabina, pistola, escopeta y cuchillo, takedowns con doble tap, recarga perfecta, **Foco** (cámara lenta), cobertura, vault, deslizamiento y voltereta. El medidor de estilo, de ×1 a ×8, premia variar.
+
+## Capturas
+
+<table>
+  <tr>
+    <td><img src="docs/media/01-titulo.png" alt="Pantalla de título"></td>
+    <td><img src="docs/media/02-continental.png" alt="El Continental"></td>
+  </tr>
+  <tr>
+    <td><img src="docs/media/03-club-kairos.png" alt="Club Kairos"></td>
+    <td><img src="docs/media/04-muelle-9.png" alt="Muelle 9"></td>
+  </tr>
+  <tr>
+    <td><img src="docs/media/05-torre-meridian.png" alt="Torre Meridian"></td>
+    <td><img src="docs/media/06-intel.png" alt="Intel con la leyenda de enemigos"></td>
+  </tr>
+</table>
 
 ## Controles
 
 | Acción | Teclado y ratón | Mando |
 |---|---|---|
-| Mover / mirar | WASD / ratón | Stick izq. / der. |
-| Disparar / apuntar | Clic izq. / clic der. | RT / LT |
-| Recargar (otra vez en la zona dorada = perfecta) | R | X |
+| Mover / mirar | WASD / ratón | Stick izquierdo / derecho |
+| Disparar / apuntar | Clic izquierdo / clic derecho | RT / LT |
+| Recargar (otra vez en la zona dorada: recarga perfecta) | R | X |
 | Takedown | F | B |
 | Interactuar | E | A |
-| Saltar · vault | Espacio | A |
-| Esquiva (o doble Espacio) | Alt | RB |
+| Saltar y vault | Espacio | A |
+| Esquivar (o doble Espacio) | Alt | RB |
 | Sprint | Shift | L3 |
-| Agacharse · deslizar · cubrirse | C | Y |
+| Agacharse, deslizarse, cubrirse | C | Y |
 | Foco | Q | LB |
-| Armas | 1 / 2 / 3 · rueda | D-pad |
+| Armas | 1, 2, 3 o rueda | Cruceta |
 | Cambiar de hombro | V | R3 |
 | Intel (mantener) | Tab | Select |
-| Pausa · controles | Esc · H | Start |
+| Pausa / controles | Esc / H | Start |
 
-Ctrl no se asigna por defecto porque Ctrl+W cierra la pestaña. Todo se puede cambiar en **Ajustes → Teclas**.
+Todo se puede reasignar en **Ajustes → Teclas**, y los avisos en pantalla muestran siempre la tecla real. Ajustes también incluye sensibilidad, invertir Y, apuntar alternando, FOV, brillo, calidad gráfica, volúmenes, sacudida de cámara, tamaño de la interfaz y pistas.
 
-## Tecnología y arquitectura
+## Ejecutarlo en local
 
-- **Vite 8 + TypeScript 7 en modo strict**, **Three.js 0.187** y **Rapier 0.21**: los personajes usan el `KinematicCharacterController` sobre cápsulas.
-- **Bucle fijo a 60 Hz** con acumulador, interpolación de render y escala de tiempo para el Foco.
-- **Una sola máquina de estados de juego** (`core/GameStateMachine.ts`), con transiciones explícitas.
-- **Niveles como datos** (`src/levels/data/*.ts`): las mallas y los colliders salen de la misma fuente.
-- **Lógica pura sin three ni DOM, con tests:** daño, estilo, rango, economía, IA (`EnemyBrain`), navegación (rejilla 2.5D + A*), guardado, ajustes, tutorial, oleadas, música y resolución dinámica.
-- **Audio 100 % Web Audio:** disparos, sirena, ambientes y música adaptativa por capas, programada con el reloj de audio (sin temporizadores).
-- **Render:** cada personaje es una sola `SkinnedMesh` low-poly con rim light; la geometría estática y los props se fusionan por material. Preset por GPU, resolución dinámica y sombras a 30 Hz en el preset medio.
+Necesitas [Node.js](https://nodejs.org) 22.12 o superior (se recomienda la 24 LTS).
+
+```bash
+git clone https://github.com/WhySoRichy/excommunicado-continental-protocol.git
+cd excommunicado-continental-protocol
+npm install
+npm start
+```
+
+El navegador se abre en http://localhost:4173. La guía completa, con instalación de Node.js en Windows, macOS y Linux, descarga en ZIP y solución de problemas, está en **[INSTALACION.md](INSTALACION.md)**.
+
+## Tecnología
+
+- **TypeScript en modo strict** con Vite 8.
+- **Three.js 0.187** para el render: personajes low-poly como un solo `SkinnedMesh`, rim light Fresnel, IBL, sombras y resolución dinámica.
+- **Rapier 0.21** para la física: el `KinematicCharacterController` mueve las cápsulas de jugador, enemigos y civiles.
+- **Bucle a paso fijo de 60 Hz** con interpolación de render y una sola máquina de estados de juego.
+- **Niveles como datos**: mallas y colliders salen de la misma fuente, y la navegación (rejilla 2.5D con A*) se genera a partir de ellos.
+- **Audio 100 % Web Audio**: disparos, ambientes, sirena y música adaptativa que sube con el combate. No hay ningún archivo de sonido.
+- **Todo el contenido es procedural**: no hay modelos, texturas ni música de terceros.
 
 ```
 src/
-  core/      bucle, entrada, FSM, guardado, ajustes
-  physics/   mundo Rapier y consultas
-  entities/  jugador, enemigos, civiles, NPC, rig
-  combat/    armas, daño, estilo, rango, IA de grupo
-  levels/    datos de nivel, constructor, navegación
-  hub/       reglas del Continental, economía, diálogos
-  missions/  director de misión, tutorial, Gauntlet, logros
-  ui/        HUD, pantallas, Intel
-  audio/     motor de audio y música
-  render/    renderer, materiales, VFX, resolución dinámica
-  debug/     overlay F3 y API de QA (?qa=1)
+  core/       bucle, entrada, máquina de estados, guardado y ajustes
+  physics/    mundo de Rapier y consultas
+  entities/   jugador, enemigos (con su IA), civiles, NPC y rig de personajes
+  combat/     armas, daño, estilo y rango
+  levels/     datos de cada nivel, constructor y navegación
+  hub/        reglas del Continental y economía
+  missions/   director de misión, tutorial, Gauntlet y logros
+  ui/         HUD, menús e Intel
+  audio/      motor de audio y música
+  render/     renderer, materiales, efectos y resolución dinámica
 ```
 
-## Calidad: cómo se prueba
+Los detalles, decisiones técnicas y convenciones están en [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md).
 
-| Suite | Qué cubre |
+## Pruebas y calidad
+
+| | |
 |---|---|
-| `npm test` (Vitest, 137 tests) | Lógica pura: rango (incluida la coherencia con 500 partidas al azar), reasignación de teclas, oleadas, IA, navegación de cada nivel, guardado |
-| `npm run test:e2e` (Playwright, 38 tests) | Sobre el build de producción y con el pipeline real: movimiento sin atravesar paredes ni atascos (también con picos de lag), combate 1vN, los 4 contratos y el Gauntlet de principio a fin, tutorial, ajustes persistentes, mando |
-| Gates | Claridad (luminancia en cada checkpoint, objetivo y baliza siempre visibles), mezcla de audio medida en la salida real, rendimiento |
+| **137 pruebas unitarias** (Vitest) | Daño, estilo, rango (incluida una prueba de coherencia con 500 partidas al azar), economía, IA de los enemigos, navegación de cada nivel, guardado, reasignación de teclas, oleadas y música |
+| **38 pruebas e2e** (Playwright) | El juego real sobre el build de producción: movimiento sin atravesar paredes ni atascarse (también con picos de lag), combate contra varios enemigos, los cuatro contratos y el Gauntlet de principio a fin, tutorial, ajustes persistentes, mando, claridad visual, mezcla de audio y rendimiento |
+| **CI** | Cada push a `main` ejecuta las pruebas y publica el juego en GitHub Pages |
 
-Con `?qa=1` se expone `window.__EXCOM__`, que permite avanzar paso a paso de forma determinista, leer invariantes (penetraciones, cámara dentro de geometría) y manejar un bot para los tests.
+### Rendimiento
 
-### Rendimiento (medido)
+Medido en el nivel más pesado (Club Kairos: 12 civiles y 8 enemigos):
 
-| Métrica | Peor nivel | Presupuesto |
+| Métrica | Medida | Límite |
 |---|---|---|
-| Draw calls | 139 (Club Kairos) | ≤ 260 |
-| Triángulos | 15 k | ≤ 120 k |
-| CPU por frame | 2,1 ms | ≤ 4 ms |
-| CPU por frame con la CPU frenada 2× (portátil con gráfica integrada) | 6,8 ms | ≤ 10 ms |
-| JS del juego / motor de física (gzip) | 240 KB / 1,6 MB | ≤ 300 KB / 1,8 MB |
+| Draw calls | 139 | 260 |
+| Triángulos | 15 k | 120 k |
+| CPU por frame | ~2 ms | 4 ms |
+| CPU por frame, CPU frenada ×2 (portátil con gráfica integrada) | 4–7 ms | 10 ms |
+| JavaScript del juego / motor de física (gzip) | 240 KB / 1,6 MB | 300 KB / 1,8 MB |
 
-En una RTX 4060 va a 144 FPS (tope del monitor). Las GPU integradas de Intel arrancan en el preset Bajo: sin sombras y con 0,75× de resolución.
-
-## Desarrollo
-
-```bash
-npm install
-npm run dev        # http://localhost:5173 (?qa=1 · ?level=arena · ?preset=low|medium|high)
-npm run build      # typecheck estricto + build en dist/
-npm test           # Vitest
-npm run test:e2e   # Playwright sobre el build (capturas en qa-screenshots/)
-npm run qa         # todo lo anterior
-npm run media      # capturas y GIF del README (requiere ffmpeg)
-```
-
-El guardado vive en `localStorage` (`excom.profile` y `excom.settings`).
-
-## Despliegue
-
-`.github/workflows/deploy.yml` ejecuta, en cada push a `main`, los tests, el build y los e2e (en CI el render es por software), y publica `dist/` en **GitHub Pages**. En el repositorio hay que activar *Settings → Pages → Source: GitHub Actions*.
+Con una RTX 4060 va a 144 FPS (el tope del monitor). En gráficas integradas el juego arranca en calidad Baja.
 
 ## Créditos y licencia
 
-Herramientas y bibliotecas en [CREDITS.md](CREDITS.md). El código está bajo la [licencia MIT](LICENSE). Proyecto académico de Programación Avanzada.
+Proyecto de **WhySoRichy** para la asignatura de Programación Avanzada. Bibliotecas y herramientas en [CREDITS.md](CREDITS.md). El código está bajo la [licencia MIT](LICENSE).
+
+> **Proyecto de fans sin ánimo de lucro.** No está afiliado ni respaldado por Lionsgate, 87Eleven ni los titulares de la franquicia John Wick. No usa material con copyright (logos, música, modelos o imágenes) ni el parecido de ningún actor. Los nombres y marcas citados pertenecen a sus dueños.

@@ -4,6 +4,7 @@ import type { Profile } from '../core/Save';
 import type { LevelSession } from '../game/LevelSession';
 import type { Hud } from '../ui/Hud';
 import { DIALOGUE, type Dialogue, HUB_TEXT } from './dialogue';
+import { EXCOM_ACHIEVEMENT } from '../missions/achievements';
 import { applyExcommunicadoFine } from './economy';
 import { EXCOM_WAVES, ExcommunicadoRules, type RuleEvent } from './ExcommunicadoRules';
 
@@ -116,6 +117,8 @@ export class HubDirector {
     const p = this.d.profile;
     this.lostCoins = applyExcommunicadoFine(p);
     p.flags.excomSeen = true;
+    // Queda registrado en el historial como logro (DISENO §2.2).
+    if (!p.achievements.includes(EXCOM_ACHIEVEMENT.id)) p.achievements.push(EXCOM_ACHIEVEMENT.id);
     this.d.save();
     this.setAlarm(true);
     this.d.hud.showToast(HUB_TEXT.excommunicado(this.lostCoins), 5);

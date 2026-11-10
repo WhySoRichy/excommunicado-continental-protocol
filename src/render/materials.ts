@@ -1,16 +1,6 @@
-import { Color, DoubleSide, MeshBasicMaterial, MeshStandardMaterial, type Material } from 'three';
+import { Color, DoubleSide, MeshBasicMaterial, MeshStandardMaterial } from 'three';
 import type { MaterialId } from '../levels/types';
 import { getTexture, type TexKind } from './textures';
-
-/** Paleta de dirección de arte (ver GAME_DESIGN §8). */
-export const Palette = {
-  graphite: 0x121418,
-  gold: 0xd4af37,
-  magenta: 0xff2e88,
-  cyan: 0x19e3ff,
-  alarm: 0xff3344,
-  cream: 0xf2efe6,
-} as const;
 
 interface MatSpec {
   color: number;
@@ -118,7 +108,7 @@ export interface RimUniforms {
 }
 
 /**
- * Rim light Fresnel inyectado en MeshStandardMaterial (R1/§5.3 del prompt):
+ * Rim light Fresnel inyectado en MeshStandardMaterial (regla R1, docs/ARQUITECTURA.md):
  * enemigos, civiles e interactivos se distinguen aunque estén en sombra.
  * Todas las variantes comparten programa (customProgramCacheKey) y cada
  * material conserva sus propios uniforms.
@@ -143,8 +133,4 @@ export function addRim(mat: MeshStandardMaterial, color: number, strength: numbe
   mat.customProgramCacheKey = () => 'rim-v1';
   mat.userData.rim = u;
   return u;
-}
-
-export function disposeMaterial(m: Material): void {
-  m.dispose();
 }

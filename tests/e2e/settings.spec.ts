@@ -83,7 +83,7 @@ test.describe('Fase 5 · ajustes', () => {
     expect(st.settings.bindings.interact[0]).toBe('KeyR');
     expect(st.settings.bindings.reload[0]).toBe('KeyG');
 
-    // En el hub, el prompt de Charon muestra la tecla real (R) y las pistas están ocultas.
+    // En el hub, el aviso de Charon muestra la tecla real (R) y las pistas están ocultas.
     await page.getByRole('button', { name: /Nueva partida|Continuar/ }).first().click();
     await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('hub');
     await page.evaluate(() => {

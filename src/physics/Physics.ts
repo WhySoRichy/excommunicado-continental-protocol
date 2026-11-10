@@ -27,11 +27,6 @@ export async function loadRapier(): Promise<Rapier> {
   return mod;
 }
 
-export function getRapier(): Rapier {
-  if (!rapier) throw new Error('Rapier no está inicializado: llama a loadRapier() primero');
-  return rapier;
-}
-
 /** Capas de colisión (bits de membresía). QUERY lo usan las consultas de escena. */
 export const Layer = {
   STATIC: 0x0001,

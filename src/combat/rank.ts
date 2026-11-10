@@ -1,7 +1,7 @@
 import type { Rank } from '../missions/types';
 
 /**
- * Rango del contrato D–S (lógica PURA). GAME_DESIGN §5.1:
+ * Rango del contrato D–S (lógica PURA). DISENO §5.1:
  * cinco subnotas 0–100 (tiempo, precisión, daño recibido, variedad, civiles ilesos) con el
  * mismo peso; si el nivel no tiene civiles, el peso se reparte. Bonus de estilo hasta +10,
  * −15 por cada marcador gastado. Matar a un civil limita el rango a C.
@@ -108,6 +108,3 @@ export function computeRank(s: MissionStats): RankResult {
   return { subs, styleBonus: Math.round(styleBonus * 10) / 10, markerPenalty, total, rank, capped };
 }
 
-export function rankIndex(r: Rank): number {
-  return RANK_ORDER.indexOf(r);
-}
