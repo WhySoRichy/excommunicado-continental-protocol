@@ -63,7 +63,8 @@ test.describe('Fase 3 · El Continental', () => {
     await expect.poll(() => page.evaluate(() => window.__EXCOM__!.menu())).toBe('contracts');
     await expect(page.locator('.contract[data-mission="practice"]')).toContainText('Simulacro de combate');
     await expect(page.locator('.contract[data-mission="nightclub"]')).toContainText('Completa "Simulacro de combate"');
-    await expect(page.locator('.contract[data-mission="docks"]')).toContainText('Próximamente');
+    await expect(page.locator('.contract[data-mission="docks"]')).toContainText('Completa "Club Kairos"');
+    await expect(page.locator('.contract[data-mission="gauntlet"]')).toContainText('Completa "Simulacro de combate"');
     expect((await page.evaluate(() => window.__EXCOM__!.profile())).flags.charonMet).toBe(true);
     await page.screenshot({ path: shotPath('fase3-contratos') });
     await page.locator('.contract[data-mission="practice"] button').click();

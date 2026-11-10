@@ -46,6 +46,14 @@ Título ─► Continental (hub) ─► Charon: contratos ─► Briefing ─►
 | 3 | **Torre Meridian** | Azoteas a 3 alturas con rampas y escaleras | Verticalidad, francotiradores, jefe con fases y escape cronometrado | Sube, elimina tiradores, vence al Juez y escapa en 45 s | El jefe blindado solo cae con headshots o takedown cuando se arrodilla |
 | 4 | **Gauntlet "Excomunicado"** | El vestíbulo en modo hostil | Oleadas infinitas y crecientes | Sobrevive | Récord local (top 10) |
 
+**Gauntlet en detalle** (`missions/gauntlet.ts`, lógica pura con tests):
+- Una sola vida (sin marcadores). El hub deja de ser zona neutral: no hay diálogos ni tienda mientras dura.
+- Respiro de 5 s antes de cada oleada. Al superar una se recuperan 30 de salud.
+- Oleada 1: 3 matones. Cada oleada suma 1,5 enemigos (redondeado hacia abajo), con tope de 10.
+- Escoltas desde la oleada 2 (hasta un 70 % de los ligeros), pesados desde la 3 (máx. 3) y tiradores desde la 5 (máx. 2).
+- Aparecen de uno en uno cada 0,5 s por las entradas de las oleadas del Excomunicado, nunca a menos de 4 m del jugador ni encima de otro enemigo.
+- Al morir se guarda el resultado en el top 10 local (oleadas y, a igualdad, puntos de estilo).
+
 Cada contrato sigue el flujo **briefing** (3 líneas: objetivo, regla especial, rango objetivo) → ejecución → **resultados** con rango D/C/B/A/S y recompensa. Los contratos se desbloquean en orden: el tutorial desbloquea Kairos (y el Gauntlet), Kairos desbloquea Muelle 9 y Muelle 9 desbloquea Torre Meridian.
 
 ## 3. Movimiento y cámara (tercera persona, sobre el hombro)

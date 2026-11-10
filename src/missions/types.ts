@@ -75,7 +75,7 @@ export const MISSIONS: Record<MissionId, MissionDef> = {
     requires: 'practice',
     parTime: 0,
     hasCivilians: false,
-    available: false,
+    available: true,
   },
 };
 

@@ -26,6 +26,8 @@ export interface ResultsView {
   achievements: Array<{ name: string; coins: number }>;
   newBest: boolean;
   styleScore: number;
+  /** Gauntlet: oleadas, puesto en el top 10 (0 = fuera) y top actual. */
+  gauntlet: { waves: number; position: number; top: Array<{ waves: number; score: number }> } | null;
 }
 
 export interface ScreenCallbacks {
@@ -214,6 +216,7 @@ export class Screens {
     const x = this.results;
     if (!x) return h('section', { class: 'screen' });
     const r = x.r;
+    if (r.gauntlet) return this.buildGauntletResults(r, r.gauntlet, x.onRetry, x.onHub);
     const mm = Math.floor(r.timeSec / 60);
     const ss = Math.floor(r.timeSec % 60);
     const subs = r.subs.map((s) =>
@@ -245,6 +248,36 @@ export class Screens {
       ...extras,
       h('div', { class: 'menu menu-row' }, [button('Volver al Continental', x.onHub, 'btn btn-primary'), button(r.success ? 'Repetir contrato' : 'Reintentar', x.onRetry)]),
     ]);
+  }
+
+  private buildGauntletResults(r: ResultsView, g: NonNullable<ResultsView['gauntlet']>, onRetry: () => void, onHub: () => void): HTMLElement {
+    const extras: HTMLElement[] = [h('div', { class: 'coins coins-big' }, [h('span', { class: 'coin-icon', text: '◉' }), h('b', { class: 'coin-count', text: `+${r.coins}` }), ' Monedas Continental'])];
+    if (r.achievements.length) {
+      extras.push(h('div', { class: 'achv-title', text: 'Logros' }));
+      for (const a of r.achievements) extras.push(h('div', { class: 'achv', text: `${a.name}${a.coins ? ` · +${a.coins}` : ''}` }));
+    }
+    const place = g.position > 0 ? `Puesto ${g.position} del top 10${g.position === 1 ? ' · nuevo récord' : ''}` : g.waves > 0 ? 'Fuera del top 10' : 'Sin oleadas superadas';
+    return h('section', { class: 'screen screen-results ok', role: 'dialog', ariaLabel: 'Resultados del Gauntlet' }, [
+      h('div', { class: 'brief-kicker', text: 'GAUNTLET TERMINADO' }),
+      h('h2', { class: 'screen-heading', text: r.missionName.toUpperCase() }),
+      h('div', { class: 'results-grid' }, [
+        h('div', { class: 'rank-box gauntlet-box' }, [h('div', { class: 'rank-letter gauntlet-waves', text: String(g.waves) }), h('div', { class: 'rank-total', text: g.waves === 1 ? 'oleada superada' : 'oleadas superadas' })]),
+        this.gauntletTable(g.top, g.position),
+      ]),
+      h('div', { class: 'results-line gauntlet-place', text: `${place} · Bajas ${r.kills} · Estilo ${r.styleScore.toLocaleString('es')}` }),
+      ...extras,
+      h('div', { class: 'menu menu-row' }, [button('Volver al Continental', onHub, 'btn btn-primary'), button('Otra vez', onRetry)]),
+    ]);
+  }
+
+  /** Top 10 local del Gauntlet (resalta el puesto recién conseguido). */
+  private gauntletTable(top: ReadonlyArray<{ waves: number; score: number }>, highlight: number): HTMLElement {
+    if (top.length === 0) return h('p', { class: 'gauntlet-empty', text: 'Aún no hay récords.' });
+    return h(
+      'ol',
+      { class: 'gauntlet-top', ariaLabel: 'Top 10 del Gauntlet' },
+      top.map((e, i) => h('li', { class: i + 1 === highlight ? 'me' : '' }, [h('span', { class: 'gt-waves', text: `${e.waves} oleadas` }), h('span', { class: 'gt-score', text: e.score.toLocaleString('es') })])),
+    );
   }
 
   private buildTitle(): HTMLElement {
@@ -349,14 +382,14 @@ export class Screens {
       let action: HTMLElement;
       if (!m.available) action = h('span', { class: 'shop-status locked', text: 'Próximamente' });
       else if (!reqDone) action = h('span', { class: 'shop-status locked', text: `Completa "${MISSIONS[m.requires!].name}"` });
-      else action = button(best ? 'Repetir' : 'Aceptar', () => this.cb.onStartMission(id), 'btn btn-small btn-primary');
+      else action = button(id === 'gauntlet' ? 'Entrar' : best ? 'Repetir' : 'Aceptar', () => this.cb.onStartMission(id), 'btn btn-small btn-primary');
       return h('div', { class: `contract ${m.available && reqDone ? 'open' : 'locked'}`, dataset: { mission: id } }, [
         h('div', { class: 'shop-text' }, [
           h('div', { class: 'shop-name', text: m.name }),
           h('div', { class: 'shop-desc', text: m.place }),
           h('div', { class: 'contract-brief', text: m.briefing[0] }),
         ]),
-        h('div', { class: 'contract-best', text: best ? `Mejor: ${best.rank}` : '—' }),
+        h('div', { class: 'contract-best', text: id === 'gauntlet' ? (p.gauntlet[0] ? `Récord: ${p.gauntlet[0].waves}` : '—') : best ? `Mejor: ${best.rank}` : '—' }),
         action,
       ]);
     });
@@ -364,6 +397,7 @@ export class Screens {
       h('h2', { class: 'screen-heading', text: 'CONTRATOS · RECEPCIÓN' }),
       h('div', { class: 'coins' }, [h('span', { class: 'coin-icon', text: '◉' }), h('b', { class: 'coin-count', text: String(p.coins) }), ' Monedas Continental']),
       h('div', { class: 'shop-list' }, rows),
+      ...(p.gauntlet.length ? [h('div', { class: 'achv-title', text: 'Récords del Gauntlet' }), this.gauntletTable(p.gauntlet, 0)] : []),
       h('div', { class: 'menu' }, [button('Cerrar', () => this.cb.onCloseMenu(), 'btn')]),
     ]);
   }

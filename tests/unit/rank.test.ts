@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { accuracyScore, computeRank, damageScore, type MissionStats, rankFor, timeScore, varietyScore } from '../../src/combat/rank';
+import { accuracyScore, computeRank, damageScore, type MissionStats, RANK_THRESHOLDS, rankFor, timeScore, varietyScore } from '../../src/combat/rank';
+import { Rng } from '../../src/core/rng';
 
 const base: MissionStats = {
   timeSec: 100,
@@ -80,5 +81,52 @@ describe('rango del contrato', () => {
     const bad = computeRank({ ...base, hasCivilians: true, civiliansKilled: 1, timeSec: 400, shotsHit: 0, damageTaken: 400, varietyCount: 0, styleBest: 1, markersUsed: 3 });
     expect(bad.rank).toBe('D');
     expect(bad.capped).toBe(false);
+  });
+
+  it('coherencia: mejorar cualquier estadística nunca baja la nota ni el rango (500 partidas al azar)', () => {
+    const rng = new Rng(4242);
+    const order = ['D', 'C', 'B', 'A', 'S'];
+    const better: Array<(m: MissionStats) => MissionStats> = [
+      (m) => ({ ...m, timeSec: m.timeSec * 0.8 }),
+      (m) => ({ ...m, shotsHit: Math.min(m.shotsFired, m.shotsHit + 3) }),
+      (m) => ({ ...m, damageTaken: m.damageTaken * 0.5 }),
+      (m) => ({ ...m, varietyCount: m.varietyCount + 1 }),
+      (m) => ({ ...m, markersUsed: Math.max(0, m.markersUsed - 1) }),
+      (m) => ({ ...m, civiliansHurt: Math.max(0, m.civiliansHurt - 1) }),
+      (m) => ({ ...m, civiliansKilled: 0 }),
+      (m) => ({ ...m, styleBest: Math.min(8, m.styleBest + 1) }),
+    ];
+    for (let i = 0; i < 500; i++) {
+      const shotsFired = rng.int(0, 120);
+      const hasCivilians = rng.next() < 0.5;
+      const m: MissionStats = {
+        timeSec: rng.range(30, 900),
+        parTime: rng.range(120, 360),
+        shotsFired,
+        shotsHit: rng.int(0, shotsFired),
+        takedowns: rng.int(0, 6),
+        knifeKills: rng.int(0, 4),
+        damageTaken: rng.range(0, 600),
+        healthPool: 160,
+        varietyCount: rng.int(0, 9),
+        hasCivilians,
+        civiliansHurt: hasCivilians ? rng.int(0, 4) : 0,
+        civiliansKilled: hasCivilians ? rng.int(0, 2) : 0,
+        markersUsed: rng.int(0, 3),
+        styleBest: rng.int(1, 8),
+      };
+      const r0 = computeRank(m);
+      expect(r0.total).toBeGreaterThanOrEqual(0);
+      expect(r0.total).toBeLessThanOrEqual(100);
+      // El rango es exactamente el que marcan los umbrales para la nota (salvo el tope C por civiles).
+      const byTotal = rankFor(r0.total);
+      expect(r0.rank).toBe(r0.capped && order.indexOf(byTotal) > order.indexOf('C') ? 'C' : byTotal);
+      for (const f of better) {
+        const r1 = computeRank(f(m));
+        expect(r1.total).toBeGreaterThanOrEqual(r0.total - 1e-9);
+        expect(order.indexOf(r1.rank)).toBeGreaterThanOrEqual(order.indexOf(r0.rank));
+      }
+    }
+    expect(RANK_THRESHOLDS.length).toBe(4);
   });
 });

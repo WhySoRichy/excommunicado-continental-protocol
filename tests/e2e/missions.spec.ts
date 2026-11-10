@@ -404,3 +404,98 @@ test.describe('Fase 4 · contratos 2 y 3', () => {
     expect(out.failReason).toContain('tiempo');
   });
 });
+
+test.describe('Fase 4 · Gauntlet', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/?qa=1');
+    await page.evaluate(() => window.localStorage.clear());
+  });
+
+  test('Gauntlet: oleadas crecientes en el hub hostil, una vida, top 10 y monedas', async ({ page }) => {
+    const errors = collectErrors(page);
+    await enterContract(page, 'gauntlet');
+    const start = await page.evaluate(() => {
+      const q = window.__EXCOM__!;
+      return { m: q.mission()!, hud: q.hud(), prompt: q.prompt(), enemies: q.enemies().length };
+    });
+    expect(start.m.kind).toBe('waves');
+    expect(start.m.markersTotal).toBe(1);
+    expect(start.m.wave).toBe(0);
+    expect(start.enemies).toBe(0);
+    expect(start.hud.objective).toMatch(/Oleada 1 en \d s/);
+    // Cerca de Charon no hay diálogo: el hub está en modo hostil.
+    const noTalk = await page.evaluate(() => {
+      const q = window.__EXCOM__!;
+      q.setGod(true);
+      q.teleport(0, 0, -9.3, 0);
+      q.setLook(0, -0.1);
+      q.step(12, {});
+      q.resetInvariants();
+      return q.prompt();
+    });
+    expect(noTalk).not.toContain('Charon');
+    // Cinco oleadas: aparecen escalonadas por las entradas, crecen y mezclan tipos.
+    const sizes: number[] = [];
+    const types = new Set<string>();
+    for (let w = 1; w <= 5; w++) {
+      const r = await page.evaluate((wave) => {
+        const q = window.__EXCOM__!;
+        // Respiro de 5 s y aparición escalonada (0,5 s entre enemigos) hasta vaciar la cola.
+        for (let i = 0; i < 80 && (q.mission()!.wave < wave || q.mission()!.wavePending > 0); i++) q.step(15, {});
+        const list = q.enemies().filter((e) => e.id.startsWith(`g${wave}-`));
+        const inv = q.invariants();
+        q.runDebug('killAll');
+        q.step(6, {});
+        return { wave: q.mission()!.wave, cleared: q.mission()!.wavesCleared, n: list.length, types: list.map((e) => e.type), pen: inv.penetrations };
+      }, w);
+      expect(r.wave).toBe(w);
+      expect(r.cleared).toBe(w);
+      expect(r.pen).toBe(0);
+      sizes.push(r.n);
+      for (const t of r.types) types.add(t);
+    }
+    console.log(`[gauntlet] tamaños de oleada ${sizes.join(', ')} · tipos ${[...types].join(', ')}`);
+    expect(sizes[0]).toBe(3);
+    for (let i = 1; i < sizes.length; i++) expect(sizes[i]!).toBeGreaterThanOrEqual(sizes[i - 1]!);
+    expect(types.has('heavy')).toBe(true);
+    expect(types.has('marksman')).toBe(true);
+    // Oleada 6 en curso: el jugador muere → fin del Gauntlet (una sola vida).
+    await page.evaluate(() => {
+      const q = window.__EXCOM__!;
+      for (let i = 0; i < 40 && q.mission()!.wave < 6; i++) q.step(15, {});
+      q.step(120, {});
+      q.measureFps(0.2);
+    });
+    await page.screenshot({ path: shotPath('fase4-gauntlet-oleada') });
+    const lum = await page.evaluate(() => window.__EXCOM__!.luminance());
+    console.log(`[gauntlet] luminancia ${lum.toFixed(3)}`);
+    expect(lum).toBeGreaterThan(LUMINANCE_MIN);
+    await page.evaluate(() => {
+      const q = window.__EXCOM__!;
+      q.setGod(false);
+      for (let i = 0; i < 200 && !q.combat()!.dead; i++) q.step(30, {});
+    });
+    await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('results');
+    const out = await page.evaluate(() => window.__EXCOM__!.outcome()!);
+    expect(out.mission).toBe('gauntlet');
+    expect(out.gauntlet).toEqual({ waves: 5, position: 1 });
+    expect(out.achievements).toContain('gauntlet.w5');
+    expect(out.achievements).not.toContain('global.first');
+    // 5 oleadas → 2 monedas + logro "Oleada 5" (2).
+    expect(out.coins).toBe(4);
+    await expect(page.locator('.brief-kicker')).toHaveText('GAUNTLET TERMINADO');
+    await expect(page.locator('.gauntlet-waves')).toHaveText('5');
+    await expect(page.locator('.gauntlet-top li.me')).toContainText('5 oleadas');
+    await page.screenshot({ path: shotPath('fase4-gauntlet-resultados') });
+    const prof = await page.evaluate(() => window.__EXCOM__!.profile());
+    expect(prof.gauntlet[0]?.waves).toBe(5);
+    // Volver al Continental: hub limpio y neutral otra vez.
+    await page.getByRole('button', { name: 'Volver al Continental' }).click();
+    await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('hub');
+    const hub = await page.evaluate(() => ({ enemies: window.__EXCOM__!.enemies().length, zone: window.__EXCOM__!.hud().zone, mission: window.__EXCOM__!.mission() }));
+    expect(hub.enemies).toBe(0);
+    expect(hub.zone).toContain('ZONA NEUTRAL');
+    expect(hub.mission).toBeNull();
+    expect(errors).toEqual([]);
+  });
+});

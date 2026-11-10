@@ -1303,3 +1303,45 @@ body {
   color: #5ee6c8;
   text-shadow: 0 1px 2px #000;
 }
+
+/* Gauntlet: oleadas en lugar de rango y top 10 local */
+.gauntlet-waves {
+  font-size: 64px;
+}
+.gauntlet-top {
+  margin: 0;
+  padding: 0 0 0 28px;
+  display: grid;
+  gap: 4px;
+  font-size: 14px;
+  color: var(--c-text-dim);
+  max-height: 180px;
+  overflow-y: auto;
+}
+.gauntlet-top li {
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.gauntlet-top li > span {
+  display: inline-block;
+}
+.gauntlet-top .gt-waves {
+  min-width: 96px;
+  color: var(--c-text);
+  font-weight: 600;
+}
+.gauntlet-top .gt-score {
+  opacity: 0.8;
+}
+.gauntlet-top li.me {
+  background: rgba(212, 175, 55, 0.18);
+  outline: 1px solid rgba(212, 175, 55, 0.55);
+}
+.gauntlet-empty {
+  margin: 0;
+  opacity: 0.7;
+}
+.screen-contracts .gauntlet-top {
+  max-width: 360px;
+  margin: 0 auto 8px;
+}

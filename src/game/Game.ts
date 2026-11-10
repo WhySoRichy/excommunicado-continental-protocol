@@ -19,6 +19,7 @@ import { addCoins, buy } from '../hub/economy';
 import { HubDirector } from '../hub/HubDirector';
 import { loadLevelData } from '../levels/registry';
 import type { EnemyType, InteractableDef, LevelId } from '../levels/types';
+import { GAUNTLET_BLOCK } from '../missions/gauntlet';
 import { MissionDirector, type MissionOutcome } from '../missions/MissionDirector';
 import { type MissionId, MISSIONS } from '../missions/types';
 import { loadRapier, QueryGroups, type Rapier } from '../physics/Physics';
@@ -309,7 +310,8 @@ export class Game {
     this.audio.init();
     this.requestLock();
     this.fsm.go('loading');
-    if (this.currentLevel !== 'hub' || !this.session) await this.loadSession('hub');
+    // Tras un contrato (o el Gauntlet sobre el propio hub) la sesión queda sucia: se recarga limpia.
+    if (this.currentLevel !== 'hub' || !this.session || this.mission) await this.loadSession('hub');
     const s = this.session;
     if (!s) {
       this.loading = false;
@@ -387,6 +389,7 @@ export class Game {
     this.outcome = null;
     this.mission = new MissionDirector({
       session: s,
+      block: id === 'gauntlet' ? GAUNTLET_BLOCK : undefined,
       hud: this.hud,
       audio: this.audio,
       profile: this.profile,
@@ -394,7 +397,8 @@ export class Game {
       onFinished: (o) => this.onMissionFinished(o),
     });
     this.hud.setMarkers(0, this.mission.markersTotal);
-    this.setHintsFor(s.data.id);
+    // En el Gauntlet el hub es zona de combate: pistas de combate, no las de hablar o el ascensor.
+    this.setHintsFor(id === 'gauntlet' ? 'practice' : s.data.id);
     this.fsm.go('briefing');
     this.screens.showBriefing(
       MISSIONS[id],
@@ -438,6 +442,7 @@ export class Game {
       achievements: o.achievements.map((a) => ({ name: a.name, coins: a.coins })),
       newBest: o.newBest,
       styleScore: this.session?.combat.style.score ?? 0,
+      gauntlet: o.gauntlet ? { waves: o.gauntlet.waves, position: o.gauntlet.position, top: o.gauntlet.top.map((g) => ({ waves: g.waves, score: g.score })) } : null,
     };
     this.audio.ui(o.success ? 'coin' : 'error');
     this.screens.showResults(
@@ -776,7 +781,7 @@ export class Game {
     const controlling = this.fsm.controlling;
     // Interactuar (E) tiene prioridad sobre saltar cuando hay algo delante (comparten botón A en gamepad).
     const near = this.nearInteractable;
-    if (controlling && near && !this.director?.hostile) {
+    if (controlling && near && this.interactionsAllowed) {
       const hold = near.hold ?? 0;
       if (hold > 0) {
         if (this.input.isDown('interact')) {
@@ -815,6 +820,11 @@ export class Game {
     }
     if (s.combat.dead && this.fsm.controlling) this.onPlayerDeath();
     this.input.endStep();
+  }
+
+  /** Sin interacciones con un hub hostil: ni durante el Excomunicado ni durante el Gauntlet. */
+  private get interactionsAllowed(): boolean {
+    return !this.director?.hostile && this.mission?.id !== 'gauntlet';
   }
 
   private onPlayerDeath(): void {
@@ -979,7 +989,7 @@ export class Game {
     if (this.peekTimer <= 0) {
       this.peekTimer = 0.1;
       const prev = this.nearInteractable;
-      this.nearInteractable = this.fsm.controlling && !this.director?.hostile ? s.nearestInteractable(this.camera.yaw, this.usedInteractables) : null;
+      this.nearInteractable = this.fsm.controlling && this.interactionsAllowed ? s.nearestInteractable(this.camera.yaw, this.usedInteractables) : null;
       if (this.nearInteractable !== prev) this.holdT = 0;
       this.hud.setPrompt(this.contextPrompt());
     }
@@ -1114,7 +1124,7 @@ export class Game {
   /** QA: interactúa con lo que haya delante (como pulsar E, o mantenerla hasta el final). */
   qaInteract(): boolean {
     const s = this.session;
-    if (!s || !this.fsm.controlling || this.director?.hostile) return false;
+    if (!s || !this.fsm.controlling || !this.interactionsAllowed) return false;
     const it = s.nearestInteractable(this.camera.yaw, this.usedInteractables);
     if (!it) return false;
     this.nearInteractable = it;

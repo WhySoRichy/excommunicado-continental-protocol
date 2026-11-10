@@ -148,7 +148,7 @@ export interface QaApi {
   beginContract(): void;
   mission(): MissionSnapshot | null;
   /** Último resultado de contrato (tras la pantalla de resultados). */
-  outcome(): { mission: string; success: boolean; rank: string; total: number; coins: number; achievements: string[]; failReason: string } | null;
+  outcome(): { mission: string; success: boolean; rank: string; total: number; coins: number; achievements: string[]; failReason: string; gauntlet: { waves: number; position: number } | null } | null;
   /** Pulsa un botón de la pantalla actual por su texto. */
   clickButton(label: string): boolean;
   civilians(): Array<{ id: string; alive: boolean; state: string; x: number; z: number; health: number }>;
@@ -171,6 +171,12 @@ export interface MissionSnapshot {
   civiliansHurt: number;
   civiliansKilled: number;
   escapeLeft: number;
+  /** Gauntlet: oleada en curso, oleadas superadas y segundos de respiro. */
+  wave: number;
+  wavesCleared: number;
+  waveBreak: number;
+  /** Enemigos de la oleada que aún no han aparecido. */
+  wavePending: number;
   beacon: { x: number; y: number; z: number } | null;
   respawn: { x: number; y: number; z: number };
 }
@@ -442,6 +448,10 @@ export function installQa(game: Game): void {
         civiliansHurt: m.civiliansHurt,
         civiliansKilled: m.civiliansKilled,
         escapeLeft: m.escapeLeft,
+        wave: m.gauntletWave,
+        wavesCleared: m.gauntletWaves,
+        waveBreak: m.gauntletBreak,
+        wavePending: m.gauntletPending,
         beacon: b ? { x: b.x, y: b.y, z: b.z } : null,
         respawn: { x: m.respawnPos.x, y: m.respawnPos.y, z: m.respawnPos.z },
       };
@@ -449,7 +459,16 @@ export function installQa(game: Game): void {
     outcome: () => {
       const o = game.outcome;
       if (!o) return null;
-      return { mission: o.mission, success: o.success, rank: o.rank.rank, total: o.rank.total, coins: o.coinsReward, achievements: o.achievements.map((a) => a.id), failReason: o.failReason };
+      return {
+        mission: o.mission,
+        success: o.success,
+        rank: o.rank.rank,
+        total: o.rank.total,
+        coins: o.coinsReward,
+        achievements: o.achievements.map((a) => a.id),
+        failReason: o.failReason,
+        gauntlet: o.gauntlet ? { waves: o.gauntlet.waves, position: o.gauntlet.position } : null,
+      };
     },
     clickButton: (label) => {
       const btn = [...document.querySelectorAll<HTMLButtonElement>('#screens button')].find((b) => b.textContent?.trim() === label);

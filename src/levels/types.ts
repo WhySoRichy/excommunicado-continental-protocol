@@ -219,7 +219,8 @@ export interface TriggerDef {
   once?: boolean;
 }
 
-export type ObjectiveKind = 'reach' | 'eliminate' | 'interact' | 'survive' | 'escape' | 'boss';
+/** `waves`: oleadas infinitas del Gauntlet (termina al morir). */
+export type ObjectiveKind = 'reach' | 'eliminate' | 'interact' | 'survive' | 'escape' | 'boss' | 'waves';
 
 /** Objetivo de misión (se cumplen en orden). */
 export interface ObjectiveDef {
@@ -250,6 +251,8 @@ export interface MissionBlock {
   objectives: ObjectiveDef[];
   /** Hay un panel de alarma: el primer enemigo en dar la voz de alarma trae refuerzos (`spawnOn: 'alarm'`). */
   alarm?: boolean;
+  /** Vidas fijas (sustituye a los marcadores de sangre del jugador). */
+  lives?: number;
 }
 
 export type MusicMood = 'hub' | 'tension' | 'club' | 'docks' | 'tower' | 'gauntlet' | 'practice';
