@@ -13,9 +13,13 @@ export async function loadLevelData(id: LevelId): Promise<LevelData> {
       return (await import('./data/hub')).hub;
     case 'nightclub':
       return (await import('./data/nightclub')).nightclub;
+    case 'docks':
+      return (await import('./data/docks')).docks;
+    case 'rooftop':
+      return (await import('./data/rooftop')).rooftop;
     default:
       throw new Error(`Nivel no disponible todavía: ${id}`);
   }
 }
 
-export const LEVEL_IDS: readonly LevelId[] = ['arena', 'practice', 'hub', 'nightclub'];
+export const LEVEL_IDS: readonly LevelId[] = ['arena', 'practice', 'hub', 'nightclub', 'docks', 'rooftop'];

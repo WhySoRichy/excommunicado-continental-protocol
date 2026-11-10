@@ -53,7 +53,7 @@ export const MISSIONS: Record<MissionId, MissionDef> = {
     requires: 'nightclub',
     parTime: 300,
     hasCivilians: false,
-    available: false,
+    available: true,
   },
   rooftop: {
     id: 'rooftop',
@@ -64,7 +64,7 @@ export const MISSIONS: Record<MissionId, MissionDef> = {
     requires: 'docks',
     parTime: 360,
     hasCivilians: false,
-    available: false,
+    available: true,
   },
   gauntlet: {
     id: 'gauntlet',

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { hub } from '../../src/levels/data/hub';
+import { docks } from '../../src/levels/data/docks';
 import { nightclub } from '../../src/levels/data/nightclub';
+import { rooftop } from '../../src/levels/data/rooftop';
 import { practice } from '../../src/levels/data/practice';
 import { NavGrid } from '../../src/levels/nav/NavGrid';
 import type { LevelData } from '../../src/levels/types';
@@ -32,9 +34,23 @@ function checkLevel(level: LevelData): void {
   for (const e of level.enemies) {
     const n = g.nearestNode(e.pos[0], e.pos[1], e.pos[2], 1.5);
     expect(n, `enemigo ${e.id}`).toBeGreaterThanOrEqual(0);
+    // Los tiradores fijos pueden estar en un nido aislado (tapa de contenedor, pasarela).
+    if (e.stationary) continue;
     expect(g.comp[n], `enemigo ${e.id} puede llegar al jugador`).toBe(main);
     const path = g.findPath(n, spawn);
-    expect(path, `ruta de ${e.id} al vestíbulo`).not.toBeNull();
+    expect(path, `ruta de ${e.id} al jugador`).not.toBeNull();
+  }
+  for (const c of level.civilians) {
+    const n = g.nearestNode(c.pos[0], c.pos[1], c.pos[2], 1.5);
+    expect(g.comp[n], `civil ${c.id}`).toBe(main);
+  }
+  for (const o of level.mission?.objectives ?? []) {
+    if (o.at) {
+      const n = g.nearestNode(o.at[0], o.at[1], o.at[2], o.radius ?? 2);
+      expect(n, `objetivo ${o.id}`).toBeGreaterThanOrEqual(0);
+      expect(g.comp[n], `objetivo ${o.id} alcanzable`).toBe(main);
+    }
+    for (const t of o.targets ?? []) expect(level.interactables.some((i) => i.id === t), `objetivo ${o.id}: interactivo ${t}`).toBe(true);
   }
 }
 
@@ -49,18 +65,14 @@ describe('navegación de los niveles jugables', () => {
 
   it('Club Kairos: objetivos, civiles, alarma y refuerzos conectados', () => {
     checkLevel(nightclub);
-    const g = NavGrid.build(nightclub);
-    const main = g.comp[g.nearestNode(0, 0, 25, 2)]!;
-    for (const c of nightclub.civilians) {
-      const n = g.nearestNode(c.pos[0], c.pos[1], c.pos[2], 1.5);
-      expect(g.comp[n], `civil ${c.id}`).toBe(main);
-    }
-    for (const o of nightclub.mission!.objectives) {
-      if (!o.at) continue;
-      const n = g.nearestNode(o.at[0], o.at[1], o.at[2], o.radius ?? 2);
-      expect(n, `objetivo ${o.id}`).toBeGreaterThanOrEqual(0);
-      expect(g.comp[n], `objetivo ${o.id} alcanzable`).toBe(main);
-    }
+  });
+
+  it('Muelle 9: cargamentos, bodega, pasarela y bote conectados', () => {
+    checkLevel(docks);
+  });
+
+  it('Torre Meridian: las tres azoteas, el Juez y la tirolina conectados', () => {
+    checkLevel(rooftop);
   });
 
   it('los NPC tienen cuerpo invisible y los interactivos de tipo npc apuntan a él', () => {
