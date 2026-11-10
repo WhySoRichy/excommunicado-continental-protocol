@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_BINDINGS } from '../../src/core/actions';
 import { MemoryStore, SETTINGS_KEY } from '../../src/core/Save';
-import { bindingConflicts, defaultSettings, loadSettings, rebind, saveSettings, SETTING_RANGES, validateSettings } from '../../src/core/Settings';
+import { bindingConflicts, defaultSettings, loadSettings, rebind, saveSettings, SETTING_RANGES, suggestPreset, validateSettings } from '../../src/core/Settings';
 
 describe('ajustes', () => {
   it('los de fábrica no tienen teclas en conflicto', () => {
@@ -78,5 +78,19 @@ describe('ajustes', () => {
       expect(bindingConflicts(b)).toEqual([]);
       for (const a of actions) expect(b[a].some((c) => !c.startsWith('Pad')), a).toBe(true);
     }
+  });
+});
+
+describe('preset sugerido por GPU', () => {
+  it('integradas de Intel, móviles y software → Bajo; dedicadas, Arc y Apple → Medio', () => {
+    expect(suggestPreset('ANGLE (Intel, Intel(R) UHD Graphics 620 Direct3D11 vs_5_0 ps_5_0, D3D11)')).toBe('low');
+    expect(suggestPreset('ANGLE (Intel, Intel(R) Iris(R) Xe Graphics Direct3D11)')).toBe('low');
+    expect(suggestPreset('ANGLE (Intel, Intel(R) Arc(TM) A770 Graphics Direct3D11)')).toBe('medium');
+    expect(suggestPreset('ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero)), SwiftShader driver)')).toBe('low');
+    expect(suggestPreset('Mali-G78')).toBe('low');
+    expect(suggestPreset('Adreno (TM) 650')).toBe('low');
+    expect(suggestPreset('ANGLE (NVIDIA, NVIDIA GeForce RTX 4060 Direct3D11 vs_5_0 ps_5_0, D3D11)')).toBe('medium');
+    expect(suggestPreset('ANGLE (AMD, AMD Radeon RX 6600 Direct3D11)')).toBe('medium');
+    expect(suggestPreset('Apple M2')).toBe('medium');
   });
 });

@@ -55,7 +55,8 @@ export class Civilian {
     this.home = new Vector3(def.pos[0], def.pos[1], def.pos[2]);
     this.mover = new PlayerController(physics, new Vector3(def.pos[0], def.pos[1] + 0.02, def.pos[2]), def.yaw, Groups.CIVILIAN);
     const outfit = OUTFITS[index % OUTFITS.length]!;
-    this.rig = new CharacterRig(`civ:${def.id}`, { colors: outfit.colors, rimColor: CIVILIAN_COLOR, rimStrength: 0.9, hair: outfit.hair, weapon: 'none', uniqueMaterial: true });
+    // Material compartido por todos los civiles (los colores van por vértice; el rim no cambia).
+    this.rig = new CharacterRig('civ', { colors: outfit.colors, rimColor: CIVILIAN_COLOR, rimStrength: 0.9, hair: outfit.hair, weapon: 'none' });
     scene.add(this.rig.root);
     this.dancePhase = rng.range(0, Math.PI * 2);
     this.behavior = def.behavior;
@@ -189,7 +190,7 @@ export class Civilian {
 
   dispose(): void {
     this.rig.dispose();
-    this.rig.material.dispose();
+    // El material es compartido (caché de CharacterRig): no se libera con cada civil.
     this.physics.removeCharacter(this.mover.char);
   }
 }

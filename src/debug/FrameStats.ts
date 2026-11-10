@@ -12,6 +12,8 @@ export class FrameStats {
   private windowStart = 0;
   private windowFrames = 0;
   private windowMs = 0;
+  private windowCpu = 0;
+  private windowWorst = 0;
 
   constructor(private readonly capacity = 240) {
     this.frames = new Float64Array(capacity);
@@ -26,6 +28,8 @@ export class FrameStats {
     this.totalFrames++;
     this.windowFrames++;
     this.windowMs += frameMs;
+    this.windowCpu += cpuMs;
+    if (frameMs > this.windowWorst) this.windowWorst = frameMs;
   }
 
   /** Frame medio (ms) de los últimos `n` frames. */
@@ -63,15 +67,19 @@ export class FrameStats {
     this.windowStart = now;
     this.windowFrames = 0;
     this.windowMs = 0;
+    this.windowCpu = 0;
+    this.windowWorst = 0;
   }
 
-  windowResult(now: number): { frames: number; seconds: number; fps: number; avgMs: number } {
+  windowResult(now: number): { frames: number; seconds: number; fps: number; avgMs: number; cpuMs: number; worstMs: number } {
     const seconds = (now - this.windowStart) / 1000;
     return {
       frames: this.windowFrames,
       seconds,
       fps: seconds > 0 ? this.windowFrames / seconds : 0,
       avgMs: this.windowFrames > 0 ? this.windowMs / this.windowFrames : 0,
+      cpuMs: this.windowFrames > 0 ? this.windowCpu / this.windowFrames : 0,
+      worstMs: this.windowWorst,
     };
   }
 }

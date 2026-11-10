@@ -170,9 +170,8 @@ test.describe('Fase 1 · movimiento', () => {
       q.setLook(0, -0.1);
     });
     await page.keyboard.down('KeyW');
-    await frames(page, 0.4);
-    const moving = await page.evaluate(() => window.__EXCOM__!.player()!.z);
-    expect(moving).toBeLessThan(7.5);
+    // Avanza con W de verdad (sin depender del FPS: en CI el render por software va a ~7 FPS).
+    await expect.poll(() => page.evaluate(() => window.__EXCOM__!.player()!.z)).toBeLessThan(7.5);
     await page.evaluate(() => window.dispatchEvent(new Event('blur')));
     expect(await page.evaluate(() => window.__EXCOM__!.state())).toBe('paused');
     expect(await page.evaluate(() => window.__EXCOM__!.input().held)).toBe(0);
@@ -212,6 +211,8 @@ test.describe('Fase 1 · movimiento', () => {
   test('resize de ventana y cambio de DPI: el canvas se adapta y el juego sigue', async ({ page }) => {
     const errors = collectErrors(page);
     await enterArena(page);
+    // Preset Medio: el Bajo limita a propósito el DPR a 1 (no cambiaría con la pantalla).
+    await page.evaluate(() => window.__EXCOM__!.setSettings({ preset: 'medium' }));
     await page.setViewportSize({ width: 900, height: 600 });
     await frames(page, 0.3);
     const c1 = await page.evaluate(() => window.__EXCOM__!.canvas());

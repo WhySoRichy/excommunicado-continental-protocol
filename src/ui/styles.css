@@ -17,6 +17,12 @@
   --ui-scale: 1;
 }
 
+/* El atributo hidden SIEMPRE oculta, aunque el componente declare su propio display
+   (un panel con display:grid lo ignoraba y oscurecía toda la pantalla). */
+[hidden] {
+  display: none !important;
+}
+
 *,
 *::before,
 *::after {

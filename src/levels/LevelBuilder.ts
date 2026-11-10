@@ -9,6 +9,7 @@ import {
   Fog,
   Group,
   HemisphereLight,
+  type Material,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
@@ -21,6 +22,7 @@ import {
   Vector3,
 } from 'three';
 import type { PhysicsWorld } from '../physics/Physics';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { getLevelMaterial, getNeonMaterial, texScaleOf } from '../render/materials';
 import { createSignTexture } from '../render/textures';
 import { boxToOriented, buildLevelPhysics, type OrientedBox, rampToOriented } from './levelPhysics';
@@ -124,8 +126,11 @@ export interface BuildOptions {
   shadowMapSize: number;
 }
 
-/** Tamaño de celda para agrupar la geometría estática (culling por zonas). */
-const CELL = 20;
+/**
+ * Tamaño de celda para agrupar la geometría estática. Los niveles miden 50–90 m: con celdas
+ * de 40 m hay pocas draw calls por material y aún se descartan zonas fuera de cámara.
+ */
+const CELL = 40;
 
 export function buildLevel(data: LevelData, scene: Scene, physics: PhysicsWorld, opts: BuildOptions): LevelRuntime {
   const root = new Group();
@@ -209,7 +214,10 @@ export function buildLevel(data: LevelData, scene: Scene, physics: PhysicsWorld,
 
   // --- Decoración (sin colisión) ---
   const neonAcc = new Map<string, GeoAccumulator>();
-  for (const d of data.decor) buildDecor(d, root, neonAcc, disposables);
+  const props: Group[] = [];
+  const propCtx: PropContext = { leaves: null, disposables };
+  for (const d of data.decor) buildDecor(d, root, neonAcc, props, propCtx);
+  mergeProps(props, root, opts.shadows, disposables);
   for (const [k2, acc] of neonAcc) {
     const [color, intensity] = k2.split(':').map(Number) as [number, number];
     const geo = acc.build();
@@ -226,6 +234,12 @@ export function buildLevel(data: LevelData, scene: Scene, physics: PhysicsWorld,
   scene.fog = a.fog ? new Fog(a.fog.color, a.fog.near, a.fog.far) : null;
   scene.environmentIntensity = a.ibl;
   scene.add(root);
+  // Todo el nivel es estático: se calculan sus matrices una vez y el grafo no lo recorre cada frame.
+  root.updateMatrixWorld(true);
+  root.traverse((o) => {
+    o.matrixAutoUpdate = false;
+  });
+  root.matrixWorldAutoUpdate = false;
 
   return {
     data,
@@ -244,7 +258,8 @@ export function buildLevel(data: LevelData, scene: Scene, physics: PhysicsWorld,
   };
 }
 
-function buildDecor(d: DecorDef, root: Group, neonAcc: Map<string, GeoAccumulator>, disposables: Array<{ dispose(): void }>): void {
+function buildDecor(d: DecorDef, root: Group, neonAcc: Map<string, GeoAccumulator>, props: Group[], ctx: PropContext): void {
+  const disposables = ctx.disposables;
   switch (d.kind) {
     case 'neon': {
       const key = `${d.color}:${d.intensity ?? 1.6}`;
@@ -270,13 +285,52 @@ function buildDecor(d: DecorDef, root: Group, neonAcc: Map<string, GeoAccumulato
       return;
     }
     case 'prop':
-      root.add(buildProp(d, disposables));
+      props.push(buildProp(d, ctx));
       return;
   }
 }
 
+interface PropContext {
+  /** Material de hojas compartido por todas las plantas del nivel. */
+  leaves: MeshStandardMaterial | null;
+  disposables: Array<{ dispose(): void }>;
+}
+
+/**
+ * Todos los props del nivel se fusionan en UNA malla por material (eran decenas de mallas
+ * sueltas: un taburete doble son 8, una lámpara de araña 12). Son estáticos y sin sombra.
+ */
+function mergeProps(props: Group[], root: Group, shadows: boolean, disposables: Array<{ dispose(): void }>): void {
+  const byMat = new Map<Material, BufferGeometry[]>();
+  for (const g of props) {
+    g.updateMatrixWorld(true);
+    for (const c of g.children) {
+      const m = c as Mesh;
+      const mat = m.material as Material;
+      const geo = m.geometry.clone().applyMatrix4(m.matrixWorld);
+      const list = byMat.get(mat);
+      if (list) list.push(geo);
+      else byMat.set(mat, [geo]);
+      m.geometry.dispose();
+    }
+  }
+  for (const [mat, geos] of byMat) {
+    const merged = mergeGeometries(geos, false);
+    for (const g of geos) g.dispose();
+    if (!merged) throw new Error('LevelBuilder: no se pudieron fusionar los props');
+    merged.computeBoundingSphere();
+    disposables.push(merged);
+    const mesh = new Mesh(merged, mat);
+    mesh.name = 'props';
+    mesh.castShadow = false;
+    mesh.receiveShadow = shadows;
+    root.add(mesh);
+  }
+}
+
 /** Props decorativos procedurales (sin colisión: si bloquean, se declaran como cajas). */
-function buildProp(d: DecorProp, disposables: Array<{ dispose(): void }>): Group {
+function buildProp(d: DecorProp, ctx: PropContext): Group {
+  const disposables = ctx.disposables;
   const g = new Group();
   g.position.set(d.c[0], d.c[1], d.c[2]);
   g.rotation.y = d.rotY ?? 0;
@@ -291,8 +345,11 @@ function buildProp(d: DecorProp, disposables: Array<{ dispose(): void }>): Group
   switch (d.prop) {
     case 'plant': {
       add(new CylinderGeometry(0.28, 0.22, 0.55, 10), getLevelMaterial('brass'), 0, 0.275, 0);
-      const leaves = new MeshStandardMaterial({ color: 0x2f6b3c, roughness: 0.8 });
-      disposables.push(leaves);
+      if (!ctx.leaves) {
+        ctx.leaves = new MeshStandardMaterial({ color: 0x2f6b3c, roughness: 0.8 });
+        disposables.push(ctx.leaves);
+      }
+      const leaves = ctx.leaves;
       add(new SphereGeometry(0.45, 8, 6), leaves, 0, 0.95, 0);
       add(new SphereGeometry(0.32, 8, 6), leaves, 0.18, 1.3, 0.05);
       break;

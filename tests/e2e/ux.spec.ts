@@ -38,6 +38,9 @@ test.describe('Fase 5 · UX', () => {
     await page.screenshot({ path: shotPath('fase5-intel') });
     await page.evaluate(() => window.__EXCOM__!.hold('intel', false));
     await expect(page.locator('#hud .intel')).toHaveCount(0);
+    // Regresión: nada con el atributo hidden se pinta (un overlay vacío oscurecía la pantalla).
+    const leaking = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('[hidden]')].filter((e) => getComputedStyle(e).display !== 'none').map((e) => e.className || e.id));
+    expect(leaking).toEqual([]);
     expect(errors).toEqual([]);
   });
 

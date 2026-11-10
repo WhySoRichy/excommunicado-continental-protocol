@@ -89,12 +89,12 @@ export interface QaApi {
   readonly ready: boolean;
   luminance(): number;
   fps(): number;
-  measureFps(seconds: number): Promise<{ frames: number; seconds: number; fps: number; avgMs: number }>;
+  measureFps(seconds: number): Promise<{ frames: number; seconds: number; fps: number; avgMs: number; cpuMs: number; worstMs: number }>;
   gpu(): string;
   debugText(): string;
   setDebug(visible: boolean): void;
   runDebug(id: string): boolean;
-  info(): { calls: number; triangles: number; programs: number; pixelRatio: number; preset: string; steps: number };
+  info(): { calls: number; triangles: number; programs: number; geometries: number; textures: number; pixelRatio: number; dynamicScale: number; preset: string; steps: number };
   state(): string;
   level(): string;
   playArena(): void;
@@ -174,6 +174,10 @@ export interface QaApi {
   setSettings(patch: Partial<Settings>): void;
   /** "Saltar tutorial" del contrato en curso. */
   skipTutorial(): void;
+  /** Reparto de CPU por sistema durante `seconds` (ms por frame y por paso fijo). */
+  cpuProfile(seconds: number): Promise<Record<string, number>>;
+  /** Objetos renderizables visibles agrupados por material/tipo y totales del grafo de escena. */
+  sceneStats(): { objects: number; autoUpdate: number; renderables: Record<string, number> };
   /** Mide la salida de audio durante `seconds` de frames reales. */
   audioMeter(seconds: number): Promise<{ running: boolean; rmsMean: number; rmsMax: number; peakMax: number; mood: string | null; intensity: number }>;
 }
@@ -247,7 +251,10 @@ export function installQa(game: Game): void {
         calls: i.render.calls,
         triangles: i.render.triangles,
         programs: i.programs?.length ?? 0,
+        geometries: i.memory.geometries,
+        textures: i.memory.textures,
         pixelRatio: game.renderer.pixelRatio,
+        dynamicScale: game.renderer.dynamicScale,
         preset: game.renderer.preset,
         steps: game.steps,
       };
@@ -512,6 +519,49 @@ export function installQa(game: Game): void {
     }),
     setSettings: (patch) => game.applySettings({ ...game.settings, ...patch }),
     skipTutorial: () => game.mission?.skipLearn(),
+    sceneStats: () => {
+      let objects = 0;
+      let autoUpdate = 0;
+      const renderables: Record<string, number> = {};
+      game.renderer.scene.traverseVisible((o) => {
+        objects++;
+        if (o.matrixAutoUpdate) autoUpdate++;
+        const m = (o as { material?: { name?: string; type?: string } | Array<{ name?: string }> }).material;
+        if (!m) return;
+        const mat = Array.isArray(m) ? m[0] : m;
+        const key = `${o.type}:${(mat && 'name' in mat && mat.name) || (mat && 'type' in mat ? mat.type : '?')}`;
+        renderables[key] = (renderables[key] ?? 0) + 1;
+      });
+      return { objects, autoUpdate, renderables };
+    },
+    cpuProfile: (seconds) =>
+      new Promise((resolve) => {
+        const p = game.prof;
+        for (const k of Object.keys(p) as Array<keyof typeof p>) p[k] = 0;
+        game.profiling = true;
+        const end = performance.now() + seconds * 1000;
+        const tick = (): void => {
+          if (performance.now() < end) {
+            requestAnimationFrame(tick);
+            return;
+          }
+          game.profiling = false;
+          const f = Math.max(1, p.frames);
+          const st = Math.max(1, p.steps);
+          resolve({
+            frames: p.frames,
+            simPerFrame: p.sim / f,
+            viewPerFrame: p.view / f,
+            renderPerFrame: p.render / f,
+            playerPerStep: p.player / st,
+            enemiesPerStep: p.enemies / st,
+            civiliansPerStep: p.civilians / st,
+            physicsPerStep: p.physics / st,
+            stepsPerFrame: p.steps / f,
+          });
+        };
+        requestAnimationFrame(tick);
+      }),
     audioMeter: (seconds) =>
       new Promise((resolve) => {
         const a = game.audio;

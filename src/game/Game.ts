@@ -11,7 +11,8 @@ import { AnimationLoop, FIXED_DT, FixedStepAccumulator } from '../core/Loop';
 import { wrapAngle } from '../core/math';
 import { Rng } from '../core/rng';
 import { BrowserStore, deleteProfile, type KeyValueStore, loadProfile, newProfile, type Profile, PROFILE_KEY, saveProfile, SETTINGS_KEY } from '../core/Save';
-import { loadSettings, saveSettings, type Settings } from '../core/Settings';
+import { loadSettings, saveSettings, type Settings, suggestPreset } from '../core/Settings';
+import { probeGpu } from '../render/gpu';
 import { CollisionDebugView, DebugOverlay } from '../debug/DebugOverlay';
 import { FrameStats } from '../debug/FrameStats';
 import { idlePose, type RigPose, type WeaponModel } from '../entities/CharacterRig';
@@ -145,6 +146,9 @@ export class Game {
   /** Nivel cuyas pistas están en pantalla (se repintan al reasignar teclas). */
   private hintsFor: LevelId | null = null;
   private intelShown = false;
+  /** QA: reparto del tiempo de CPU por sistema (ms acumulados; solo si `profiling`). */
+  profiling = false;
+  readonly prof = { frames: 0, steps: 0, sim: 0, player: 0, enemies: 0, civilians: 0, physics: 0, view: 0, render: 0 };
   private readonly musicIn: IntensityInput = { fighting: 0, searching: 0, boss: false, escape: false, hostile: false, onMission: false };
 
   constructor(gameRoot: HTMLElement, uiRoot: HTMLElement, opts: GameOptions) {
@@ -156,7 +160,10 @@ export class Game {
     if (loaded.status === 'reset-corrupt') console.warn('[save] la partida guardada estaba corrupta; se empezó una nueva (copia en localStorage).');
     this.settings = loadSettings(this.store);
     // Primera vez: si el sistema pide menos movimiento, la cámara no tiembla (se puede cambiar en Ajustes).
-    if (this.store.get(SETTINGS_KEY) === null && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) this.settings.shake = 0;
+    const firstRun = this.store.get(SETTINGS_KEY) === null;
+    if (firstRun && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) this.settings.shake = 0;
+    // Primera vez y sin `?preset=`: el preset se elige por la GPU (integradas → Bajo).
+    if (firstRun && !opts.preset) this.settings.preset = suggestPreset(probeGpu());
     this.renderer = new GameRenderer(gameRoot, opts.preset ?? this.settings.preset);
     this.input = new Input(this.renderer.canvas);
     this.input.attach();
@@ -318,7 +325,7 @@ export class Game {
     cs.shake = s.shake;
     if (persist && s.preset !== prev.preset && s.preset !== this.renderer.preset) this.renderer.applyPreset(s.preset);
     this.renderer.dynamicResolution = s.dynamicResolution;
-    if (!s.dynamicResolution) this.renderer.dynamicScale = 1;
+    if (!s.dynamicResolution) this.renderer.dyn.reset();
     this.renderer.setBrightness(s.brightness);
     this.audio.setVolumes({ master: s.master, music: s.music, sfx: s.sfx, ui: s.ui });
     this.input.setBindings(s.bindings);
@@ -735,10 +742,12 @@ export class Game {
       this.sim.timeScale = this.deathSlowmo > 0 ? 0.4 : s.combat.timeScale;
       this.audio.setMuffle(s.combat.focusActive ? 0.55 : 0);
     }
+    const tSim = this.profiling ? performance.now() : 0;
     if (this.fsm.simulating && s && !this.manual) {
       const n = this.sim.advance(realDt);
       for (let i = 0; i < n; i++) this.fixedUpdate(FIXED_DT);
     }
+    const tView = this.profiling ? performance.now() : 0;
 
     const alpha = this.manual ? 1 : this.sim.alpha;
     const scaledDt = realDt * this.sim.timeScale;
@@ -760,8 +769,16 @@ export class Game {
     this.debug.update(realDt, () => this.debugText());
     if (this.collisionView.enabled && s) this.collisionView.refresh(s.physics);
     if (!this.fsm.simulating) this.input.endStep();
+    const tRender = this.profiling ? performance.now() : 0;
     this.renderer.render();
     this.lastCpuMs = performance.now() - t0;
+    if (this.profiling) {
+      const p = this.prof;
+      p.frames++;
+      p.sim += tView - tSim;
+      p.view += tRender - tView;
+      p.render += performance.now() - tRender;
+    }
     this.stats.push(realDt * 1000, this.lastCpuMs);
     this.renderer.updateDynamicResolution(this.stats.avgFrameMs(60), realDt);
     void now;
@@ -920,6 +937,7 @@ export class Game {
   fixedUpdate(dt: number): void {
     const s = this.session;
     if (!s) return;
+    const tStep = this.profiling ? performance.now() : 0;
     const controlling = this.fsm.controlling;
     // Interactuar (E) tiene prioridad sobre saltar cuando hay algo delante (comparten botón A en gamepad).
     const near = this.nearInteractable;
@@ -949,12 +967,25 @@ export class Game {
     const ci = controlling ? this.buildCombatIntent() : this.idleCIntent;
     if (s.infiniteAmmo) s.combat.weapon.mag = Math.max(s.combat.weapon.mag, 1);
     s.combat.fixedUpdate(dt, ci, s.ctx);
+    const tE = this.profiling ? performance.now() : 0;
     s.enemies.fixedUpdate(dt, s.updateTarget(dt));
+    const tC = this.profiling ? performance.now() : 0;
     s.civilians?.fixedUpdate(dt);
+    const tP = this.profiling ? performance.now() : 0;
     s.pickups.update(dt);
     this.director?.fixedUpdate(dt);
     if (this.fsm.state === 'playing') this.mission?.fixedUpdate(dt);
+    const tPh = this.profiling ? performance.now() : 0;
     s.physics.step();
+    if (this.profiling) {
+      const p = this.prof;
+      const end = performance.now();
+      p.steps++;
+      p.enemies += tC - tE;
+      p.civilians += tP - tC;
+      p.physics += end - tPh;
+      p.player += tE - tStep + (tPh - tP);
+    }
     this.steps++;
     if (this.opts.qa) {
       this.checkPlayerInvariants();

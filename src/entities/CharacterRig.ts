@@ -1,4 +1,19 @@
-import { BoxGeometry, type BufferGeometry, Color, Float32BufferAttribute, Group, Mesh, MeshStandardMaterial } from 'three';
+import {
+  Bone,
+  BoxGeometry,
+  type BufferGeometry,
+  Color,
+  Float32BufferAttribute,
+  Group,
+  Matrix4,
+  Mesh,
+  MeshStandardMaterial,
+  Skeleton,
+  SkinnedMesh,
+  Sphere,
+  Uint16BufferAttribute,
+  Vector3,
+} from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { clamp, damp, lerp } from '../core/math';
 import { addRim, type RimUniforms } from '../render/materials';
@@ -60,6 +75,11 @@ export function idlePose(): RigPose {
 }
 
 const tmpColor = new Color();
+const _rootInv = new Matrix4();
+const _local = new Matrix4();
+/** Esfera de recorte generosa (cubre volteretas, caídas y brazos extendidos). */
+const CULL_CENTER = new Vector3(0, 0.9, 0);
+const CULL_RADIUS = 1.6;
 
 /** Caja con color por vértice, desplazada. */
 function cbox(w: number, h: number, d: number, color: number, x = 0, y = 0, z = 0): BufferGeometry {
@@ -100,25 +120,30 @@ function rigMaterial(key: string, rimColor: number, rimStrength: number, unique:
 }
 
 /**
- * Humanoide low-poly procedural (8 meshes) con animación procedural.
- * Jerarquía: root(pies, yaw) → spin(centro de masa: voltereta/caída) → hips → torso/piernas.
+ * Humanoide low-poly procedural con animación procedural.
+ * Jerarquía de huesos: root(pies, yaw) → spin(centro de masa: voltereta/caída) → hips → torso/piernas.
+ * Todo el cuerpo es UNA SkinnedMesh (cada pieza pesa 1 en su hueso): 1 draw call (+1 de sombra)
+ * en vez de 7. El arma va aparte porque cambia de modelo.
  */
 export class CharacterRig {
   readonly root = new Group();
   readonly material: MeshStandardMaterial;
   readonly rim: RimUniforms;
-  private readonly spin = new Group();
-  private readonly hips = new Group();
-  private readonly torso = new Group();
-  private readonly armL = new Group();
-  private readonly armR = new Group();
-  private readonly thighL = new Group();
-  private readonly thighR = new Group();
-  private readonly shinL = new Group();
-  private readonly shinR = new Group();
+  private readonly spin = new Bone();
+  private readonly hips = new Bone();
+  private readonly torso = new Bone();
+  private readonly armL = new Bone();
+  private readonly armR = new Bone();
+  private readonly thighL = new Bone();
+  private readonly thighR = new Bone();
+  private readonly shinL = new Bone();
+  private readonly shinR = new Bone();
+  /** Piezas pendientes de fusionar en la malla con skinning. */
+  private readonly pieces: Array<{ bone: Bone; geo: BufferGeometry }> = [];
+  private skeleton: Skeleton | null = null;
   readonly weaponMount = new Group();
   private weaponMesh: Mesh | null = null;
-  private readonly meshes: Mesh[] = [];
+  private readonly meshes: Array<Mesh | SkinnedMesh> = [];
   private phase = 0;
   private crouchK = 0;
   private aimK = 0;
@@ -191,16 +216,45 @@ export class CharacterRig {
     this.spin.position.set(0, 0.9, 0);
     this.spin.add(this.hips);
     this.root.add(this.spin);
+    this.buildSkin();
     this.setWeapon(o.weapon, c.accent);
   }
 
-  private addMesh(parent: Group, geo: BufferGeometry): Mesh {
-    const m = new Mesh(geo, this.material);
-    m.castShadow = true;
-    m.receiveShadow = true;
-    parent.add(m);
-    this.meshes.push(m);
-    return m;
+  private addMesh(bone: Bone, geo: BufferGeometry): void {
+    this.pieces.push({ bone, geo });
+  }
+
+  /** Fusiona las piezas en una SkinnedMesh: cada vértice va a su hueso con peso 1. */
+  private buildSkin(): void {
+    const bones = [this.spin, this.hips, this.torso, this.armL, this.armR, this.thighL, this.thighR, this.shinL, this.shinR];
+    this.root.updateMatrixWorld(true);
+    _rootInv.copy(this.root.matrixWorld).invert();
+    const geos: BufferGeometry[] = [];
+    for (const { bone, geo } of this.pieces) {
+      // Pose de reposo: la pieza pasa del espacio de su hueso al de la raíz.
+      geo.applyMatrix4(_local.multiplyMatrices(_rootInv, bone.matrixWorld));
+      const n = geo.getAttribute('position').count;
+      const idx = bones.indexOf(bone);
+      const si = new Uint16Array(n * 4);
+      const sw = new Float32Array(n * 4);
+      for (let i = 0; i < n; i++) {
+        si[i * 4] = idx;
+        sw[i * 4] = 1;
+      }
+      geo.setAttribute('skinIndex', new Uint16BufferAttribute(si, 4));
+      geo.setAttribute('skinWeight', new Float32BufferAttribute(sw, 4));
+      geos.push(geo);
+    }
+    this.pieces.length = 0;
+    const mesh = new SkinnedMesh(merge(geos), this.material);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.boundingSphere = new Sphere(CULL_CENTER.clone(), CULL_RADIUS);
+    this.root.add(mesh);
+    this.root.updateMatrixWorld(true);
+    this.skeleton = new Skeleton(bones);
+    mesh.bind(this.skeleton);
+    this.meshes.push(mesh);
   }
 
   /** Cambia el arma visible (geometría propia por modelo). */
@@ -388,6 +442,7 @@ export class CharacterRig {
 
   dispose(): void {
     for (const m of this.meshes) m.geometry.dispose();
+    this.skeleton?.dispose();
     this.weaponMesh?.geometry.dispose();
     this.root.removeFromParent();
   }

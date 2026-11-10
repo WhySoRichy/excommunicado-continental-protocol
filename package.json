@@ -13,7 +13,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "qa": "npm run build && npm test && npm run test:e2e"
+    "qa": "npm run build && npm test && npm run test:e2e",
+    "media": "npm run build && playwright test -c playwright.media.config.ts && node scripts/make-gif.mjs"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "0.21.0",

@@ -196,3 +196,16 @@ export function bindingConflicts(b: Bindings): Array<{ code: string; actions: Ac
   for (const a of REBINDABLE) for (const c of b[a]) if (isKbm(c)) byCode.set(c, [...(byCode.get(c) ?? []), a]);
   return [...byCode.entries()].filter(([, a]) => a.length > 1).map(([code, actions]) => ({ code, actions }));
 }
+
+/**
+ * Preset sugerido en el primer arranque según la GPU: las integradas de Intel (no Arc),
+ * las de móvil y el render por software van en Bajo (sin sombras, 0,75× de resolución)
+ * para sostener 60 FPS; el resto, Medio. El jugador puede cambiarlo en Ajustes.
+ */
+export function suggestPreset(gpu: string): QualityPresetId {
+  const g = gpu.toLowerCase();
+  if (/swiftshader|llvmpipe|software|basic render/.test(g)) return 'low';
+  if (/intel/.test(g) && !/\barc\b/.test(g)) return 'low';
+  if (/mali|adreno|powervr|videocore/.test(g)) return 'low';
+  return 'medium';
+}

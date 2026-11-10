@@ -8,6 +8,7 @@ import {
   Vector2,
   WebGLRenderer,
 } from 'three';
+import { DynamicResolution } from './dynamicResolution';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
@@ -29,18 +30,17 @@ export interface QualitySettings {
   antialias: boolean;
   /** Multiplicador de partículas de VFX. */
   particles: number;
+  /** Cada cuántos frames se regenera el mapa de sombras (2 = a 30 Hz con 60 FPS). */
+  shadowInterval: number;
 }
 
 export const QUALITY: Record<QualityPreset, QualitySettings> = {
-  low: { pixelRatioCap: 1, baseScale: 0.75, shadows: false, shadowMapSize: 512, bloom: false, antialias: false, particles: 0.5 },
-  medium: { pixelRatioCap: 1.25, baseScale: 1, shadows: true, shadowMapSize: 1024, bloom: false, antialias: true, particles: 1 },
-  high: { pixelRatioCap: 1.75, baseScale: 1, shadows: true, shadowMapSize: 2048, bloom: true, antialias: true, particles: 1 },
+  low: { pixelRatioCap: 1, baseScale: 0.75, shadows: false, shadowMapSize: 512, bloom: false, antialias: false, particles: 0.5, shadowInterval: 1 },
+  // Medio: la sombra (el mayor coste de CPU tras las draw calls) se regenera en frames alternos.
+  medium: { pixelRatioCap: 1.25, baseScale: 1, shadows: true, shadowMapSize: 1024, bloom: false, antialias: true, particles: 1, shadowInterval: 2 },
+  high: { pixelRatioCap: 1.75, baseScale: 1, shadows: true, shadowMapSize: 2048, bloom: true, antialias: true, particles: 1, shadowInterval: 1 },
 };
 
-/** Límites de la resolución dinámica. */
-const DYN_MIN = 0.6;
-const DYN_MAX = 1;
-const DYN_TARGET_MS = 1000 / 58;
 
 export class GameRenderer {
   readonly renderer: WebGLRenderer;
@@ -49,14 +49,14 @@ export class GameRenderer {
   readonly canvas: HTMLCanvasElement;
   preset: QualityPreset;
   dynamicResolution = true;
-  dynamicScale = 1;
+  /** Controlador de la resolución dinámica (lógica pura en `dynamicResolution.ts`). */
+  readonly dyn = new DynamicResolution();
   private composer: EffectComposer | null = null;
   private bloomPass: UnrealBloomPass | null = null;
   private bloomEnabled = false;
   private readonly container: HTMLElement;
-  private slowTime = 0;
-  private fastTime = 0;
   private brightness = 1;
+  private frameNo = 0;
 
   constructor(container: HTMLElement, preset: QualityPreset) {
     this.container = container;
@@ -105,7 +105,7 @@ export class GameRenderer {
     const q = QUALITY[preset];
     this.renderer.shadowMap.enabled = q.shadows;
     this.setBloom(q.bloom);
-    this.dynamicScale = 1;
+    this.dyn.reset();
     this.resize();
   }
 
@@ -139,7 +139,7 @@ export class GameRenderer {
 
   get pixelRatio(): number {
     const q = this.quality;
-    return Math.min(window.devicePixelRatio || 1, q.pixelRatioCap) * q.baseScale * (this.dynamicResolution ? this.dynamicScale : 1);
+    return Math.min(window.devicePixelRatio || 1, q.pixelRatioCap) * q.baseScale * (this.dynamicResolution ? this.dyn.scale : 1);
   }
 
   private appliedW = 0;
@@ -190,30 +190,22 @@ export class GameRenderer {
    */
   updateDynamicResolution(avgFrameMs: number, dt: number): void {
     if (!this.dynamicResolution) return;
-    if (avgFrameMs > DYN_TARGET_MS * 1.08) {
-      this.slowTime += dt;
-      this.fastTime = 0;
-      if (this.slowTime > 2 && this.dynamicScale > DYN_MIN) {
-        this.dynamicScale = clamp(this.dynamicScale - 0.1, DYN_MIN, DYN_MAX);
-        this.slowTime = 0;
-        this.resize();
-      }
-    } else if (avgFrameMs < DYN_TARGET_MS * 0.8) {
-      this.fastTime += dt;
-      this.slowTime = 0;
-      if (this.fastTime > 4 && this.dynamicScale < DYN_MAX) {
-        this.dynamicScale = clamp(this.dynamicScale + 0.1, DYN_MIN, DYN_MAX);
-        this.fastTime = 0;
-        this.resize();
-      }
-    } else {
-      this.slowTime = 0;
-      this.fastTime = 0;
-    }
+    if (this.dyn.update(avgFrameMs, dt)) this.resize();
+  }
+
+  /** Escala de render actual (1 = completa). */
+  get dynamicScale(): number {
+    return this.dyn.scale;
   }
 
   render(): void {
     this.renderer.info.reset();
+    const sm = this.renderer.shadowMap;
+    if (sm.enabled) {
+      this.frameNo++;
+      sm.autoUpdate = false;
+      if (this.frameNo % this.quality.shadowInterval === 0) sm.needsUpdate = true;
+    }
     if (this.bloomEnabled && this.composer) this.composer.render();
     else this.renderer.render(this.scene, this.camera);
   }
@@ -221,6 +213,8 @@ export class GameRenderer {
   /** Precompila los shaders del nivel para evitar tirones al ver un material por primera vez. */
   prewarm(): void {
     this.renderer.compile(this.scene, this.camera);
+    // Nivel nuevo: la sombra se regenera en el primer frame aunque toque saltarlo.
+    this.renderer.shadowMap.needsUpdate = true;
   }
 
   /**

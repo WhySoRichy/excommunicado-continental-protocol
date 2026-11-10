@@ -43,9 +43,8 @@ test('gamepad: sticks, botón A y desconexión sin entradas pegadas', async ({ p
   await page.evaluate(() => {
     (window as unknown as { __pad: { axes: number[] } }).__pad.axes[1] = -1;
   });
-  await page.evaluate(() => window.__EXCOM__!.measureFps(0.5));
-  const moved = await page.evaluate(() => window.__EXCOM__!.player()!);
-  expect(moved.z).toBeLessThan(7);
+  // Espera a que avance (independiente del FPS: en CI el render por software va a ~7 FPS).
+  await expect.poll(() => page.evaluate(() => window.__EXCOM__!.player()!.z)).toBeLessThan(7);
 
   // Stick derecho a la derecha → la cámara gira (yaw disminuye).
   const yaw0 = await page.evaluate(() => window.__EXCOM__!.camera().yaw);
