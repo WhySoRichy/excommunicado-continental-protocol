@@ -311,6 +311,7 @@ export class Game {
     this.hud.setHintsEnabled(s.hints);
     if (!s.aimToggle) this.aimLatched = false;
     if (this.hintsFor) this.setHintsFor(this.hintsFor);
+    this.mission?.refreshText();
     if (persist) saveSettings(this.store, s);
   }
 
@@ -425,6 +426,7 @@ export class Game {
     this.mission = new MissionDirector({
       session: s,
       block: id === 'gauntlet' ? GAUNTLET_BLOCK : undefined,
+      label: (a) => this.input.label(a),
       hud: this.hud,
       audio: this.audio,
       profile: this.profile,
@@ -435,10 +437,17 @@ export class Game {
     // En el Gauntlet el hub es zona de combate: pistas de combate, no las de hablar o el ascensor.
     this.setHintsFor(id === 'gauntlet' ? 'practice' : s.data.id);
     this.fsm.go('briefing');
+    const hasTutorial = this.mission.current?.kind === 'learn';
     this.screens.showBriefing(
       MISSIONS[id],
       () => this.beginContract(),
       () => void this.goToHub(),
+      hasTutorial
+        ? () => {
+            this.beginContract();
+            this.mission?.skipLearn();
+          }
+        : null,
     );
     this.loading = false;
   }

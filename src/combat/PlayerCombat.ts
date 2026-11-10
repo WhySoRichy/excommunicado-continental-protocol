@@ -493,7 +493,9 @@ export class PlayerCombat {
     let best: Enemy | null = null;
     let bestD = TD_RANGE;
     for (const e of ctx.enemies.enemies) {
-      if (!e.alive || e.state === 'stunned') continue;
+      if (!e.alive) continue;
+      // El jefe solo cae de un takedown arrodillado; el resto, siempre (también aturdidos).
+      if (e.def.takedownWhenStunned && e.state !== 'stunned') continue;
       const dx = e.feet.x - p.feet.x;
       const dz = e.feet.z - p.feet.z;
       const d = Math.hypot(dx, dz);

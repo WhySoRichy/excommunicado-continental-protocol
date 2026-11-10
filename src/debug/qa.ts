@@ -150,7 +150,18 @@ export interface QaApi {
   beginContract(): void;
   mission(): MissionSnapshot | null;
   /** Último resultado de contrato (tras la pantalla de resultados). */
-  outcome(): { mission: string; success: boolean; rank: string; total: number; coins: number; achievements: string[]; failReason: string; gauntlet: { waves: number; position: number } | null } | null;
+  outcome(): {
+    mission: string;
+    success: boolean;
+    rank: string;
+    total: number;
+    coins: number;
+    achievements: string[];
+    failReason: string;
+    timeSec: number;
+    shotsFired: number;
+    gauntlet: { waves: number; position: number } | null;
+  } | null;
   /** Pulsa un botón de la pantalla actual por su texto. */
   clickButton(label: string): boolean;
   civilians(): Array<{ id: string; alive: boolean; state: string; x: number; z: number; health: number }>;
@@ -159,6 +170,8 @@ export interface QaApi {
   /** Ajustes actuales y estado derivado (cámara, render, audio). */
   settings(): { settings: Settings; cameraFov: number; mouseSens: number; brightness: string; preset: string; uiScale: string; volumes: { master: number; music: number } };
   setSettings(patch: Partial<Settings>): void;
+  /** "Saltar tutorial" del contrato en curso. */
+  skipTutorial(): void;
 }
 
 export interface MissionSnapshot {
@@ -443,7 +456,7 @@ export function installQa(game: Game): void {
         id: m.id,
         index: m.index,
         total: m.objectives.length,
-        objective: o?.text ?? '',
+        objective: m.currentText,
         kind: o?.kind ?? '',
         finished: m.finished,
         markersUsed: m.markersUsed,
@@ -473,6 +486,8 @@ export function installQa(game: Game): void {
         coins: o.coinsReward,
         achievements: o.achievements.map((a) => a.id),
         failReason: o.failReason,
+        timeSec: o.timeSec,
+        shotsFired: o.stats.shotsFired,
         gauntlet: o.gauntlet ? { waves: o.gauntlet.waves, position: o.gauntlet.position } : null,
       };
     },
@@ -491,6 +506,7 @@ export function installQa(game: Game): void {
       volumes: game.audio.getVolumes(),
     }),
     setSettings: (patch) => game.applySettings({ ...game.settings, ...patch }),
+    skipTutorial: () => game.mission?.skipLearn(),
     killEnemy: (id) => {
       const s = game.session;
       const e = s?.enemies.enemies.find((x) => x.id === id || x.id.startsWith(`${id}#`));

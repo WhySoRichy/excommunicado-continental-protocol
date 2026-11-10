@@ -333,14 +333,35 @@ test.describe('Fase 4 · contratos 2 y 3', () => {
     const boss = await page.evaluate(() => {
       const q = window.__EXCOM__!;
       q.press('weapon2');
+      // De pie, el Juez no admite takedown (no hay remate gratis).
+      const j0 = q.enemies().find((e) => e.id === 'judge')!;
+      q.teleport(j0.x, 7.68, j0.z + 1.2, 0);
+      q.setLook(0, -0.2);
+      q.step(3, {});
+      q.press('takedown');
+      q.step(3, {});
+      const j1 = q.enemies().find((e) => e.id === 'judge')!;
+      const standingTakedown = j1.state === 'stunned' || !j1.alive;
       q.teleport(12, 7.68, -16, 0);
       q.step(20, { aim: true });
       let kneel = false;
+      let finisher = false;
       let phaseSpawn = 0;
       for (let i = 0; i < 80; i++) {
         const j = q.enemies().find((e) => e.id === 'judge');
         if (!j || !j.alive) break;
-        if (j.state === 'stunned') kneel = true;
+        phaseSpawn = Math.max(phaseSpawn, q.enemies().filter((e) => e.id.startsWith('p1-') || e.id.startsWith('p2-')).length);
+        if (j.state === 'stunned') {
+          // Arrodillado: ahora sí, takedown de remate.
+          kneel = true;
+          q.teleport(j.x, 7.68, j.z + 1.2, 0);
+          q.setLook(0, -0.2);
+          q.step(2, {});
+          q.press('takedown');
+          q.step(90, {});
+          finisher = !q.enemies().find((e) => e.id === 'judge')!.alive;
+          continue;
+        }
         phaseSpawn = Math.max(phaseSpawn, q.enemies().filter((e) => e.id.startsWith('p1-') || e.id.startsWith('p2-')).length);
         const c = q.combat()!;
         if (c.mag === 0 && !c.reloading) q.press('reload');
@@ -351,10 +372,12 @@ test.describe('Fase 4 · contratos 2 y 3', () => {
         q.step(12, { aim: true });
       }
       q.step(5, {});
-      return { kneel, phaseSpawn, m: q.mission()!, judge: q.enemies().find((e) => e.id === 'judge')! };
+      return { kneel, finisher, standingTakedown, phaseSpawn, m: q.mission()!, judge: q.enemies().find((e) => e.id === 'judge')! };
     });
+    expect(boss.standingTakedown).toBe(false);
     expect(boss.judge.alive).toBe(false);
     expect(boss.kneel).toBe(true);
+    expect(boss.finisher).toBe(true);
     expect(boss.phaseSpawn).toBeGreaterThanOrEqual(2);
     expect(boss.m.index).toBe(4);
     expect(boss.m.kind).toBe('escape');

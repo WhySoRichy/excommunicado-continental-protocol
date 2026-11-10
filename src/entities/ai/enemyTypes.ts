@@ -38,6 +38,8 @@ export interface EnemyTypeDef {
   fovDeg: number;
   /** Escala de velocidad al correr (1 = trote del jugador). */
   runScale: number;
+  /** Solo admite takedown cuando está aturdido (el jefe, al arrodillarse por fase). */
+  takedownWhenStunned?: boolean;
   walkScale: number;
   prefersCover: number;
   flanker: boolean;
@@ -163,6 +165,7 @@ export const ENEMY_TYPES: Record<EnemyType, EnemyTypeDef> = {
     sightRange: 45,
     fovDeg: 140,
     runScale: 0.85,
+    takedownWhenStunned: true,
     walkScale: 0.4,
     prefersCover: 0.5,
     flanker: false,

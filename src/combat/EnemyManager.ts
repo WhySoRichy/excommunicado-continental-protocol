@@ -162,6 +162,21 @@ export class EnemyManager implements Tactics {
     for (const c of this.cover) c.claimedBy = null;
   }
 
+  /** Retira (sin cadáver) a los enemigos de un grupo: el maniquí del tutorial al saltarlo. */
+  despawnGroup(group: string): number {
+    let n = 0;
+    for (let i = this.enemies.length - 1; i >= 0; i--) {
+      const e = this.enemies[i]!;
+      if (e.spawnDef.group !== group) continue;
+      for (const c of this.cover) if (c.claimedBy === e.id) c.claimedBy = null;
+      this.byHandle.delete(e.collider.handle);
+      e.dispose();
+      this.enemies.splice(i, 1);
+      n++;
+    }
+    return n;
+  }
+
   /** Reaparición del jugador: los vivos vuelven a su punto con salud completa. */
   resetAlive(): void {
     for (const e of this.enemies) e.reset();

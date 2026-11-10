@@ -1,5 +1,6 @@
 import { Vector3 } from 'three';
 import type { AudioEngine } from '../audio/AudioEngine';
+import type { Action } from '../core/actions';
 import { heal } from '../combat/damage';
 import { computeRank, type MissionStats, type RankResult } from '../combat/rank';
 import { markersPerContract } from '../combat/weapons';
@@ -19,6 +20,7 @@ import {
   gauntletWave,
   waveQueue,
 } from './gauntlet';
+import { copyCounters, emptyCounters, formatObjective, SKILL_GOAL, type SkillCounters, skillProgress, skillTally } from './tutorial';
 import { MISSIONS, type MissionId } from './types';
 
 export interface MissionOutcome {
@@ -43,6 +45,8 @@ export interface MissionDirectorDeps {
   session: LevelSession;
   /** Guion que no vive en los datos del nivel (Gauntlet sobre el hub). */
   block?: MissionBlock;
+  /** Etiqueta de la tecla asignada a una acción (textos del tutorial). */
+  label?: (a: Action) => string;
   hud: Hud;
   audio: AudioEngine;
   profile: Profile;
@@ -55,6 +59,10 @@ const BOSS_PHASES: readonly number[] = [0.5, 0.2];
 const BOSS_KNEEL_TIME = 3.5;
 /** Gauntlet: no aparecen enemigos a menos de esta distancia del jugador. */
 const GAUNTLET_SPAWN_MIN_PLAYER_DIST = 4;
+/** Paso de Foco del tutorial: el medidor se llena para poder practicarlo. */
+const TUTORIAL_FOCUS = 100;
+/** Paso de recarga: si el cargador está lleno, se vacían estas balas para poder recargar. */
+const TUTORIAL_RELOAD_SPEND = 3;
 const _v = new Vector3();
 
 /**
@@ -96,6 +104,13 @@ export class MissionDirector {
   private spawnT = 0;
   private spawnCursor = 0;
   private spawnPoints: Vec3[] = [];
+  /** Tutorial: contadores al empezar el paso y los actuales (reutilizados, sin asignar por paso). */
+  private readonly learnBase: SkillCounters = emptyCounters();
+  private readonly learnNow: SkillCounters = emptyCounters();
+  /** El rango solo cuenta desde que acaba el tutorial (estadísticas base en ese momento). */
+  private readonly scoreBase = { shotsFired: 0, shotsHit: 0, takedowns: 0, knifeKills: 0, damageTaken: 0 };
+  /** Último número mostrado en el HUD del objetivo (evita reescribir el texto cada paso). */
+  private hudNum = Number.NaN;
 
   constructor(private readonly d: MissionDirectorDeps) {
     const s = d.session;
@@ -113,6 +128,57 @@ export class MissionDirector {
 
   get current(): ObjectiveDef | null {
     return this.objectives[this.index] ?? null;
+  }
+
+  /** Texto del objetivo con la tecla real asignada. */
+  text(o: ObjectiveDef): string {
+    return this.d.label ? formatObjective(o.text, this.d.label) : o.text;
+  }
+
+  get currentText(): string {
+    const o = this.current;
+    return o ? this.text(o) : '';
+  }
+
+  /** Tras reasignar teclas: repinta el objetivo con las nuevas. */
+  refreshText(): void {
+    this.hudNum = Number.NaN;
+    const o = this.current;
+    if (o && !this.finished) this.d.hud.setObjective(this.text(o));
+  }
+
+  /** Pone `text · n sufijo` en el HUD solo si el número cambió. */
+  private hudCount(o: ObjectiveDef, n: number, suffix: (n: number) => string): void {
+    if (n === this.hudNum) return;
+    this.hudNum = n;
+    this.d.hud.setObjective(`${this.text(o)} · ${suffix(n)}`);
+  }
+
+  /** "Saltar tutorial": va directo al primer objetivo puntuable. */
+  skipLearn(): void {
+    if (this.current?.kind !== 'learn') return;
+    for (const o of this.objectives) if (o.stunGroup) this.d.session.enemies.despawnGroup(o.stunGroup);
+    const i = this.objectives.findIndex((o) => o.kind !== 'learn');
+    if (i >= 0) this.startObjective(i, true);
+  }
+
+  private fillCounters(out: SkillCounters): SkillCounters {
+    const p = this.d.session.player.stats;
+    const c = this.d.session.combat.stats;
+    out.distance = p.distance;
+    out.sprintTime = p.sprintTime;
+    out.vaults = p.vaults;
+    out.mantles = p.mantles;
+    out.slides = p.slides;
+    out.rolls = p.rolls;
+    out.dives = p.dives;
+    out.coverEnters = p.coverEnters;
+    out.shotsFired = c.shotsFired;
+    out.reloads = c.reloads;
+    out.switches = c.switches;
+    out.focusUses = c.focusUses;
+    out.takedowns = c.takedowns;
+    return out;
   }
 
   /** Gauntlet: enemigos de la oleada en curso que aún esperan para aparecer. */
@@ -141,6 +207,10 @@ export class MissionDirector {
         }
       }
       return best ? out.set(best.feet.x, best.feet.y + 1.9, best.feet.z) : null;
+    }
+    if (o.kind === 'learn' && o.stunGroup) {
+      for (const e of s.enemies.enemies) if (e.alive && e.spawnDef.group === o.stunGroup) return out.set(e.feet.x, e.feet.y + 1.9, e.feet.z);
+      return null;
     }
     if (o.kind === 'eliminate' || o.kind === 'boss') {
       // Baliza sobre el enemigo vivo más cercano del grupo.
@@ -182,17 +252,21 @@ export class MissionDirector {
     return g === 'all' || e.spawnDef.group === g;
   }
 
-  private startObjective(i: number): void {
+  private startObjective(i: number, skipped = false): void {
     const o = this.objectives[i];
     if (!o) return;
     this.index = i;
     this.objectiveTime = 0;
+    this.hudNum = Number.NaN;
+    const prev = this.objectives[i - 1];
+    if (o.kind !== 'learn' && prev?.kind === 'learn') this.startScoring();
+    if (o.kind === 'learn') this.startLearn(o);
     if (o.onStart) {
       const n = this.d.session.enemies.spawnEvent(o.onStart);
       if (n > 0) this.d.session.enemies.alertAll(this.d.session.player.feet);
     }
     if (o.kind === 'escape') this.escapeLeft = o.seconds ?? 45;
-    this.d.hud.setObjective(o.text);
+    this.d.hud.setObjective(this.text(o));
     if (o.kind === 'waves') {
       this.spawnPoints = gauntletSpawnPoints(this.d.session.data);
       if (this.spawnPoints.length === 0) throw new Error(`El nivel ${this.d.session.data.id} no tiene puntos de oleada`);
@@ -201,8 +275,33 @@ export class MissionDirector {
       this.d.hud.setObjective(this.breakText());
     }
     if (i > 0) {
-      this.d.hud.showToast(`Objetivo: ${o.text}`, 3);
+      // En el tutorial la instrucción ya está en la barra del objetivo: el toast solo confirma.
+      const msg = o.kind === 'learn' ? '✓ Hecho' : prev?.kind === 'learn' && !skipped ? `Tutorial completado · ${this.text(o)}` : `Objetivo: ${this.text(o)}`;
+      this.d.hud.showToast(msg, o.kind === 'learn' ? 1.2 : 3);
       this.d.audio.ui('confirm');
+    }
+  }
+
+  /** Fin del tutorial: el reloj y las estadísticas del rango empiezan aquí. */
+  private startScoring(): void {
+    const c = this.d.session.combat;
+    this.time = 0;
+    this.minHealth = c.vitals.health;
+    this.scoreBase.shotsFired = c.stats.shotsFired;
+    this.scoreBase.shotsHit = c.stats.shotsHit;
+    this.scoreBase.takedowns = c.stats.takedowns;
+    this.scoreBase.knifeKills = c.stats.knifeKills;
+    this.scoreBase.damageTaken = c.stats.damageTaken;
+  }
+
+  /** Prepara un paso del tutorial para que siempre se pueda cumplir. */
+  private startLearn(o: ObjectiveDef): void {
+    copyCounters(this.fillCounters(this.learnNow), this.learnBase);
+    const c = this.d.session.combat;
+    if (o.skill === 'focus') c.focus = Math.max(c.focus, TUTORIAL_FOCUS);
+    if (o.skill === 'reload') {
+      const w = c.weapon;
+      if (w.isGun && w.mag >= w.def.mag) w.mag = Math.max(1, w.mag - TUTORIAL_RELOAD_SPEND);
     }
   }
 
@@ -273,19 +372,52 @@ export class MissionDirector {
   fixedUpdate(dt: number): void {
     if (this.finished) return;
     const s = this.d.session;
-    this.time += dt;
-    this.objectiveTime += dt;
-    this.minHealth = Math.min(this.minHealth, s.combat.vitals.health);
-    this.trackMarksmen();
-    this.tickBoss(dt);
     const o = this.current;
     if (!o) return;
+    // El tutorial no cuenta para el rango: ni reloj ni salud mínima.
+    if (o.kind !== 'learn') {
+      this.time += dt;
+      this.minHealth = Math.min(this.minHealth, s.combat.vitals.health);
+    }
+    this.objectiveTime += dt;
+    this.trackMarksmen();
+    this.tickBoss(dt);
+    if (o.stunGroup) {
+      for (const e of s.enemies.enemies) if (e.alive && e.spawnDef.group === o.stunGroup && e.state !== 'stunned') e.stun();
+    }
     switch (o.kind) {
+      case 'learn': {
+        const skill = o.skill;
+        if (!skill) {
+          this.completeObjective();
+          break;
+        }
+        this.fillCounters(this.learnNow);
+        let groupGone = false;
+        if (o.stunGroup) {
+          let seen = 0;
+          let alive = 0;
+          for (const e of s.enemies.enemies) {
+            if (e.spawnDef.group !== o.stunGroup) continue;
+            seen++;
+            if (e.alive) alive++;
+          }
+          groupGone = seen > 0 && alive === 0;
+        }
+        if (groupGone || skillProgress(skill, this.learnBase, this.learnNow) >= 1) {
+          this.d.audio.ui('confirm');
+          this.completeObjective();
+          break;
+        }
+        const tally = skillTally(skill, this.learnBase, this.learnNow);
+        if (tally !== null) this.hudCount(o, tally, (n) => `${n}/${SKILL_GOAL[skill]}`);
+        break;
+      }
       case 'reach':
       case 'escape': {
         if (o.kind === 'escape') {
           this.escapeLeft = Math.max(0, (o.seconds ?? 45) - this.objectiveTime);
-          this.d.hud.setObjective(`${o.text} · ${Math.ceil(this.escapeLeft)} s`);
+          this.hudCount(o, Math.ceil(this.escapeLeft), (n) => `${n} s`);
           if (this.escapeLeft <= 0) {
             this.finish(false, 'Se acabó el tiempo de escape.');
             return;
@@ -303,19 +435,19 @@ export class MissionDirector {
           if (e.alive) alive++;
         }
         if (seen > 0 && alive === 0) this.completeObjective();
-        else if (alive > 0 && this.objectiveTime > 0.5) this.d.hud.setObjective(`${o.text} · ${alive} restante${alive === 1 ? '' : 's'}`);
+        else if (alive > 0 && this.objectiveTime > 0.5) this.hudCount(o, alive, (n) => `${n} restante${n === 1 ? '' : 's'}`);
         break;
       }
       case 'interact': {
         const targets = o.targets ?? [];
         const left = targets.filter((t) => !this.doneTargets.has(t)).length;
         if (left === 0) this.completeObjective();
-        else if (targets.length > 1) this.d.hud.setObjective(`${o.text} · ${targets.length - left}/${targets.length}`);
+        else if (targets.length > 1) this.hudCount(o, targets.length - left, (n) => `${n}/${targets.length}`);
         break;
       }
       case 'survive': {
         const left = Math.max(0, (o.seconds ?? 30) - this.objectiveTime);
-        this.d.hud.setObjective(`${o.text} · ${Math.ceil(left)} s`);
+        this.hudCount(o, Math.ceil(left), (n) => `${n} s`);
         if (left <= 0) this.completeObjective();
         break;
       }
@@ -325,7 +457,7 @@ export class MissionDirector {
       case 'boss': {
         const boss = s.enemies.enemies.find((e) => this.matchesGroup(e, o));
         if (boss && !boss.alive) this.completeObjective();
-        else if (boss) this.d.hud.setObjective(`${o.text} · ${Math.ceil((boss.vitals.health / boss.vitals.maxHealth) * 100)} %`);
+        else if (boss) this.hudCount(o, Math.ceil((boss.vitals.health / boss.vitals.maxHealth) * 100), (n) => `${n} %`);
         break;
       }
     }
@@ -421,6 +553,8 @@ export class MissionDirector {
   private tickBoss(dt: number): void {
     const s = this.d.session;
     if (this.bossKneeling) {
+      // Con el takedown en marcha no se levanta: el remate termina siempre.
+      if (s.combat.takedown?.enemy === this.bossKneeling) return;
       this.bossKneel -= dt;
       if (this.bossKneel <= 0 || !this.bossKneeling.alive) {
         if (this.bossKneeling.alive) {
@@ -457,11 +591,11 @@ export class MissionDirector {
     const stats: MissionStats = {
       timeSec: this.time,
       parTime: def.parTime,
-      shotsFired: c.stats.shotsFired,
-      shotsHit: c.stats.shotsHit,
-      takedowns: c.stats.takedowns,
-      knifeKills: c.stats.knifeKills,
-      damageTaken: c.stats.damageTaken,
+      shotsFired: c.stats.shotsFired - this.scoreBase.shotsFired,
+      shotsHit: c.stats.shotsHit - this.scoreBase.shotsHit,
+      takedowns: c.stats.takedowns - this.scoreBase.takedowns,
+      knifeKills: c.stats.knifeKills - this.scoreBase.knifeKills,
+      damageTaken: c.stats.damageTaken - this.scoreBase.damageTaken,
       healthPool: c.vitals.maxHealth + c.vitals.maxArmor,
       varietyCount: c.style.varietyCount,
       hasCivilians: def.hasCivilians,

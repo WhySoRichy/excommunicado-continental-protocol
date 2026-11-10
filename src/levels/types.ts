@@ -219,8 +219,11 @@ export interface TriggerDef {
   once?: boolean;
 }
 
-/** `waves`: oleadas infinitas del Gauntlet (termina al morir). */
-export type ObjectiveKind = 'reach' | 'eliminate' | 'interact' | 'survive' | 'escape' | 'boss' | 'waves';
+/** `waves`: oleadas infinitas del Gauntlet (termina al morir). `learn`: paso del tutorial. */
+export type ObjectiveKind = 'reach' | 'eliminate' | 'interact' | 'survive' | 'escape' | 'boss' | 'waves' | 'learn';
+
+/** Habilidades que enseña el tutorial (objetivos `learn`). */
+export type SkillId = 'move' | 'sprint' | 'vault' | 'slide' | 'dodge' | 'cover' | 'shoot' | 'reload' | 'switch' | 'focus' | 'takedown';
 
 /** Objetivo de misión (se cumplen en orden). */
 export interface ObjectiveDef {
@@ -239,6 +242,10 @@ export interface ObjectiveDef {
   seconds?: number;
   /** boss: id del enemigo jefe. */
   enemyId?: string;
+  /** learn: habilidad que hay que demostrar. */
+  skill?: SkillId;
+  /** Mientras dure el objetivo, los enemigos de este grupo quedan aturdidos (maniquí del tutorial). */
+  stunGroup?: string;
   /** Eventos de aparición (`spawnOn`) al empezar / completar el objetivo. */
   onStart?: string;
   onComplete?: string;

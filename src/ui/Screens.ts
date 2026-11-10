@@ -192,8 +192,8 @@ export class Screens {
   }
 
   /** Briefing de 3 líneas: objetivo, regla especial, rango objetivo. */
-  showBriefing(m: MissionDef, onStart: () => void, onBack: () => void): void {
-    this.briefing = { m, onStart, onBack };
+  showBriefing(m: MissionDef, onStart: () => void, onBack: () => void, onSkip: (() => void) | null = null): void {
+    this.briefing = { m, onStart, onBack, onSkip };
     this.show('briefing');
   }
 
@@ -202,7 +202,7 @@ export class Screens {
     this.show('results');
   }
 
-  private briefing: { m: MissionDef; onStart: () => void; onBack: () => void } | null = null;
+  private briefing: { m: MissionDef; onStart: () => void; onBack: () => void; onSkip: (() => void) | null } | null = null;
   private results: { r: ResultsView; onRetry: () => void; onHub: () => void } | null = null;
 
   private build(id: ScreenId): HTMLElement {
@@ -243,7 +243,7 @@ export class Screens {
         h('li', {}, [h('b', { text: 'Regla. ' }), rule]),
         h('li', {}, [h('b', { text: 'Meta. ' }), target]),
       ]),
-      h('div', { class: 'menu menu-row' }, [button('Empezar', b.onStart, 'btn btn-primary'), button('Volver', b.onBack)]),
+      h('div', { class: 'menu menu-row' }, [button('Empezar', b.onStart, 'btn btn-primary'), ...(b.onSkip ? [button('Saltar tutorial', b.onSkip)] : []), button('Volver', b.onBack)]),
       h('p', { class: 'screen-hint' }, ['Pulsa ', keycap('Enter'), ' para empezar.']),
     ]);
   }

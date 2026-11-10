@@ -71,11 +71,17 @@ test.describe('Fase 3 · El Continental', () => {
     // Briefing de 3 líneas → Enter → jugando con el primer objetivo y su baliza.
     await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('briefing');
     await expect(page.locator('.brief-lines li')).toHaveCount(3);
+    await expect(page.getByRole('button', { name: 'Saltar tutorial' })).toBeVisible();
     await page.keyboard.press('Enter');
     await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('playing');
     expect(await page.evaluate(() => window.__EXCOM__!.level())).toBe('practice');
+    // Enter empieza por el tutorial (tests/e2e/tutorial.spec.ts lo recorre entero); aquí se salta.
+    const t0 = await page.evaluate(() => window.__EXCOM__!.mission()!);
+    expect(t0.kind).toBe('learn');
+    expect(t0.objective).toContain('WASD');
+    await page.evaluate(() => window.__EXCOM__!.skipTutorial());
     const m0 = await page.evaluate(() => window.__EXCOM__!.mission()!);
-    expect(m0.index).toBe(0);
+    expect(m0.index).toBe(11);
     expect(m0.objective).toContain('patio');
     expect(m0.beacon).not.toBeNull();
     expect(m0.markersTotal).toBe(3);
@@ -89,7 +95,7 @@ test.describe('Fase 3 · El Continental', () => {
       q.step(10, {});
       return { m: q.mission()!, enemies: q.enemies().filter((e) => e.alive).length };
     });
-    expect(m1.m.index).toBe(1);
+    expect(m1.m.index).toBe(12);
     expect(m1.enemies).toBe(6);
     expect(m1.m.respawn.z).toBeCloseTo(-11, 0);
     await page.screenshot({ path: shotPath('fase4-practica-objetivo') });

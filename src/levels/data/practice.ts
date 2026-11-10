@@ -93,6 +93,7 @@ export const practice: LevelData = {
     { id: 'perch', pos: [14, 1.8, -33.5], yaw: Math.PI, radius: 2, label: 'Plataforma' },
   ],
   enemies: [
+    { id: 'tut-dummy', type: 'thug', pos: [-1, 0, -8.5], yaw: 0, spawnOn: 'dummy', group: 'dummy' },
     { id: 'd-thug-a', type: 'thug', pos: [-4, 0, -33], yaw: Math.PI, spawnOn: 'drill', group: 'drill', patrol: [[-4, 0, -33], [-6, 0, -27]] },
     { id: 'd-thug-b', type: 'thug', pos: [6, 0, -33], yaw: Math.PI, spawnOn: 'drill', group: 'drill' },
     { id: 'd-escort-a', type: 'escort', pos: [12, 0, -17], yaw: Math.PI, spawnOn: 'drill', group: 'drill' },
@@ -114,6 +115,18 @@ export const practice: LevelData = {
   mission: {
     id: 'practice',
     objectives: [
+      // Tutorial (≈3 min): un paso por habilidad, validado con lo que hace el jugador.
+      { id: 't-move', kind: 'learn', skill: 'move', text: 'Camina con {move} y mira con el ratón' },
+      { id: 't-sprint', kind: 'learn', skill: 'sprint', text: 'Mantén {sprint} mientras avanzas para correr' },
+      { id: 't-vault', kind: 'learn', skill: 'vault', text: 'Ve hasta la caja y, pegado a ella, pulsa {jump} para saltarla', at: [0, 0, 0.4] },
+      { id: 't-slide', kind: 'learn', skill: 'slide', text: 'Corriendo, pulsa {crouch} para deslizarte' },
+      { id: 't-dodge', kind: 'learn', skill: 'dodge', text: 'Esquiva rodando con {dodge} (o doble {jump})' },
+      { id: 't-cover', kind: 'learn', skill: 'cover', text: 'Pégate al muro alto y pulsa {crouch} para cubrirte', at: [4, 0, -4.2] },
+      { id: 't-shoot', kind: 'learn', skill: 'shoot', text: 'En los carriles: apunta con {aim} y dispara con {fire}', at: [-14, 0, -7] },
+      { id: 't-reload', kind: 'learn', skill: 'reload', text: 'Recarga con {reload}; vuelve a pulsar en la zona dorada' },
+      { id: 't-switch', kind: 'learn', skill: 'switch', text: 'Cambia de arma con {weapon1}, {weapon2} o {weapon3}' },
+      { id: 't-focus', kind: 'learn', skill: 'focus', text: 'Activa el Foco (cámara lenta) con {focus}' },
+      { id: 't-takedown', kind: 'learn', skill: 'takedown', text: 'Acércate al maniquí aturdido y remátalo con {takedown}', stunGroup: 'dummy', onStart: 'dummy' },
       { id: 'yard', kind: 'reach', text: 'Baja al patio del simulacro', at: [4, 0, -11], radius: 3, checkpoint: 'yard' },
       { id: 'clear', kind: 'eliminate', text: 'Elimina a los 6 maniquíes armados', group: 'drill', onStart: 'drill' },
     ],

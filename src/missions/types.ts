@@ -26,7 +26,7 @@ export const MISSIONS: Record<MissionId, MissionDef> = {
     id: 'practice',
     name: 'Simulacro de combate',
     place: 'Campo de práctica · sótano del Continental',
-    briefing: ['Elimina a los 6 maniquíes armados del patio.', 'Aquí sí se dispara: es el único lugar del hotel donde se permite.', 'Rango objetivo: B o superior.'],
+    briefing: ['Tutorial de 3 minutos y, después, elimina a los 6 maniquíes armados del patio.', 'Aquí sí se dispara: es el único lugar del hotel donde se permite.', 'Rango objetivo: B o superior (el rango solo cuenta el simulacro).'],
     baseReward: 2,
     requires: null,
     parTime: 90,
