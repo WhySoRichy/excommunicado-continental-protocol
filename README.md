@@ -18,6 +18,7 @@ Gun-fu, contratos y las reglas del Continental, hecho con TypeScript, Three.js y
 &nbsp;&middot;&nbsp; [Instalación](INSTALACION.md)
 &nbsp;&middot;&nbsp; [Diseño](docs/DISENO.md)
 &nbsp;&middot;&nbsp; [Arquitectura](docs/ARQUITECTURA.md)
+&nbsp;&middot;&nbsp; [Roadmap](docs/ROADMAP.md)
 
 <img src="docs/media/gameplay.gif" alt="El simulacro de combate" width="760">
 
@@ -96,6 +97,7 @@ El navegador se abre en http://localhost:4173. La guía completa, con instalaci�
 ## Tecnología
 
 - **TypeScript en modo strict** con Vite 8.
+- **Animación procedural**, sin clips grabados: las piernas se resuelven con cinemática inversa para que los pies pisen el suelo, y las poses de arma, recarga, deslizamiento o voltereta se calculan en cada frame.
 - **Three.js 0.187** para el render: personajes low-poly como un solo `SkinnedMesh`, rim light Fresnel, IBL, sombras y resolución dinámica.
 - **Rapier 0.21** para la física: el `KinematicCharacterController` mueve las cápsulas de jugador, enemigos y civiles.
 - **Bucle a paso fijo de 60 Hz** con interpolación de render y una sola máquina de estados de juego.
@@ -117,13 +119,13 @@ src/
   render/     renderer, materiales, efectos y resolución dinámica
 ```
 
-Los detalles, decisiones técnicas y convenciones están en [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md).
+Los detalles, decisiones técnicas y convenciones están en [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md). Para retomar o ampliar el proyecto: [guía de desarrollo](docs/CONTRIBUIR.md) y [roadmap](docs/ROADMAP.md).
 
 ## Pruebas y calidad
 
 | | |
 |---|---|
-| **137 pruebas unitarias** (Vitest) | Daño, estilo, rango (incluida una prueba de coherencia con 500 partidas al azar), economía, IA de los enemigos, navegación de cada nivel, guardado, reasignación de teclas, oleadas y música |
+| **143 pruebas unitarias** (Vitest) | Cinemática inversa del rig, daño, estilo, rango (incluida una prueba de coherencia con 500 partidas al azar), economía, IA de los enemigos, navegación de cada nivel, guardado, reasignación de teclas, oleadas y música |
 | **38 pruebas e2e** (Playwright) | El juego real sobre el build de producción: movimiento sin atravesar paredes ni atascarse (también con picos de lag), combate contra varios enemigos, los cuatro contratos y el Gauntlet de principio a fin, tutorial, ajustes persistentes, mando, claridad visual, mezcla de audio y rendimiento |
 | **CI** | Cada push a `main` ejecuta las pruebas y publica el juego en GitHub Pages |
 
