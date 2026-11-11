@@ -1,7 +1,7 @@
 import { Vector3 } from 'three';
 import { AudioEngine } from '../audio/AudioEngine';
 import { type IntensityInput, musicIntensity } from '../audio/music';
-import { type CombatIntent, emptyCombatIntent } from '../combat/PlayerCombat';
+import { type CombatIntent, emptyCombatIntent, SWITCH_TIME } from '../combat/PlayerCombat';
 import { STYLE_RANKS } from '../combat/StyleMeter';
 import type { UpgradeId, WeaponId } from '../combat/weapons';
 import type { Action } from '../core/actions';
@@ -1081,7 +1081,9 @@ export class Game {
     rig.root.rotation.y = yaw;
     const c = s.combat;
     const model: WeaponModel = c.holstered ? 'none' : WEAPON_MODEL[c.current];
-    if (model !== this.lastWeaponModel) {
+    // El modelo cambia a mitad del gesto, cuando la mano está en la cadera.
+    const swapT = c.switchT > 0 ? 1 - c.switchT / SWITCH_TIME : 1;
+    if (model !== this.lastWeaponModel && swapT >= 0.5) {
       this.lastWeaponModel = model;
       rig.setWeapon(model);
     }
@@ -1099,6 +1101,7 @@ export class Game {
     pose.reload = c.weapon.reloadProgress;
     pose.recoil = c.recoilVis;
     pose.melee = c.meleeT > 0 ? Math.sin((1 - c.meleeT / 0.45) * Math.PI) : 0;
+    pose.swap = c.switchT > 0 ? Math.sin(swapT * Math.PI) : 0;
     rig.update(pose, scaledDt);
     rig.setOpacity(this.camera.distanceToHead < 0.55 ? 0 : 1);
   }

@@ -3,6 +3,9 @@ import { midiToHz, type NoteEvent, stepEvents, stepSeconds } from './music';
 
 /** Cuánto se programa por adelantado (s). El bucle de render rellena esta ventana cada frame. */
 const LOOKAHEAD = 0.15;
+/** Con pocos FPS la ventana crece hasta cubrir el frame siguiente (tope: 1,5 s). */
+const LOOKAHEAD_FRAMES = 2.5;
+const LOOKAHEAD_MAX = 1.5;
 /** Si el reloj se quedó atrás (pestaña oculta), se salta en vez de ponerse al día de golpe. */
 const MAX_BEHIND = 0.1;
 /** Suavizado de la intensidad (por segundo) para que las capas entren y salgan sin saltos. */
@@ -78,16 +81,24 @@ export class MusicPlayer {
   update(): void {
     const ctx = this.ctx;
     const now = ctx.currentTime;
-    const dt = Math.min(0.25, Math.max(0, now - this.lastUpdate));
+    const frame = Math.max(0, now - this.lastUpdate);
+    const dt = Math.min(0.25, frame);
+    // A 3 FPS un adelanto fijo de 0,15 s dejaba huecos sin notas: se adapta al frame real.
+    const ahead = Math.min(LOOKAHEAD_MAX, Math.max(LOOKAHEAD, frame * LOOKAHEAD_FRAMES));
     this.lastUpdate = now;
     const d = this.target - this.intensity;
     this.intensity += Math.sign(d) * Math.min(Math.abs(d), INTENSITY_RATE * dt);
     const mood = this.mood;
     const out = this.out;
     if (!mood || !out) return;
-    if (this.nextTime < now - MAX_BEHIND) this.nextTime = now + 0.02;
+    if (this.nextTime < now - MAX_BEHIND - ahead) this.nextTime = now + 0.02;
+    // Lo que ya quedó en el pasado no se programa (sonaría todo de golpe).
+    while (this.nextTime < now) {
+      this.step++;
+      this.nextTime += stepSeconds(mood);
+    }
     const stepDur = stepSeconds(mood);
-    while (this.nextTime < now + LOOKAHEAD) {
+    while (this.nextTime < now + ahead) {
       const n = stepEvents(mood, this.step, this.intensity, this.events);
       for (let i = 0; i < n; i++) this.play(this.events[i]!, this.nextTime, stepDur, out);
       this.step++;

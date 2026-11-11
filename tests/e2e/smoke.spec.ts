@@ -13,7 +13,8 @@ test.describe('Fase 0 · smoke', () => {
     console.log(`[smoke] GPU="${gpu}" fps=${fps.fps.toFixed(1)} luminancia=${lum.toFixed(3)}`);
 
     expect(lum, 'la escena no debe ser negra').toBeGreaterThan(LUMINANCE_MIN);
-    expect(fps.frames).toBeGreaterThan(5);
+    // En CI el render por software va a ~3 FPS: basta con comprobar que el bucle avanza.
+    expect(fps.frames).toBeGreaterThan(2);
     if (!isCI) expect(fps.fps).toBeGreaterThan(30);
 
     await page.keyboard.press('F3');

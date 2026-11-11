@@ -18,6 +18,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { clamp, damp, lerp } from '../core/math';
 import { addRim, type RimUniforms } from '../render/materials';
 import type { MoveState, Posture } from './PlayerController';
+import { bell, cadence, type FootStep, footStep, type LegAngles, smooth, solveLeg } from './rigMath';
 
 /** Colores del personaje (low-poly con colores por vértice: 1 material por tipo). */
 export interface RigColors {
@@ -68,10 +69,14 @@ export interface RigPose {
   recoil: number;
   /** Golpe/forcejeo de melee 0..1. */
   melee: number;
+  /** Cambio de arma 0..1 (0 = sin cambio; sube y baja durante el gesto). */
+  swap: number;
+  /** 0..1 arrodillado (enemigo aturdido o jefe entre fases). */
+  kneel: number;
 }
 
 export function idlePose(): RigPose {
-  return { speed: 0, moveAngle: 0, state: 'ground', posture: 'stand', grounded: true, aim: 0, aimPitch: 0, stateTime: 0, reload: -1, recoil: 0, melee: 0 };
+  return { speed: 0, moveAngle: 0, state: 'ground', posture: 'stand', grounded: true, aim: 0, aimPitch: 0, stateTime: 0, reload: -1, recoil: 0, melee: 0, swap: 0, kneel: 0 };
 }
 
 const tmpColor = new Color();
@@ -80,6 +85,24 @@ const _local = new Matrix4();
 /** Esfera de recorte generosa (cubre volteretas, caídas y brazos extendidos). */
 const CULL_CENTER = new Vector3(0, 0.9, 0);
 const CULL_RADIUS = 1.6;
+
+// --- Medidas del esqueleto (m) ---
+/** Altura del centro de masa (hueso `spin`) sobre los pies. */
+const SPIN_Y = 0.9;
+/** Altura de la articulación de la cadera de pie (piernas casi estiradas). */
+const HIP_STAND = 0.935;
+const HIP_CROUCH = 0.58;
+const HIP_SLIDE = 0.3;
+const HIP_KNEEL = 0.5;
+const SHOULDER_Y = 0.56;
+const NECK_Y = 0.7;
+const ELBOW_Y = -0.32;
+const HAND_Y = -0.315;
+/** Velocidad a partir de la cual el personaje esprinta (braceo en vez de arma en guardia). */
+const SPRINT_SPEED = 5.6;
+/** Rigidez del suavizado de articulaciones (1/s). */
+const JOINT_K = 16;
+const HALF_PI = Math.PI / 2;
 
 /** Caja con color por vértice, desplazada. */
 function cbox(w: number, h: number, d: number, color: number, x = 0, y = 0, z = 0): BufferGeometry {
@@ -121,9 +144,16 @@ function rigMaterial(key: string, rimColor: number, rimStrength: number, unique:
 
 /**
  * Humanoide low-poly procedural con animación procedural.
- * Jerarquía de huesos: root(pies, yaw) → spin(centro de masa: voltereta/caída) → hips → torso/piernas.
- * Todo el cuerpo es UNA SkinnedMesh (cada pieza pesa 1 en su hueso): 1 draw call (+1 de sombra)
- * en vez de 7. El arma va aparte porque cambia de modelo.
+ *
+ * Huesos: root(pies, yaw) → spin(centro de masa: voltereta/caída) → hips → torso → cabeza y
+ * brazos (hombro + codo); hips → piernas (cadera + rodilla). Todo el cuerpo es UNA SkinnedMesh
+ * (cada pieza pesa 1 en su hueso): 1 draw call. El arma va aparte porque cambia de modelo.
+ *
+ * Convención: el personaje mira a −Z. En huesos que cuelgan (brazos, piernas) la rotación X
+ * positiva los lleva hacia delante; en los que suben (torso, cabeza) positiva = hacia atrás.
+ * Las piernas se resuelven con IK (`rigMath.solveLeg`) para que los pies pisen donde deben.
+ * Las poses de brazos se definen en ángulos "de mundo" y se les resta la inclinación del torso,
+ * así el arma apunta igual de pie, agachado o deslizándose.
  */
 export class CharacterRig {
   readonly root = new Group();
@@ -132,8 +162,11 @@ export class CharacterRig {
   private readonly spin = new Bone();
   private readonly hips = new Bone();
   private readonly torso = new Bone();
+  private readonly head = new Bone();
   private readonly armL = new Bone();
   private readonly armR = new Bone();
+  private readonly foreL = new Bone();
+  private readonly foreR = new Bone();
   private readonly thighL = new Bone();
   private readonly thighR = new Bone();
   private readonly shinL = new Bone();
@@ -143,59 +176,83 @@ export class CharacterRig {
   private skeleton: Skeleton | null = null;
   readonly weaponMount = new Group();
   private weaponMesh: Mesh | null = null;
+  private weaponModel: WeaponModel = 'none';
   private readonly meshes: Array<Mesh | SkinnedMesh> = [];
   private phase = 0;
+  private time = 0;
   private crouchK = 0;
   private aimK = 0;
-  private readonly bulk: number;
+  private sprintK = 0;
+  private kneelK = 0;
   private opacity = 1;
+  // Reutilizados cada frame (sin asignaciones en el bucle).
+  private readonly stepL: FootStep = { along: 0, lift: 0 };
+  private readonly stepR: FootStep = { along: 0, lift: 0 };
+  private readonly legL: LegAngles = { thigh: 0, shin: 0 };
+  private readonly legR: LegAngles = { thigh: 0, shin: 0 };
 
   constructor(key: string, o: RigOptions) {
     const { mat, rim } = rigMaterial(key, o.rimColor, o.rimStrength, !!o.uniqueMaterial);
     this.material = mat;
     this.rim = rim;
     const c = o.colors;
-    const b = (this.bulk = o.bulk ?? 1);
+    const b = o.bulk ?? 1;
 
-    // --- Torso + cabeza + pelo (un solo mesh) ---
+    // --- Torso (pelvis, chaqueta, camisa, cuello) ---
     const torsoParts: BufferGeometry[] = [
       cbox(0.36 * b, 0.2, 0.22 * b, c.pants, 0, 0.02, 0), // pelvis
       cbox(0.44 * b, 0.52, 0.26 * b, c.jacket, 0, 0.36, 0), // chaqueta
       cbox(0.13, 0.36, 0.02, c.shirt, 0, 0.42, -0.135 * b), // camisa (V)
       cbox(0.045, 0.3, 0.025, c.tie, 0, 0.42, -0.142 * b), // corbata
-      cbox(0.1, 0.08, 0.1, c.skin, 0, 0.66, 0), // cuello
-      cbox(0.2, 0.24, 0.22, c.skin, 0, 0.82, -0.01), // cabeza
-      cbox(0.06, 0.025, 0.02, c.accent, 0, 0.84, -0.12), // ojos (franja)
+      cbox(0.1, 0.1, 0.1, c.skin, 0, 0.66, 0), // cuello
     ];
     if (o.vest) torsoParts.push(cbox(0.48 * b, 0.4, 0.3 * b, c.accent, 0, 0.36, 0.0));
+    this.addMesh(this.torso, merge(torsoParts));
+
+    // --- Cabeza (hueso propio: mira arriba/abajo y se mantiene nivelada cuando el torso se inclina) ---
+    const hy = -NECK_Y;
+    const headParts: BufferGeometry[] = [
+      cbox(0.2, 0.24, 0.22, c.skin, 0, 0.82 + hy, -0.01), // cabeza
+      cbox(0.06, 0.025, 0.02, c.accent, 0, 0.84 + hy, -0.12), // ojos (franja)
+    ];
     switch (o.hair) {
       case 'long':
-        torsoParts.push(cbox(0.23, 0.07, 0.25, c.hair, 0, 0.955, 0.0), cbox(0.235, 0.34, 0.09, c.hair, 0, 0.78, 0.09), cbox(0.03, 0.26, 0.2, c.hair, 0.115, 0.82, 0.0), cbox(0.03, 0.26, 0.2, c.hair, -0.115, 0.82, 0.0));
+        headParts.push(cbox(0.23, 0.07, 0.25, c.hair, 0, 0.955 + hy, 0.0), cbox(0.235, 0.34, 0.09, c.hair, 0, 0.78 + hy, 0.09), cbox(0.03, 0.26, 0.2, c.hair, 0.115, 0.82 + hy, 0.0), cbox(0.03, 0.26, 0.2, c.hair, -0.115, 0.82 + hy, 0.0));
         break;
       case 'short':
-        torsoParts.push(cbox(0.215, 0.06, 0.235, c.hair, 0, 0.95, 0.0), cbox(0.215, 0.12, 0.05, c.hair, 0, 0.88, 0.1));
+        headParts.push(cbox(0.215, 0.06, 0.235, c.hair, 0, 0.95 + hy, 0.0), cbox(0.215, 0.12, 0.05, c.hair, 0, 0.88 + hy, 0.1));
         break;
       case 'helmet':
-        torsoParts.push(cbox(0.25, 0.14, 0.27, c.accent, 0, 0.93, 0.0), cbox(0.22, 0.05, 0.03, 0x101418, 0, 0.84, -0.125));
+        headParts.push(cbox(0.25, 0.14, 0.27, c.accent, 0, 0.93 + hy, 0.0), cbox(0.22, 0.05, 0.03, 0x101418, 0, 0.84 + hy, -0.125));
         break;
       case 'cap':
-        torsoParts.push(cbox(0.22, 0.07, 0.24, c.accent, 0, 0.955, 0.0), cbox(0.2, 0.02, 0.1, c.accent, 0, 0.925, -0.15));
+        headParts.push(cbox(0.22, 0.07, 0.24, c.accent, 0, 0.955 + hy, 0.0), cbox(0.2, 0.02, 0.1, c.accent, 0, 0.925 + hy, -0.15));
         break;
       case 'bald':
         break;
     }
-    this.addMesh(this.torso, merge(torsoParts));
+    this.head.position.set(0, NECK_Y, 0);
+    this.addMesh(this.head, merge(headParts));
+    this.torso.add(this.head);
 
-    // --- Brazos (pivote en el hombro, apuntan hacia −Y) ---
-    const armGeo = (): BufferGeometry =>
-      merge([cbox(0.12 * b, 0.32, 0.13 * b, c.jacket, 0, -0.16, 0), cbox(0.11 * b, 0.28, 0.12 * b, c.jacket, 0, -0.45, -0.02), cbox(0.08, 0.09, 0.09, c.skin, 0, -0.63, -0.03)]);
-    this.armL.position.set(-0.285 * b, 0.56, 0);
-    this.armR.position.set(0.285 * b, 0.56, 0);
-    this.addMesh(this.armL, armGeo());
-    this.addMesh(this.armR, armGeo());
+    // --- Brazos: hombro (brazo) + codo (antebrazo y mano) ---
+    const upperGeo = (): BufferGeometry => cbox(0.12 * b, 0.34, 0.13 * b, c.jacket, 0, -0.16, 0);
+    const foreGeo = (): BufferGeometry => merge([cbox(0.11 * b, 0.3, 0.12 * b, c.jacket, 0, -0.13, -0.005), cbox(0.08, 0.09, 0.09, c.skin, 0, HAND_Y, -0.01)]);
+    this.armL.position.set(-0.285 * b, SHOULDER_Y, 0);
+    this.armR.position.set(0.285 * b, SHOULDER_Y, 0);
+    this.foreL.position.set(0, ELBOW_Y, 0);
+    this.foreR.position.set(0, ELBOW_Y, 0);
+    this.addMesh(this.armL, upperGeo());
+    this.addMesh(this.armR, upperGeo());
+    this.addMesh(this.foreL, foreGeo());
+    this.addMesh(this.foreR, foreGeo());
+    this.armL.add(this.foreL);
+    this.armR.add(this.foreR);
     this.torso.add(this.armL, this.armR);
-    this.weaponMount.position.set(0, -0.63, -0.04);
-    this.armR.add(this.weaponMount);
+    // El arma va en la mano, con el cañón alineado con el antebrazo.
+    this.weaponMount.position.set(0, HAND_Y - 0.01, -0.03);
+    this.weaponMount.rotation.x = -HALF_PI;
+    this.foreR.add(this.weaponMount);
 
     // --- Piernas (muslo con pivote en cadera, espinilla con pivote en rodilla) ---
     const thighGeo = (): BufferGeometry => cbox(0.16 * b, 0.46, 0.17 * b, c.pants, 0, -0.23, 0);
@@ -213,7 +270,7 @@ export class CharacterRig {
 
     this.hips.position.set(0, 0.05, 0);
     this.hips.add(this.torso, this.thighL, this.thighR);
-    this.spin.position.set(0, 0.9, 0);
+    this.spin.position.set(0, SPIN_Y, 0);
     this.spin.add(this.hips);
     this.root.add(this.spin);
     this.buildSkin();
@@ -226,7 +283,7 @@ export class CharacterRig {
 
   /** Fusiona las piezas en una SkinnedMesh: cada vértice va a su hueso con peso 1. */
   private buildSkin(): void {
-    const bones = [this.spin, this.hips, this.torso, this.armL, this.armR, this.thighL, this.thighR, this.shinL, this.shinR];
+    const bones = [this.spin, this.hips, this.torso, this.head, this.armL, this.armR, this.foreL, this.foreR, this.thighL, this.thighR, this.shinL, this.shinR];
     this.root.updateMatrixWorld(true);
     _rootInv.copy(this.root.matrixWorld).invert();
     const geos: BufferGeometry[] = [];
@@ -257,30 +314,31 @@ export class CharacterRig {
     this.meshes.push(mesh);
   }
 
-  /** Cambia el arma visible (geometría propia por modelo). */
+  /** Cambia el arma visible (geometría propia por modelo). El cañón apunta a −Z del soporte. */
   setWeapon(model: WeaponModel, accent = 0x888888): void {
     if (this.weaponMesh) {
       this.weaponMount.remove(this.weaponMesh);
       this.weaponMesh.geometry.dispose();
       this.weaponMesh = null;
     }
+    this.weaponModel = model;
     const dark = 0x1d1f23;
     let geo: BufferGeometry | null = null;
     switch (model) {
       case 'pistol':
-        geo = merge([cbox(0.04, 0.06, 0.2, dark, 0, 0, -0.08), cbox(0.035, 0.1, 0.05, dark, 0, -0.06, -0.01)]);
+        geo = merge([cbox(0.04, 0.06, 0.2, dark, 0, 0.03, -0.08), cbox(0.035, 0.1, 0.05, dark, 0, -0.03, -0.01)]);
         break;
       case 'rifle':
-        geo = merge([cbox(0.05, 0.08, 0.72, dark, 0, 0.0, -0.22), cbox(0.04, 0.14, 0.05, dark, 0, -0.09, -0.12), cbox(0.05, 0.04, 0.2, accent, 0, 0.06, -0.2)]);
+        geo = merge([cbox(0.05, 0.08, 0.72, dark, 0, 0.03, -0.2), cbox(0.04, 0.14, 0.05, dark, 0, -0.06, -0.02), cbox(0.05, 0.04, 0.2, accent, 0, 0.09, -0.2), cbox(0.045, 0.1, 0.16, dark, 0, 0.01, 0.2)]);
         break;
       case 'smg':
-        geo = merge([cbox(0.05, 0.08, 0.42, dark, 0, 0.0, -0.13), cbox(0.04, 0.16, 0.05, dark, 0, -0.1, -0.08)]);
+        geo = merge([cbox(0.05, 0.08, 0.42, dark, 0, 0.03, -0.13), cbox(0.04, 0.16, 0.05, dark, 0, -0.07, -0.02), cbox(0.04, 0.06, 0.12, dark, 0, 0.02, 0.12)]);
         break;
       case 'shotgun':
-        geo = merge([cbox(0.06, 0.08, 0.8, 0x3a2a1c, 0, 0.0, -0.25), cbox(0.05, 0.05, 0.6, dark, 0, 0.05, -0.32)]);
+        geo = merge([cbox(0.06, 0.08, 0.8, 0x3a2a1c, 0, 0.03, -0.25), cbox(0.05, 0.05, 0.6, dark, 0, 0.08, -0.32), cbox(0.05, 0.1, 0.18, 0x3a2a1c, 0, 0.0, 0.2)]);
         break;
       case 'knife':
-        geo = merge([cbox(0.02, 0.03, 0.18, 0xc8ccd2, 0, 0, -0.1), cbox(0.03, 0.04, 0.08, dark, 0, 0, 0.01)]);
+        geo = merge([cbox(0.02, 0.03, 0.18, 0xc8ccd2, 0, 0, -0.13), cbox(0.03, 0.04, 0.08, dark, 0, 0, -0.01)]);
         break;
       case 'none':
         break;
@@ -308,136 +366,322 @@ export class CharacterRig {
 
   /** Anima la pose. `dt` = tiempo de render (incluye la escala del Foco). */
   update(p: RigPose, dt: number): void {
-    const k = 16;
-    const crouchTarget = p.posture === 'crouch' || p.state === 'slide' || p.state === 'roll' ? 1 : 0;
-    this.crouchK = damp(this.crouchK, crouchTarget, 14, dt);
-    this.aimK = damp(this.aimK, p.aim, 18, dt);
+    this.time += dt;
+    const st = p.state;
+    const model = this.weaponModel;
+    const armed = model !== 'none';
+    const long = model === 'rifle' || model === 'smg' || model === 'shotgun';
+    const knife = model === 'knife';
+
+    const onFeet = st === 'ground' || st === 'cover' || st === 'locked';
+    const crouching = p.posture === 'crouch' && onFeet;
+    this.crouchK = damp(this.crouchK, crouching ? 1 : 0, 12, dt);
+    this.aimK = damp(this.aimK, knife ? 0 : p.aim, 18, dt);
+    this.sprintK = damp(this.sprintK, onFeet && p.grounded && p.speed > SPRINT_SPEED ? 1 : 0, 9, dt);
+    this.kneelK = damp(this.kneelK, p.kneel, 9, dt);
     const ck = this.crouchK;
     const ak = this.aimK;
+    const sk = this.sprintK;
+    const kk = this.kneelK;
 
-    // Ciclo de marcha.
-    const moving = p.grounded && p.speed > 0.25 && (p.state === 'ground' || p.state === 'cover' || p.state === 'locked');
-    const stride = lerp(1.25, 1.6, clamp(p.speed / 7, 0, 1));
-    if (moving) this.phase += (p.speed / stride) * Math.PI * dt;
-    const amp = moving ? clamp(p.speed / 6.5, 0.25, 1) * (1 - ck * 0.5) : 0;
-    const back = Math.cos(p.moveAngle) < -0.3 ? -1 : 1;
-    const swing = Math.sin(this.phase) * 0.75 * amp * back;
-    const kneeL = Math.max(0, Math.sin(this.phase + Math.PI / 2)) * 1.0 * amp;
-    const kneeR = Math.max(0, Math.sin(this.phase - Math.PI / 2)) * 1.0 * amp;
+    // ------------------------------------------------------------- marcha
+    const moving = p.grounded && p.speed > 0.25 && onFeet;
+    const speedN = clamp(p.speed / 7, 0, 1);
+    if (moving) this.phase += Math.PI * cadence(p.speed) * dt;
+    const ph = this.phase;
+    const amp = moving ? clamp(p.speed / 2.2, 0.3, 1) : 0;
+    const half = amp * lerp(0.2, 0.36, speedN) * (1 - 0.35 * ck);
+    const liftH = amp * lerp(0.06, 0.16, speedN) * (1 - 0.4 * ck);
+    const cf = Math.cos(p.moveAngle);
+    const cr = -Math.sin(p.moveAngle);
+    const sL = footStep(ph, half, liftH, this.stepL);
+    const sR = footStep(ph + Math.PI, half, liftH, this.stepR);
+    const lead = Math.cos(ph) * amp;
 
-    let thighL = -swing;
-    let thighR = swing;
-    let shinL = kneeL;
-    let shinR = kneeR;
-    let hipsY = 0.05 - Math.abs(Math.sin(this.phase)) * 0.035 * amp;
-    let torsoX = -0.08 * clamp(p.speed / 7, 0, 1);
+    // Postura de combate: un pie adelantado al apuntar o agacharse (menos al caminar).
+    const stance = (0.035 + 0.09 * ak + 0.13 * ck) * (1 - amp * 0.75);
+    let hipY = lerp(HIP_STAND - 0.02 * ak, HIP_CROUCH, ck) - 0.03 * amp * Math.abs(Math.cos(ph));
+    let lF = sL.along * cf + stance;
+    let rF = sR.along * cf - stance;
+    let lSide = sL.along * cr;
+    let rSide = sR.along * cr;
+    let lDown = hipY - sL.lift;
+    let rDown = hipY - sR.lift;
+    let hipLocal = hipY - SPIN_Y;
+
+    let torsoX = lerp(-0.04 - 0.08 * speedN - 0.14 * sk, -0.42, ck);
+    let torsoZ = -cr * 0.07 * amp;
+    let torsoY = lead * cf * 0.16 * (armed ? 0.35 + 0.65 * sk : 1);
+    let hipsYaw = -lead * cf * 0.12;
+    let headX = p.aimPitch * 0.55;
+    let headLevel = 0.85;
     let spinX = 0;
-    let spinY = 0.9;
+    let spinY = SPIN_Y;
+    // Peso de las poses de arma (guardia/apuntado); los estados acrobáticos lo reducen.
+    let armsFree = 0;
+    let plantL = 0;
 
-    // Agachado.
-    thighL = lerp(thighL, -1.25 + swing * 0.4, ck);
-    thighR = lerp(thighR, -1.05 - swing * 0.4, ck);
-    shinL = lerp(shinL, 1.95, ck);
-    shinR = lerp(shinR, 1.75, ck);
-    hipsY = lerp(hipsY, -0.36, ck);
-    torsoX = lerp(torsoX, -0.28, ck);
-
-    switch (p.state) {
+    // ------------------------------------------------------------- estados
+    switch (st) {
       case 'air':
-        thighL = lerp(thighL, -0.6, 0.8);
-        thighR = lerp(thighR, -0.2, 0.8);
-        shinL = lerp(shinL, 0.9, 0.8);
-        shinR = lerp(shinR, 0.5, 0.8);
+        lF = 0.24;
+        lDown = 0.6;
+        rF = -0.1;
+        rDown = 0.8;
+        lSide = rSide = 0;
+        hipLocal = 0.03;
+        torsoX = -0.12;
         break;
       case 'roll': {
         const t = clamp(p.stateTime / 0.5, 0, 1);
         spinX = -Math.PI * 2 * t;
-        spinY = lerp(0.9, 0.5, Math.sin(t * Math.PI));
-        thighL = thighR = -1.6;
-        shinL = shinR = 2.2;
-        torsoX = -0.7;
+        spinY = lerp(SPIN_Y, 0.5, Math.sin(t * Math.PI));
+        lF = 0.24;
+        rF = 0.2;
+        lDown = 0.34;
+        rDown = 0.38;
+        lSide = rSide = 0;
+        hipLocal = 0;
+        torsoX = -0.95;
+        headX = -0.35;
+        headLevel = 0;
+        armsFree = 1;
         break;
       }
-      case 'slide':
-        torsoX = 0.55;
-        thighR = -1.3;
-        shinR = 0.15;
-        thighL = -0.4;
-        shinL = 1.6;
-        hipsY = -0.42;
+      case 'slide': {
+        // Deslizamiento: cadera casi en el suelo, pierna derecha estirada al frente, izquierda
+        // recogida con la rodilla arriba, torso reclinado y mano izquierda apoyada detrás.
+        const settle = smooth(0, 0.18, p.stateTime);
+        hipY = lerp(HIP_CROUCH, HIP_SLIDE, settle);
+        hipLocal = hipY - SPIN_Y;
+        rF = 0.84;
+        rDown = hipY - 0.05;
+        lF = 0.3;
+        lDown = hipY - 0.03;
+        lSide = -0.04;
+        rSide = 0.04;
+        torsoX = lerp(0.2, 0.78, settle);
+        torsoZ = 0.1;
+        torsoY = 0;
+        hipsYaw = 0;
+        plantL = settle;
         break;
+      }
       case 'vault':
-        torsoX = -0.45;
-        thighL = -1.4;
-        thighR = -0.9;
-        shinL = 1.8;
-        shinR = 1.2;
+        lF = 0.36;
+        rF = 0.42;
+        lDown = 0.46;
+        rDown = 0.42;
+        lSide = rSide = 0.22;
+        hipLocal = 0;
+        torsoX = -0.4;
+        torsoZ = 0.22;
+        plantL = 1;
         break;
       case 'dead': {
         const t = clamp(p.stateTime / 0.55, 0, 1);
-        spinX = (Math.PI / 2) * t * t;
-        spinY = lerp(0.9, 0.2, t);
-        thighL = -0.2;
-        thighR = 0.1;
-        shinL = shinR = 0.2;
+        spinX = HALF_PI * t * t;
+        spinY = lerp(SPIN_Y, 0.16, t);
+        lF = 0.05;
+        rF = 0.22;
+        lDown = 0.9;
+        rDown = 0.8;
+        lSide = -0.08;
+        rSide = 0.1;
+        hipLocal = 0.02;
+        torsoX = 0.05;
+        headX = 0.2;
+        headLevel = 0;
+        armsFree = 1;
         break;
       }
       default:
         break;
     }
 
-    // Brazos: balanceo al correr o pose de apuntado.
-    let armLX = swing * 0.8;
-    let armRX = -swing * 0.8;
-    let armLZ = 0.06;
-    let armRZ = -0.06;
-    let armLY = 0;
-    let armRY = 0;
-    const aimArm = -Math.PI / 2 - p.aimPitch;
-    const ready = p.state === 'ground' || p.state === 'cover' || p.state === 'air' || p.state === 'locked';
-    if (ready) {
-      // Siempre con el arma algo levantada (lectura clara de "listo para disparar").
-      armRX = lerp(lerp(armRX, -0.55, 0.6), aimArm, ak);
-      armLX = lerp(armLX, aimArm + 0.15, ak);
-      armLY = lerp(0, 0.55, ak);
-      armRY = lerp(0, 0.05, ak);
-      armLZ = lerp(armLZ, 0.35, ak);
+    // Arrodillado (aturdido): rodilla derecha en el suelo, torso vencido.
+    if (kk > 0.001) {
+      hipLocal = lerp(hipLocal, HIP_KNEEL - SPIN_Y, kk);
+      lF = lerp(lF, 0.34, kk);
+      lDown = lerp(lDown, HIP_KNEEL - 0.02, kk);
+      torsoX = lerp(torsoX, -0.5, kk);
+      headX = lerp(headX, -0.45, kk);
     }
-    if (p.reload >= 0) {
-      const r = Math.sin(clamp(p.reload, 0, 1) * Math.PI);
-      armLX = lerp(armLX, -1.1, r);
-      armLZ = lerp(armLZ, 0.6, r);
-    }
-    if (p.melee > 0) {
-      armRX = lerp(armRX, -2.2, p.melee);
-      armRZ = lerp(armRZ, -0.5, p.melee);
-    }
-    armRX -= p.recoil * 0.18;
 
-    // Aplicación suavizada.
+    const legL = solveLeg(lF, lDown, this.legL);
+    const legR = solveLeg(rF, rDown, this.legR);
+    let thighR = legR.thigh;
+    let shinR = legR.shin;
+    if (kk > 0.001) {
+      thighR = lerp(thighR, -0.05, kk);
+      shinR = lerp(shinR, -1.62, kk);
+    }
+
+    // ------------------------------------------------------------- brazos
+    // Base sin arma: braceo contrario a las piernas, codos más doblados al correr.
+    const pump = 0.42 + 0.55 * sk;
+    let lsx = -lead * cf * pump;
+    let rsx = lead * cf * pump;
+    let lel = 0.2 + 0.3 * amp + 0.95 * sk;
+    let rel = lel;
+    let lsz = -0.07;
+    let rsz = 0.07;
+    let wrist = 0;
+
+    if (armed && armsFree < 1) {
+      // Guardia (ángulos de mundo; se resta la inclinación del torso).
+      let gRsx: number, gRel: number, gRsz: number, gLsx: number, gLel: number, gLsz: number;
+      let aRsx: number, aRel: number, aRsz: number, aLsx: number, aLel: number, aLsz: number;
+      const aimW = HALF_PI + p.aimPitch;
+      if (long) {
+        gRsx = 0.3;
+        gRel = 0.9;
+        gRsz = -0.2;
+        gLsx = 0.78;
+        gLel = 0.42;
+        gLsz = 0.52;
+        aRsx = 0.95 + 0.5 * p.aimPitch;
+        aRel = 0.62 + 0.5 * p.aimPitch;
+        aRsz = -0.2;
+        aLsx = 1.3 + 0.95 * p.aimPitch;
+        aLel = 0.24;
+        aLsz = 0.5;
+      } else if (knife) {
+        gRsx = 0.45;
+        gRel = 1.25;
+        gRsz = -0.12;
+        gLsx = 0.4;
+        gLel = 1.3;
+        gLsz = 0.22;
+        aRsx = gRsx;
+        aRel = gRel;
+        aRsz = gRsz;
+        aLsx = gLsx;
+        aLel = gLel;
+        aLsz = gLsz;
+      } else {
+        // Pistola: guardia recogida al pecho a dos manos; al apuntar, brazos extendidos.
+        gRsx = 0.2;
+        gRel = 1.15;
+        gRsz = -0.3;
+        gLsx = 0.26;
+        gLel = 1.08;
+        gLsz = 0.44;
+        aRsx = aimW - 0.03;
+        aRel = 0.1;
+        aRsz = -0.33;
+        aLsx = aimW;
+        aLel = 0.14;
+        aLsz = 0.52;
+      }
+      // Al esprintar con pistola o cuchillo se bracea; el arma larga se lleva cruzada.
+      const hold = (1 - armsFree) * (1 - sk * (long ? 0.2 : 0.85) * (1 - ak));
+      const bob = Math.sin(ph * 2) * 0.03 * amp;
+      rsx = lerp(rsx, lerp(gRsx, aRsx, ak) - torsoX + bob, hold);
+      rel = lerp(rel, lerp(gRel, aRel, ak), hold);
+      rsz = lerp(rsz, lerp(gRsz, aRsz, ak), hold);
+      lsx = lerp(lsx, lerp(gLsx, aLsx, ak) - torsoX + bob, hold);
+      lel = lerp(lel, lerp(gLel, aLel, ak), hold);
+      lsz = lerp(lsz, lerp(gLsz, aLsz, ak), hold);
+
+      // Retroceso: el arma salta y vuelve.
+      rel += p.recoil * (long ? 0.1 : 0.26);
+      rsx += p.recoil * 0.05;
+      lel += p.recoil * (long ? 0.06 : 0.2);
+
+      // Recarga: el arma sube inclinada, la mano izquierda baja al cinturón y vuelve.
+      if (p.reload >= 0) {
+        const up = bell(p.reload);
+        const belt = smooth(0.15, 0.38, p.reload) * (1 - smooth(0.6, 0.85, p.reload));
+        rsx = lerp(rsx, 0.5 - torsoX, up * 0.85);
+        rel = lerp(rel, 1.5, up * 0.85);
+        rsz = lerp(rsz, -0.25, up);
+        wrist = -0.35 * up;
+        lsx = lerp(lerp(lsx, 0.62 - torsoX, up), 0.05 - torsoX, belt);
+        lel = lerp(lerp(lel, 1.25, up), 1.05, belt);
+        lsz = lerp(lerp(lsz, 0.5, up), 0.08, belt);
+      }
+    }
+
+    // Cambio de arma: la mano baja a la cadera (donde se cambia el modelo) y vuelve.
+    if (p.swap > 0) {
+      rsx = lerp(rsx, -0.3 - torsoX, p.swap);
+      rel = lerp(rel, 0.85, p.swap);
+      rsz = lerp(rsz, 0.04, p.swap);
+      lsx = lerp(lsx, 0.1 - torsoX, p.swap * 0.7);
+      lel = lerp(lel, 0.35, p.swap * 0.7);
+      lsz = lerp(lsz, -0.05, p.swap * 0.7);
+    }
+    // Golpe cuerpo a cuerpo: barrido cruzado con giro de torso.
+    if (p.melee > 0) {
+      rsx = lerp(rsx, 1.45 - torsoX, p.melee);
+      rel = lerp(rel, 0.4, p.melee);
+      rsz = lerp(rsz, -0.75, p.melee);
+      torsoY += 0.45 * p.melee;
+    }
+    // Mano izquierda apoyada (deslizamiento: detrás, en el suelo; vault: sobre el obstáculo).
+    if (plantL > 0) {
+      const sliding = st === 'slide';
+      lsx = lerp(lsx, (sliding ? -0.35 : 0.55) - torsoX, plantL);
+      lel = lerp(lel, sliding ? 0.12 : 0.25, plantL);
+      lsz = lerp(lsz, sliding ? -0.28 : -0.15, plantL);
+    }
+    if (st === 'roll') {
+      lsx = rsx = 1.0;
+      lel = rel = 1.9;
+      lsz = 0.2;
+      rsz = -0.2;
+    } else if (st === 'dead') {
+      lsx = rsx = -0.25;
+      lel = rel = 0.35;
+      lsz = -0.95;
+      rsz = 0.95;
+    }
+    if (kk > 0.001) {
+      lsx = lerp(lsx, 0.35 - torsoX, kk);
+      lel = lerp(lel, 0.2, kk);
+      lsz = lerp(lsz, -0.1, kk);
+      rsx = lerp(rsx, 0.1 - torsoX, kk);
+      rel = lerp(rel, 0.5, kk);
+    }
+
+    // Respiración en reposo (rotación mínima, sin escalar huesos).
+    if (!moving && onFeet) torsoX += Math.sin(this.time * 1.7) * 0.012;
+    torsoX += p.recoil * 0.025;
+
+    // ------------------------------------------------------------- aplicación suavizada
+    const exact = st === 'roll' || st === 'dead';
+    const k = exact ? 40 : JOINT_K;
     const s = (cur: number, tgt: number): number => damp(cur, tgt, k, dt);
-    this.thighL.rotation.x = s(this.thighL.rotation.x, thighL);
+    this.thighL.rotation.x = s(this.thighL.rotation.x, legL.thigh);
     this.thighR.rotation.x = s(this.thighR.rotation.x, thighR);
-    this.shinL.rotation.x = s(this.shinL.rotation.x, shinL);
+    this.shinL.rotation.x = s(this.shinL.rotation.x, legL.shin);
     this.shinR.rotation.x = s(this.shinR.rotation.x, shinR);
-    this.hips.position.y = s(this.hips.position.y, hipsY);
-    this.torso.rotation.x = s(this.torso.rotation.x, torsoX + (ak > 0.5 ? -p.aimPitch * 0.25 : 0));
-    this.armL.rotation.x = s(this.armL.rotation.x, armLX);
-    this.armR.rotation.x = s(this.armR.rotation.x, armRX);
-    this.armL.rotation.y = s(this.armL.rotation.y, armLY);
-    this.armR.rotation.y = s(this.armR.rotation.y, armRY);
-    this.armL.rotation.z = s(this.armL.rotation.z, armLZ);
-    this.armR.rotation.z = s(this.armR.rotation.z, armRZ);
-    // La voltereta y la caída no se suavizan (deben seguir el tiempo exacto).
-    if (p.state === 'roll' || p.state === 'dead') {
+    this.thighL.rotation.z = s(this.thighL.rotation.z, clamp(Math.atan2(lSide, lDown), -0.5, 0.5));
+    this.thighR.rotation.z = s(this.thighR.rotation.z, clamp(Math.atan2(rSide, rDown), -0.5, 0.5));
+    this.hips.position.y = s(this.hips.position.y, hipLocal);
+    this.hips.rotation.y = s(this.hips.rotation.y, hipsYaw);
+    this.torso.rotation.x = s(this.torso.rotation.x, torsoX + ak * p.aimPitch * 0.2);
+    this.torso.rotation.y = s(this.torso.rotation.y, torsoY - hipsYaw);
+    this.torso.rotation.z = s(this.torso.rotation.z, torsoZ);
+    this.head.rotation.x = s(this.head.rotation.x, clamp(headX - torsoX * headLevel, -0.9, 0.9));
+    this.armL.rotation.x = s(this.armL.rotation.x, lsx);
+    this.armR.rotation.x = s(this.armR.rotation.x, rsx);
+    this.armL.rotation.z = s(this.armL.rotation.z, lsz);
+    this.armR.rotation.z = s(this.armR.rotation.z, rsz);
+    this.foreL.rotation.x = s(this.foreL.rotation.x, lel);
+    this.foreR.rotation.x = s(this.foreR.rotation.x, rel);
+    this.weaponMount.rotation.x = s(this.weaponMount.rotation.x, -HALF_PI + wrist);
+    // La voltereta y la caída siguen el tiempo exacto del estado (no se suavizan).
+    if (exact) {
       this.spin.rotation.x = spinX;
       this.spin.position.y = spinY;
     } else {
+      // Tras una voltereta completa el giro equivale a 0: no se "desenrolla".
+      if (this.spin.rotation.x < -Math.PI) this.spin.rotation.x += Math.PI * 2;
       this.spin.rotation.x = s(this.spin.rotation.x, 0);
       this.spin.position.y = s(this.spin.position.y, spinY);
     }
-    // Respiración en reposo.
-    if (!moving && p.state === 'ground') this.torso.scale.y = 1 + Math.sin(performance.now() * 0.0025) * 0.006 * this.bulk;
   }
 
   dispose(): void {

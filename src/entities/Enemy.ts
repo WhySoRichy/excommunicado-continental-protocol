@@ -474,7 +474,9 @@ export class Enemy {
     const vx = m.feet.x - m.prevFeet.x;
     const vz = m.feet.z - m.prevFeet.z;
     pose.moveAngle = Math.hypot(vx, vz) > 1e-4 ? Math.atan2(-vx, -vz) - m.yaw : 0;
-    pose.state = this.alive ? (this.brain.state === 'stunned' ? 'locked' : m.state) : 'dead';
+    const stunned = this.alive && this.brain.state === 'stunned';
+    pose.state = this.alive ? (stunned ? 'locked' : m.state) : 'dead';
+    pose.kneel = stunned ? 1 : 0;
     pose.posture = m.posture;
     pose.grounded = m.grounded;
     pose.aim = this.intent.aim ? 1 : 0;
