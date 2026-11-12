@@ -3,6 +3,7 @@ import {
   BoxGeometry,
   type BufferGeometry,
   Color,
+  CylinderGeometry,
   Float32BufferAttribute,
   Group,
   Matrix4,
@@ -11,6 +12,7 @@ import {
   Skeleton,
   SkinnedMesh,
   Sphere,
+  SphereGeometry,
   Uint16BufferAttribute,
   Vector3,
 } from 'three';
@@ -104,10 +106,8 @@ const SPRINT_SPEED = 5.6;
 const JOINT_K = 16;
 const HALF_PI = Math.PI / 2;
 
-/** Caja con color por vértice, desplazada. */
-function cbox(w: number, h: number, d: number, color: number, x = 0, y = 0, z = 0): BufferGeometry {
-  const g = new BoxGeometry(w, h, d);
-  g.translate(x, y, z);
+/** Pinta toda la geometría de un color (atributo por vértice). */
+function paint(g: BufferGeometry, color: number): BufferGeometry {
   tmpColor.set(color);
   const n = g.getAttribute('position').count;
   const cols = new Float32Array(n * 3);
@@ -118,6 +118,35 @@ function cbox(w: number, h: number, d: number, color: number, x = 0, y = 0, z = 
   }
   g.setAttribute('color', new Float32BufferAttribute(cols, 3));
   return g;
+}
+
+/** Caja con color por vértice, desplazada. `rz` la inclina antes de colocarla. */
+function cbox(w: number, h: number, d: number, color: number, x = 0, y = 0, z = 0, rz = 0): BufferGeometry {
+  const g = new BoxGeometry(w, h, d);
+  if (rz !== 0) g.rotateZ(rz);
+  g.translate(x, y, z);
+  return paint(g, color);
+}
+
+/** Tronco de cono elíptico (miembros y torso): `taper` es el radio inferior respecto al superior. */
+function ccyl(rx: number, rz: number, h: number, color: number, x = 0, y = 0, z = 0, taper = 1, seg = 8): BufferGeometry {
+  const g = new CylinderGeometry(1, taper, h, seg);
+  g.scale(rx, 1, rz);
+  g.translate(x, y, z);
+  return paint(g, color);
+}
+
+/** Elipsoide; con `top` solo el casquete superior (pelo, casco, gorra). */
+function csph(rx: number, ry: number, rz: number, color: number, x = 0, y = 0, z = 0, top = false): BufferGeometry {
+  const g = top ? new SphereGeometry(1, 10, 4, 0, Math.PI * 2, 0, Math.PI / 2) : new SphereGeometry(1, 10, 7);
+  g.scale(rx, ry, rz);
+  g.translate(x, y, z);
+  return paint(g, color);
+}
+
+/** Mismo color, más oscuro o más claro. */
+function shade(color: number, k: number): number {
+  return tmpColor.set(color).multiplyScalar(k).getHex();
 }
 
 function merge(parts: BufferGeometry[]): BufferGeometry {
@@ -198,35 +227,54 @@ export class CharacterRig {
     const c = o.colors;
     const b = o.bulk ?? 1;
 
-    // --- Torso (pelvis, chaqueta, camisa, cuello) ---
+    // --- Torso: pelvis, chaqueta entallada con solapas, camisa, corbata y cuello ---
+    const lapel = shade(c.jacket, 0.72);
     const torsoParts: BufferGeometry[] = [
-      cbox(0.36 * b, 0.2, 0.22 * b, c.pants, 0, 0.02, 0), // pelvis
-      cbox(0.44 * b, 0.52, 0.26 * b, c.jacket, 0, 0.36, 0), // chaqueta
-      cbox(0.13, 0.36, 0.02, c.shirt, 0, 0.42, -0.135 * b), // camisa (V)
-      cbox(0.045, 0.3, 0.025, c.tie, 0, 0.42, -0.142 * b), // corbata
-      cbox(0.1, 0.1, 0.1, c.skin, 0, 0.66, 0), // cuello
+      ccyl(0.18 * b, 0.115 * b, 0.2, c.pants, 0, 0.02, 0, 0.95),
+      ccyl(0.225 * b, 0.135 * b, 0.56, c.jacket, 0, 0.34, 0, 0.84, 10), // el faldón cubre el cinturón por detrás
+      csph(0.262 * b, 0.085, 0.14 * b, c.jacket, 0, 0.6, 0), // hombros
+      cbox(0.11, 0.26, 0.02, c.shirt, 0, 0.47, -0.127 * b),
+      cbox(0.04, 0.23, 0.02, c.tie, 0, 0.47, -0.135 * b),
+      cbox(0.04, 0.27, 0.022, lapel, -0.062, 0.48, -0.131 * b, 0.3),
+      cbox(0.04, 0.27, 0.022, lapel, 0.062, 0.48, -0.131 * b, -0.3),
+      ccyl(0.064, 0.064, 0.035, c.shirt, 0, 0.635, 0),
+      ccyl(0.05, 0.052, 0.1, c.skin, 0, 0.67, 0),
     ];
-    if (o.vest) torsoParts.push(cbox(0.48 * b, 0.4, 0.3 * b, c.accent, 0, 0.36, 0.0));
+    if (o.vest) torsoParts.push(ccyl(0.24 * b, 0.152 * b, 0.36, c.accent, 0, 0.39, 0, 0.86, 10), cbox(0.16, 0.09, 0.03, shade(c.accent, 0.7), 0, 0.3, -0.15 * b));
     this.addMesh(this.torso, merge(torsoParts));
 
     // --- Cabeza (hueso propio: mira arriba/abajo y se mantiene nivelada cuando el torso se inclina) ---
     const hy = -NECK_Y;
+    const dark = 0x121418;
     const headParts: BufferGeometry[] = [
-      cbox(0.2, 0.24, 0.22, c.skin, 0, 0.82 + hy, -0.01), // cabeza
-      cbox(0.06, 0.025, 0.02, c.accent, 0, 0.84 + hy, -0.12), // ojos (franja)
+      csph(0.1, 0.125, 0.112, c.skin, 0, 0.83 + hy, -0.005), // cráneo
+      csph(0.084, 0.08, 0.094, c.skin, 0, 0.765 + hy, -0.014), // mandíbula
+      cbox(0.024, 0.05, 0.03, shade(c.skin, 0.9), 0, 0.812 + hy, -0.116), // nariz
+      cbox(0.03, 0.015, 0.012, dark, -0.04, 0.845 + hy, -0.103), // ojos
+      cbox(0.03, 0.015, 0.012, dark, 0.04, 0.845 + hy, -0.103),
+      cbox(0.044, 0.011, 0.014, c.hair, -0.04, 0.867 + hy, -0.104), // cejas
+      cbox(0.044, 0.011, 0.014, c.hair, 0.04, 0.867 + hy, -0.104),
+      cbox(0.044, 0.008, 0.01, shade(c.skin, 0.55), 0, 0.772 + hy, -0.104), // boca
+      cbox(0.02, 0.05, 0.03, shade(c.skin, 0.92), -0.1, 0.83 + hy, 0.0), // orejas
+      cbox(0.02, 0.05, 0.03, shade(c.skin, 0.92), 0.1, 0.83 + hy, 0.0),
     ];
     switch (o.hair) {
       case 'long':
-        headParts.push(cbox(0.23, 0.07, 0.25, c.hair, 0, 0.955 + hy, 0.0), cbox(0.235, 0.34, 0.09, c.hair, 0, 0.78 + hy, 0.09), cbox(0.03, 0.26, 0.2, c.hair, 0.115, 0.82 + hy, 0.0), cbox(0.03, 0.26, 0.2, c.hair, -0.115, 0.82 + hy, 0.0));
+        headParts.push(
+          csph(0.108, 0.094, 0.121, c.hair, 0, 0.878 + hy, 0.0, true),
+          csph(0.108, 0.17, 0.07, c.hair, 0, 0.775 + hy, 0.072), // melena
+          csph(0.03, 0.13, 0.075, c.hair, 0.098, 0.8 + hy, 0.035),
+          csph(0.03, 0.13, 0.075, c.hair, -0.098, 0.8 + hy, 0.035),
+        );
         break;
       case 'short':
-        headParts.push(cbox(0.215, 0.06, 0.235, c.hair, 0, 0.95 + hy, 0.0), cbox(0.215, 0.12, 0.05, c.hair, 0, 0.88 + hy, 0.1));
+        headParts.push(csph(0.106, 0.09, 0.119, c.hair, 0, 0.88 + hy, 0.0, true), cbox(0.19, 0.1, 0.04, c.hair, 0, 0.85 + hy, 0.092));
         break;
       case 'helmet':
-        headParts.push(cbox(0.25, 0.14, 0.27, c.accent, 0, 0.93 + hy, 0.0), cbox(0.22, 0.05, 0.03, 0x101418, 0, 0.84 + hy, -0.125));
+        headParts.push(csph(0.125, 0.115, 0.136, c.accent, 0, 0.862 + hy, 0.0, true), cbox(0.2, 0.045, 0.03, 0x101418, 0, 0.846 + hy, -0.115));
         break;
       case 'cap':
-        headParts.push(cbox(0.22, 0.07, 0.24, c.accent, 0, 0.955 + hy, 0.0), cbox(0.2, 0.02, 0.1, c.accent, 0, 0.925 + hy, -0.15));
+        headParts.push(csph(0.109, 0.085, 0.121, c.accent, 0, 0.885 + hy, 0.0, true), cbox(0.17, 0.016, 0.1, c.accent, 0, 0.892 + hy, -0.155));
         break;
       case 'bald':
         break;
@@ -235,9 +283,15 @@ export class CharacterRig {
     this.addMesh(this.head, merge(headParts));
     this.torso.add(this.head);
 
-    // --- Brazos: hombro (brazo) + codo (antebrazo y mano) ---
-    const upperGeo = (): BufferGeometry => cbox(0.12 * b, 0.34, 0.13 * b, c.jacket, 0, -0.16, 0);
-    const foreGeo = (): BufferGeometry => merge([cbox(0.11 * b, 0.3, 0.12 * b, c.jacket, 0, -0.13, -0.005), cbox(0.08, 0.09, 0.09, c.skin, 0, HAND_Y, -0.01)]);
+    // --- Brazos: hombro (brazo) + codo (antebrazo, puño de la camisa y mano con pulgar) ---
+    const upperGeo = (): BufferGeometry => merge([csph(0.074 * b, 0.07, 0.08 * b, c.jacket, 0, -0.02, 0), ccyl(0.07 * b, 0.076 * b, 0.32, c.jacket, 0, -0.16, 0, 0.85)]);
+    const foreGeo = (): BufferGeometry =>
+      merge([
+        ccyl(0.061 * b, 0.066 * b, 0.27, c.jacket, 0, -0.125, -0.005, 0.8),
+        ccyl(0.05, 0.054, 0.03, c.shirt, 0, -0.265, -0.005),
+        cbox(0.045, 0.1, 0.085, c.skin, 0, HAND_Y - 0.005, -0.01),
+        cbox(0.022, 0.045, 0.028, c.skin, 0, HAND_Y + 0.012, -0.062),
+      ]);
     this.armL.position.set(-0.285 * b, SHOULDER_Y, 0);
     this.armR.position.set(0.285 * b, SHOULDER_Y, 0);
     this.foreL.position.set(0, ELBOW_Y, 0);
@@ -254,9 +308,15 @@ export class CharacterRig {
     this.weaponMount.rotation.x = -HALF_PI;
     this.foreR.add(this.weaponMount);
 
-    // --- Piernas (muslo con pivote en cadera, espinilla con pivote en rodilla) ---
-    const thighGeo = (): BufferGeometry => cbox(0.16 * b, 0.46, 0.17 * b, c.pants, 0, -0.23, 0);
-    const shinGeo = (): BufferGeometry => merge([cbox(0.14 * b, 0.42, 0.15 * b, c.pants, 0, -0.21, 0), cbox(0.15 * b, 0.07, 0.27, c.shoes, 0, -0.44, -0.05)]);
+    // --- Piernas (muslo con pivote en cadera, espinilla con pivote en rodilla, zapato con suela) ---
+    const thighGeo = (): BufferGeometry => ccyl(0.094 * b, 0.1 * b, 0.47, c.pants, 0, -0.23, 0, 0.8);
+    const shinGeo = (): BufferGeometry =>
+      merge([
+        ccyl(0.076 * b, 0.083 * b, 0.42, c.pants, 0, -0.2, 0, 0.74),
+        cbox(0.105 * b, 0.06, 0.2, c.shoes, 0, -0.425, -0.03),
+        cbox(0.1 * b, 0.042, 0.085, c.shoes, 0, -0.434, -0.165),
+        cbox(0.112 * b, 0.02, 0.285, 0x0b0b0d, 0, -0.465, -0.055),
+      ]);
     this.thighL.position.set(-0.1 * b, 0, 0);
     this.thighR.position.set(0.1 * b, 0, 0);
     this.shinL.position.set(0, -0.46, 0);
