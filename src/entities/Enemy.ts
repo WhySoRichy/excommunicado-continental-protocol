@@ -59,6 +59,8 @@ const _eye = new Vector3();
 const _muzzle = new Vector3();
 const _dir = new Vector3();
 const _hitPt = new Vector3();
+/** Lo que tarda el agarre del takedown en tumbar al enemigo (s). */
+const THROW_DELAY = 0.1;
 /** Grosor del rim en reposo: por debajo del umbral del bloom, para que solo brillen el impacto y el telégrafo. */
 const RIM_BASE = 0.8;
 /**
@@ -119,6 +121,8 @@ export class Enemy {
   private flinch = 0;
   private flinchSide = 0;
   private deathStyle: 0 | 1 | 2 = 0;
+  /** Tiempo desde que el jugador lo agarró en un takedown (s); −1 si no lo están proyectando. */
+  private thrownT = -1;
 
   constructor(def: EnemySpawnDef, w: EnemyWorld, index: number) {
     this.id = def.id;
@@ -457,7 +461,7 @@ export class Enemy {
     this.flinchSide = right > 0 ? -1 : 1;
     if (r.killed) {
       // Por la espalda cae de bruces; de frente, de espaldas (siempre si fue a la cabeza) o desplomado.
-      this.deathStyle = front < 0 ? 0 : zone === 'head' || Math.abs(right) < Math.abs(front) * 0.35 ? 1 : 2;
+      this.deathStyle = this.thrownT >= 0 ? 1 : front < 0 ? 0 : zone === 'head' || Math.abs(right) < Math.abs(front) * 0.35 ? 1 : 2;
       this.die();
     }
     return r;
@@ -466,7 +470,9 @@ export class Enemy {
   private die(): void {
     this.brain.kill();
     this.mover.kill();
-    this.deadFor = 0;
+    // Si lo estaban proyectando, la caída sigue donde iba en vez de empezar de pie.
+    this.deadFor = this.thrownT >= 0 ? Math.max(0, this.thrownT - THROW_DELAY) : 0;
+    this.thrownT = -1;
     // El cuerpo deja de bloquear y de recibir disparos.
     this.mover.collider.setEnabled(false);
     this.icon.visible = false;
@@ -476,6 +482,18 @@ export class Enemy {
   stun(): void {
     this.brain.stun();
     this.mover.setLocked(true);
+  }
+
+  /** El jugador lo agarra para un takedown: tras un instante cae de espaldas, aún vivo. */
+  beginThrow(from: Vector3): void {
+    this.thrownT = 0;
+    // Encara a quien lo agarra: así cae alejándose de él y no entre sus pies.
+    this.mover.yaw = Math.atan2(-(from.x - this.mover.feet.x), -(from.z - this.mover.feet.z));
+  }
+
+  /** El takedown terminó o se canceló sin matarlo: se reincorpora. */
+  endThrow(): void {
+    this.thrownT = -1;
   }
 
   /** Vuelve al punto de aparición con salud completa (reaparición del jugador / reinicio). */
@@ -502,20 +520,22 @@ export class Enemy {
     const vz = m.feet.z - m.prevFeet.z;
     pose.moveAngle = Math.hypot(vx, vz) > 1e-4 ? Math.atan2(-vx, -vz) - m.yaw : 0;
     const stunned = this.alive && this.brain.state === 'stunned';
-    pose.state = this.alive ? (stunned ? 'locked' : m.state) : 'dead';
-    pose.kneel = stunned ? 1 : 0;
+    const thrown = this.alive && this.thrownT >= 0;
+    if (thrown) this.thrownT += dt;
+    pose.state = this.alive && !thrown ? (stunned ? 'locked' : m.state) : 'dead';
+    pose.kneel = stunned && !thrown ? 1 : 0;
     pose.posture = m.posture;
     pose.grounded = m.grounded;
     pose.aim = this.intent.aim ? 1 : 0;
     pose.aimPitch = 0;
     if (!this.alive) this.deadFor += dt;
-    pose.stateTime = this.alive ? m.stateTime : this.deadFor;
+    pose.stateTime = thrown ? Math.max(0, this.thrownT - THROW_DELAY) : this.alive ? m.stateTime : this.deadFor;
     pose.recoil = this.recoilVis;
     pose.melee = 0;
     this.flinch = Math.max(0, this.flinch - dt * 4.5);
     pose.flinch = this.flinch * this.flinch;
     pose.flinchSide = this.flinchSide;
-    pose.death = this.deathStyle;
+    pose.death = thrown ? 1 : this.deathStyle;
     this.rig.update(pose, dt);
     // Feedback de impacto y telégrafo del blindado/jefe: el rim se enciende.
     const rim = this.rig.rim;

@@ -1119,6 +1119,7 @@ export class Game {
     pose.recoil = c.recoilVis;
     pose.melee = c.meleeT > 0 ? Math.sin((1 - c.meleeT / 0.45) * Math.PI) : 0;
     pose.swap = c.switchT > 0 ? Math.sin(swapT * Math.PI) : 0;
+    pose.takedown = c.takedown ? c.takedown.t : -1;
     rig.update(pose, scaledDt);
     rig.setOpacity(this.camera.distanceToHead < 0.55 ? 0 : 1);
   }

@@ -522,6 +522,7 @@ export class PlayerCombat {
     this.weapon.cancelReload();
     this.takedown = { enemy: e, t: 0, shots: 0 };
     e.stun();
+    e.beginThrow(ctx.player.feet);
     ctx.player.setLocked(true);
     // El jugador encara al objetivo.
     ctx.player.yaw = Math.atan2(-(e.feet.x - ctx.player.feet.x), -(e.feet.z - ctx.player.feet.z));
@@ -536,7 +537,11 @@ export class PlayerCombat {
     const e = td.enemy;
     const fire = (): void => {
       this.muzzleOf(ctx.player, true, _muzzle);
-      _tmp.set(e.feet.x, e.feet.y + 0.35, e.feet.z);
+      // El cuerpo queda tumbado alejándose del jugador: se remata al pecho, no a los pies.
+      const ax = e.feet.x - ctx.player.feet.x;
+      const az = e.feet.z - ctx.player.feet.z;
+      const al = Math.hypot(ax, az) || 1;
+      _tmp.set(e.feet.x + (ax / al) * 0.85, e.feet.y + 0.2, e.feet.z + (az / al) * 0.85);
       _dir.subVectors(_tmp, _muzzle).normalize();
       ctx.vfx.tracer(_muzzle, _tmp, 0xffe2a0);
       ctx.vfx.muzzle(_muzzle, _dir, true);
@@ -558,6 +563,7 @@ export class PlayerCombat {
       fire();
     }
     if (td.t >= TD_TOTAL || this.dead) {
+      e.endThrow();
       this.takedown = null;
       ctx.player.setLocked(false);
     }
@@ -602,6 +608,7 @@ export class PlayerCombat {
     if (this.takedown) {
       this.takedown.enemy.brain.unstun();
       this.takedown.enemy.mover.setLocked(false);
+      this.takedown.enemy.endThrow();
       this.takedown = null;
     }
     ctx.player.setLocked(false);

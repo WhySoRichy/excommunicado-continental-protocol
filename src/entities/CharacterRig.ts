@@ -81,10 +81,12 @@ export interface RigPose {
   flinchSide: number;
   /** Forma de caer al morir: 0 de bruces, 1 de espaldas, 2 desplomado de lado. */
   death: 0 | 1 | 2;
+  /** Tiempo dentro del takedown (s) de quien lo ejecuta; −1 si no hay. */
+  takedown: number;
 }
 
 export function idlePose(): RigPose {
-  return { speed: 0, moveAngle: 0, state: 'ground', posture: 'stand', grounded: true, aim: 0, aimPitch: 0, stateTime: 0, reload: -1, recoil: 0, melee: 0, swap: 0, kneel: 0, flinch: 0, flinchSide: 0, death: 0 };
+  return { speed: 0, moveAngle: 0, state: 'ground', posture: 'stand', grounded: true, aim: 0, aimPitch: 0, stateTime: 0, reload: -1, recoil: 0, melee: 0, swap: 0, kneel: 0, flinch: 0, flinchSide: 0, death: 0, takedown: -1 };
 }
 
 const tmpColor = new Color();
@@ -725,6 +727,24 @@ export class CharacterRig {
       rel = lerp(rel, 0.4, p.melee);
       rsz = lerp(rsz, -0.75, p.melee);
       torsoY += 0.45 * p.melee;
+    }
+    // Takedown: la izquierda agarra, el torso se vuelca para proyectar y la derecha remata hacia el suelo.
+    if (p.takedown >= 0) {
+      const t = p.takedown;
+      const grab = smooth(0, 0.14, t) * (1 - smooth(0.3, 0.5, t));
+      const thrw = smooth(0.2, 0.45, t) * (1 - smooth(0.82, 0.95, t));
+      const exec = smooth(0.4, 0.54, t) * (1 - smooth(0.85, 0.95, t));
+      torsoX -= 0.18 * grab + 0.4 * thrw;
+      torsoY -= 0.5 * grab - 0.3 * thrw;
+      headX -= 0.4 * exec;
+      lsx = lerp(lsx, 1.3 - torsoX, grab);
+      lel = lerp(lel, 0.3, grab);
+      lsz = lerp(lsz, 0.2, grab);
+      lsx = lerp(lsx, 0.35 - torsoX, thrw * (1 - grab));
+      lel = lerp(lel, 0.5, thrw * (1 - grab));
+      rsx = lerp(rsx, 0.85 - torsoX + p.recoil * 0.2, exec);
+      rel = lerp(rel, 0.12, exec);
+      rsz = lerp(rsz, -0.12, exec);
     }
     // Mano izquierda apoyada (deslizamiento: detrás, en el suelo; vault: sobre el obstáculo).
     if (plantL > 0) {

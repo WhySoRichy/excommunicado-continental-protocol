@@ -12,11 +12,10 @@ Qué se puede mejorar y en qué orden. Cada bloque está pensado para una sesió
 ## Prioridad alta: lo que más se nota al jugar
 
 ### 1. Tercera pasada de animación
-Ya están hechas las reacciones de impacto, las tres caídas al morir (de bruces, de espaldas o desplomado, según de dónde venga el disparo), el esprint con zancada propia y los pasos al girar en el sitio. Queda:
+Ya están hechas las reacciones de impacto, las tres caídas al morir (de bruces, de espaldas o desplomado, según de dónde venga el disparo), el esprint con zancada propia, los pasos al girar en el sitio y el takedown coreografiado (agarre, proyección del enemigo de espaldas y remate al pecho). Queda:
 - **Mano izquierda con IK** hacia el guardamanos del arma larga y hacia la pistola: ahora son ángulos fijos y las manos no siempre coinciden.
 - **Pies como hueso propio**, para que la suela quede plana en el deslizamiento y de puntillas al agacharse.
 - **Vault con tiempos**: usar la duración real del estado para apoyar la mano, pasar las piernas y aterrizar.
-- **Takedown coreografiado**: hoy es un golpe genérico.
 - Cómo comprobarlo: `npm run poses` genera capturas de perfil de cada pose en `qa-screenshots/poses/`.
 
 ### 2. Sensación de combate
