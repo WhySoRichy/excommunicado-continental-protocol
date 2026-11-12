@@ -27,6 +27,8 @@ export const rooftop: LevelData = {
     background: 0x0b0e16,
     fog: { color: 0x0b0e16, near: 55, far: 170 },
     exposure: 1.0,
+    // La torre domina la ciudad: el horizonte queda muy por debajo de la azotea.
+    skyline: { y: -30 },
   },
   key: { color: 0xc8d8ff, intensity: 1.6, dir: [-0.35, 1, 0.25], shadow: true, shadowArea: 44 },
   lights: [

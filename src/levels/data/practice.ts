@@ -17,15 +17,15 @@ export const practice: LevelData = {
   ambient: {
     sky: 0xd2dcf0,
     ground: 0x564a3e,
-    hemi: 1.35,
+    hemi: 0.95,
     ambientColor: 0xfff3e0,
     ambient: 0.3,
-    ibl: 0.45,
+    ibl: 0.3,
     background: 0x15181f,
     fog: { color: 0x15181f, near: 40, far: 120 },
     exposure: 1.05,
   },
-  key: { color: 0xffeedd, intensity: 2.4, dir: [0.35, 1, 0.45], shadow: true, shadowArea: 32 },
+  key: { color: 0xffeedd, intensity: 1.6, dir: [0.35, 1, 0.45], shadow: true, shadowArea: 32 },
   lights: [
     { pos: [0, 4.5, 9], color: 0xffd9a0, intensity: 45, distance: 16 },
     { pos: [0, 4.5, -3], color: 0xffe4b8, intensity: 40, distance: 16 },

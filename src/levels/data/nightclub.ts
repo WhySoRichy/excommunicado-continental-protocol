@@ -28,6 +28,7 @@ export const nightclub: LevelData = {
     background: 0x120c18,
     fog: { color: 0x120c18, near: 40, far: 120 },
     exposure: 1.05,
+    skyline: { y: 0 },
   },
   key: { color: 0xd8c8ff, intensity: 1.3, dir: [0.25, 1, 0.35], shadow: true, shadowArea: 26 },
   lights: [

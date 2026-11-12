@@ -23,7 +23,8 @@ import {
 } from 'three';
 import type { PhysicsWorld } from '../physics/Physics';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { getLevelMaterial, getNeonMaterial, texScaleOf } from '../render/materials';
+import { EMISSIVE_HDR, getLevelMaterial, getNeonMaterial, texScaleOf } from '../render/materials';
+import { createSkyline } from '../render/sky';
 import { createSignTexture } from '../render/textures';
 import { boxToOriented, buildLevelPhysics, type OrientedBox, rampToOriented } from './levelPhysics';
 import type { DecorDef, DecorProp, LevelData, MaterialId } from './types';
@@ -230,6 +231,11 @@ export function buildLevel(data: LevelData, scene: Scene, physics: PhysicsWorld,
   }
 
   // --- Entorno ---
+  if (a.skyline) {
+    const sky = createSkyline(cx, cz, a.skyline.y, a.fog?.color ?? a.background);
+    disposables.push(sky);
+    root.add(sky.mesh);
+  }
   scene.background = new Color(a.background);
   scene.fog = a.fog ? new Fog(a.fog.color, a.fog.near, a.fog.far) : null;
   scene.environmentIntensity = a.ibl;
@@ -274,7 +280,8 @@ function buildDecor(d: DecorDef, root: Group, neonAcc: Map<string, GeoAccumulato
     case 'sign': {
       const tex = createSignTexture(d.w, d.h, { text: d.text, sub: d.sub, color: d.color, bg: d.bg, font: d.font ?? 'sans' });
       const mat = new MeshBasicMaterial({ map: tex, transparent: d.bg === undefined, toneMapped: false });
-      if (d.glow) mat.color.setScalar(d.glow);
+      // Los carteles luminosos (sin placa de fondo) van en HDR para que el bloom los recoja.
+      mat.color.setScalar((d.glow ?? 1) * (d.bg === undefined ? EMISSIVE_HDR * 0.9 : 1));
       const geo = new PlaneGeometry(d.w, d.h);
       const mesh = new Mesh(geo, mat);
       mesh.position.set(d.c[0], d.c[1], d.c[2]);

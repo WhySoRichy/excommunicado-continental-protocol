@@ -1,4 +1,5 @@
 import {
+  HalfFloatType,
   NeutralToneMapping,
   PCFShadowMap,
   PerspectiveCamera,
@@ -7,6 +8,7 @@ import {
   SRGBColorSpace,
   Vector2,
   WebGLRenderer,
+  WebGLRenderTarget,
 } from 'three';
 import { DynamicResolution } from './dynamicResolution';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
@@ -26,6 +28,7 @@ export interface QualitySettings {
   baseScale: number;
   shadows: boolean;
   shadowMapSize: number;
+  /** Posprocesado: bloom de neones y fogonazos más viñeta. */
   bloom: boolean;
   antialias: boolean;
   /** Multiplicador de partículas de VFX. */
@@ -37,10 +40,42 @@ export interface QualitySettings {
 export const QUALITY: Record<QualityPreset, QualitySettings> = {
   low: { pixelRatioCap: 1, baseScale: 0.75, shadows: false, shadowMapSize: 512, bloom: false, antialias: false, particles: 0.5, shadowInterval: 1 },
   // Medio: la sombra (el mayor coste de CPU tras las draw calls) se regenera en frames alternos.
-  medium: { pixelRatioCap: 1.25, baseScale: 1, shadows: true, shadowMapSize: 1024, bloom: false, antialias: true, particles: 1, shadowInterval: 2 },
+  medium: { pixelRatioCap: 1.25, baseScale: 1, shadows: true, shadowMapSize: 1024, bloom: true, antialias: true, particles: 1, shadowInterval: 2 },
   high: { pixelRatioCap: 1.75, baseScale: 1, shadows: true, shadowMapSize: 2048, bloom: true, antialias: true, particles: 1, shadowInterval: 1 },
 };
 
+/** Oscurecimiento máximo de las esquinas (0 = sin viñeta). */
+const VIGNETTE = 0.42;
+
+/** Añade la viñeta al shader de salida, antes del mapeo de tonos. Devuelve null si el shader cambió. */
+function withVignette(fragment: string): string | null {
+  const decl = 'uniform sampler2D tDiffuse;';
+  const read = 'gl_FragColor = texture2D( tDiffuse, vUv );';
+  if (!fragment.includes(decl) || !fragment.includes(read)) return null;
+  return fragment
+    .replace(decl, `${decl}\nuniform float vignette;`)
+    .replace(
+      read,
+      `${read}\n\t\t\tvec2 vd = ( vUv - 0.5 ) * vec2( 1.0, 0.8 );\n\t\t\tgl_FragColor.rgb *= 1.0 - vignette * smoothstep( 0.32, 0.82, length( vd ) );`,
+    );
+}
+
+/** Umbral del bloom sobre el canal más alto (lineal, antes del mapeo de tonos). */
+const BLOOM_THRESHOLD = 1.4;
+
+/**
+ * El filtro de paso alto original mide la luminancia: un neón magenta o rojo puro apenas la supera
+ * y un suelo pulido con brillo especular la revienta. Aquí se mide el canal más alto y se acota la
+ * entrada, de modo que brillan los emisores y nunca se lava una superficie entera.
+ */
+function tuneHighPass(fragment: string): string | null {
+  const read = 'vec4 texel = texture2D( tDiffuse, vUv );';
+  const lum = 'float v = luminance( texel.xyz );';
+  if (!fragment.includes(read) || !fragment.includes(lum)) return null;
+  return fragment
+    .replace(read, `${read}\n\t\t\ttexel.rgb = min( texel.rgb, vec3( 4.0 ) );`)
+    .replace(lum, 'float v = max( texel.r, max( texel.g, texel.b ) );');
+}
 
 export class GameRenderer {
   readonly renderer: WebGLRenderer;
@@ -113,12 +148,23 @@ export class GameRenderer {
     this.bloomEnabled = on;
     if (on && !this.composer) {
       const size = this.renderer.getSize(new Vector2());
-      this.composer = new EffectComposer(this.renderer);
+      // Destino multimuestreado: sin él, el compositor pierde el antialias del canvas.
+      const target = new WebGLRenderTarget(Math.max(1, size.x), Math.max(1, size.y), { type: HalfFloatType, samples: this.quality.antialias ? 4 : 0 });
+      this.composer = new EffectComposer(this.renderer, target);
       this.composer.addPass(new RenderPass(this.scene, this.camera));
-      // Bloom moderado: umbral alto para que solo brillen neones y fogonazos (nunca lava la imagen).
-      this.bloomPass = new UnrealBloomPass(size, 0.45, 0.35, 0.85);
+      // Bloom moderado: el umbral queda por encima de cualquier superficie iluminada, así que solo
+      // brillan los emisores en HDR (neones, carteles, fogonazos).
+      this.bloomPass = new UnrealBloomPass(size, 0.36, 0.45, BLOOM_THRESHOLD);
+      const highPass = tuneHighPass(this.bloomPass.materialHighPassFilter.fragmentShader);
+      if (highPass) this.bloomPass.materialHighPassFilter.fragmentShader = highPass;
       this.composer.addPass(this.bloomPass);
-      this.composer.addPass(new OutputPass());
+      const out = new OutputPass();
+      const fragment = withVignette(out.material.fragmentShader);
+      if (fragment) {
+        out.material.fragmentShader = fragment;
+        out.uniforms.vignette = { value: VIGNETTE };
+      }
+      this.composer.addPass(out);
       this.resize();
     }
   }
@@ -212,7 +258,12 @@ export class GameRenderer {
 
   /** Precompila los shaders del nivel para evitar tirones al ver un material por primera vez. */
   prewarm(): void {
+    // Con posprocesado la escena se dibuja en el destino del compositor, cuyos programas difieren de
+    // los de pantalla (sin mapeo de tonos): se compila contra ese destino para no duplicarlos.
+    const target = this.bloomEnabled && this.composer ? this.composer.readBuffer : null;
+    this.renderer.setRenderTarget(target);
     this.renderer.compile(this.scene, this.camera);
+    this.renderer.setRenderTarget(null);
     // Nivel nuevo: la sombra se regenera en el primer frame aunque toque saltarlo.
     this.renderer.shadowMap.needsUpdate = true;
   }

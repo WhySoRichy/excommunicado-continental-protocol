@@ -55,6 +55,8 @@ La primera vez que se ejecuten las e2e: `npx playwright install chromium`. Requi
 - **Tests que dependen del tiempo real.** En CI el juego va a ~3 FPS. Los tests deben avanzar con `step()` o esperar condiciones con `expect.poll`, nunca asumir que "en 0,5 s ya se movió".
 - **Luminancia medida en el canvas.** No detecta capas DOM que oscurezcan la pantalla.
 - **Estado que sobrevive al cambiar de nivel.** `loadSession` debe limpiar todo lo transitorio (toasts, balizas, interactivos usados).
+- **Bloom que lava la imagen.** El bloom actúa antes del mapeo de tonos: cualquier superficie que pase del umbral (`BLOOM_THRESHOLD` en `render/Renderer.ts`) brilla entera. Un suelo claro y pulido con mucha luz lo superaba y el vestíbulo quedaba blanco. Solo los emisores van en HDR (`EMISSIVE_HDR` en `render/materials.ts`); las superficies iluminadas deben quedar por debajo de 1.
+- **Shaders compilados dos veces.** Con posprocesado la escena se dibuja en un destino intermedio y sus programas no son los de pantalla. `prewarm()` compila contra ese destino; si no, el presupuesto de programas se dispara.
 - **Niveles:** escalones de más de 0,32 m o muebles sin `noWalk` rompen la navegación de los enemigos. Los tests de navegación lo detectan.
 
 ## Despliegue

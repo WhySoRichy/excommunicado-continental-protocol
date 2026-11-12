@@ -6,6 +6,7 @@ Qué se puede mejorar y en qué orden. Cada bloque está pensado para una sesió
 
 - Hub, tutorial, tres contratos y Gauntlet completos y jugables de principio a fin.
 - Animación procedural con IK de piernas, codos y cabeza (`src/entities/CharacterRig.ts`).
+- Dirección de arte nocturna: cielo con silueta de ciudad en los exteriores, vestíbulo del Continental con papel pintado y damero de mármol, bloom y viñeta desde el preset Medio.
 - 143 pruebas unitarias y 38 e2e; CI y despliegue automático en GitHub Pages.
 
 ## Prioridad alta: lo que más se nota al jugar

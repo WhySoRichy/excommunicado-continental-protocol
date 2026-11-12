@@ -31,6 +31,7 @@ export const docks: LevelData = {
     background: 0x0d1118,
     fog: { color: 0x0d1118, near: 45, far: 150 },
     exposure: 1.0,
+    skyline: { y: 0 },
   },
   key: { color: 0xbcd0ff, intensity: 1.8, dir: [-0.4, 1, 0.3], shadow: true, shadowArea: 40 },
   lights: [

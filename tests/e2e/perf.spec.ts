@@ -13,7 +13,8 @@ const BUDGET = {
   calls: 260,
   triangles: 120_000,
   /** Programas de shader compilados en TODA la sesión (la caché es acumulativa). */
-  programsSession: 64,
+  // Incluye la cadena de posprocesado (bloom y salida), que aporta unos nueve programas propios.
+  programsSession: 76,
   /** CPU por frame (simulación + envío de render) sin freno, en ms. */
   cpuMs: 4,
   /** CPU por frame con la CPU frenada 2× (portátil con gráfica integrada): deja ~6,7 ms a la GPU. */

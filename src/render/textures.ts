@@ -14,6 +14,7 @@ export type TexKind =
   | 'plaster'
   | 'marble'
   | 'marbleDark'
+  | 'marbleChecker'
   | 'wood'
   | 'carpet'
   | 'brushed'
@@ -23,6 +24,7 @@ export type TexKind =
   | 'tiles'
   | 'danceFloor'
   | 'brick'
+  | 'wallpaper'
   | 'gravel'
   | 'hazard'
   | 'target'
@@ -171,6 +173,57 @@ function marbleTex(seed: number, base: string, vein: string, accent: string): Ca
   ctx.strokeRect(size / 2 + 1, 1, size / 2 - 2, size / 2 - 2);
   ctx.strokeRect(1, size / 2 + 1, size / 2 - 2, size / 2 - 2);
   ctx.strokeRect(size / 2 + 1, size / 2 + 1, size / 2 - 2, size / 2 - 2);
+  return finish(c);
+}
+
+function marbleCheckerTex(seed: number): CanvasTexture {
+  // Damero de mármol crema y negro: cada repetición son 2 × 2 losas.
+  const size = 512;
+  const half = size / 2;
+  const [c, ctx] = makeCanvas(size);
+  const rng = new Rng(seed);
+  const slab = (x: number, y: number, base: string, vein: string, accent: string): void => {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, y, half, half);
+    ctx.clip();
+    ctx.fillStyle = base;
+    ctx.fillRect(x, y, half, half);
+    ctx.lineCap = 'round';
+    const veins = (color: string, width: number, alpha: number, count: number): void => {
+      ctx.strokeStyle = color;
+      ctx.globalAlpha = alpha;
+      ctx.lineWidth = width;
+      for (let v = 0; v < count; v++) {
+        let px = x + rng.range(0, half);
+        let py = y - 10;
+        ctx.beginPath();
+        ctx.moveTo(px, py);
+        while (py < y + half + 10) {
+          px += rng.range(-20, 20);
+          py += rng.range(12, 28);
+          ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    };
+    veins(vein, 2, 0.35, 3);
+    veins(vein, 1, 0.5, 4);
+    veins(accent, 1.2, 0.4, 2);
+    ctx.restore();
+  };
+  slab(0, 0, '#cfc8ba', '#8f8a80', '#c9a227');
+  slab(half, half, '#cfc8ba', '#8f8a80', '#c9a227');
+  slab(half, 0, '#1e1e23', '#77777e', '#d4af37');
+  slab(0, half, '#1e1e23', '#77777e', '#d4af37');
+  speckle(ctx, size, rng, 1200, 0.05, true);
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(0, 0, half, half);
+  ctx.strokeRect(half, 0, half, half);
+  ctx.strokeRect(0, half, half, half);
+  ctx.strokeRect(half, half, half, half);
   return finish(c);
 }
 
@@ -337,19 +390,83 @@ function danceFloorTex(): CanvasTexture {
 }
 
 function brickTex(seed: number): CanvasTexture {
-  const size = 256;
+  // Un tile = 2 m: hiladas de 12,5 cm y ladrillos de 25 cm, con mortero oscuro y hollín.
+  const size = 512;
   const [c, ctx] = makeCanvas(size);
   const rng = new Rng(seed);
-  ctx.fillStyle = '#8f8a84';
+  ctx.fillStyle = '#2f2a28';
   ctx.fillRect(0, 0, size, size);
-  const rows = 8;
+  const rows = 16;
   const bh = size / rows;
+  const bw = size / 8;
   for (let r = 0; r < rows; r++) {
-    const off = r % 2 === 0 ? 0 : size / 8;
-    for (let x = -size / 4; x < size; x += size / 4) {
-      const v = rng.range(-14, 14);
-      ctx.fillStyle = `rgb(${142 + v},${70 + v * 0.5},${52 + v * 0.4})`;
-      ctx.fillRect(x + off + 2, r * bh + 2, size / 4 - 4, bh - 4);
+    const off = r % 2 === 0 ? 0 : bw / 2;
+    for (let x = -bw; x < size; x += bw) {
+      const v = rng.range(-12, 12);
+      const soot = rng.chance(0.12) ? 0.62 : 1;
+      ctx.fillStyle = `rgb(${Math.round((100 + v) * soot)},${Math.round((56 + v * 0.5) * soot)},${Math.round((48 + v * 0.4) * soot)})`;
+      ctx.fillRect(x + off + 2, r * bh + 2, bw - 4, bh - 4);
+      // Canto superior iluminado y base en sombra: relieve barato.
+      ctx.fillStyle = 'rgba(255,220,200,0.10)';
+      ctx.fillRect(x + off + 2, r * bh + 2, bw - 4, 2);
+      ctx.fillStyle = 'rgba(0,0,0,0.22)';
+      ctx.fillRect(x + off + 2, r * bh + bh - 4, bw - 4, 2);
+    }
+  }
+  // Manchas de humedad (lejos de los bordes para que el mosaico no se note).
+  for (let i = 0; i < 12; i++) {
+    const x = rng.range(70, size - 70);
+    const y = rng.range(70, size - 70);
+    const g = ctx.createRadialGradient(x, y, 2, x, y, rng.range(24, 64));
+    g.addColorStop(0, 'rgba(0,0,0,0.20)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+  }
+  return finish(c);
+}
+
+function wallpaperTex(seed: number): CanvasTexture {
+  // Papel pintado del Continental: verde botella con rombos y florones dorados muy tenues.
+  const size = 512;
+  const [c, ctx] = makeCanvas(size);
+  const rng = new Rng(seed);
+  ctx.fillStyle = '#21403a';
+  ctx.fillRect(0, 0, size, size);
+  for (let x = 0; x < size; x += 32) {
+    ctx.fillStyle = (x / 32) % 2 === 0 ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.07)';
+    ctx.fillRect(x, 0, 32, size);
+  }
+  speckle(ctx, size, rng, 1400, 0.07, false);
+  const n = 4;
+  const s = size / n;
+  ctx.lineWidth = 1.5;
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      const cx = i * s + s / 2;
+      const cy = j * s + s / 2;
+      ctx.strokeStyle = 'rgba(212,175,55,0.22)';
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - s / 2);
+      ctx.lineTo(cx + s / 2, cy);
+      ctx.lineTo(cx, cy + s / 2);
+      ctx.lineTo(cx - s / 2, cy);
+      ctx.closePath();
+      ctx.stroke();
+      // Florón: cuatro pétalos y un botón central.
+      ctx.fillStyle = 'rgba(212,175,55,0.30)';
+      for (let k = 0; k < 4; k++) {
+        const a = (k * Math.PI) / 2;
+        ctx.beginPath();
+        ctx.ellipse(cx + Math.cos(a) * s * 0.13, cy + Math.sin(a) * s * 0.13, s * 0.1, s * 0.045, a, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.beginPath();
+      ctx.arc(cx, cy, s * 0.035, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(i * s, j * s, s * 0.03, 0, Math.PI * 2);
+      ctx.fill();
     }
   }
   return finish(c);
@@ -441,6 +558,9 @@ export function getTexture(kind: TexKind): Texture {
     case 'marbleDark':
       t = marbleTex(14, '#4c4c52', '#a9a6a0', '#d4af37');
       break;
+    case 'marbleChecker':
+      t = marbleCheckerTex(24);
+      break;
     case 'wood':
       t = woodTex(15);
       break;
@@ -467,6 +587,9 @@ export function getTexture(kind: TexKind): Texture {
       break;
     case 'brick':
       t = brickTex(20);
+      break;
+    case 'wallpaper':
+      t = wallpaperTex(23);
       break;
     case 'gravel':
       t = gravelTex(21);

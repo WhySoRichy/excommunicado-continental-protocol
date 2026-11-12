@@ -20,6 +20,7 @@ export type MaterialId =
   | 'plasterDark'
   | 'marble'
   | 'marbleDark'
+  | 'marbleChecker'
   | 'woodPanel'
   | 'woodDark'
   | 'carpetRed'
@@ -41,6 +42,7 @@ export type MaterialId =
   | 'leather'
   | 'velvet'
   | 'brick'
+  | 'wallpaper'
   | 'water'
   | 'roofGravel'
   | 'hazard'
@@ -95,6 +97,8 @@ export interface AmbientDef {
   background: number;
   fog: { color: number; near: number; far: number } | null;
   exposure: number;
+  /** Cielo nocturno con silueta de ciudad (niveles a cielo abierto). `y` desplaza el horizonte (m). */
+  skyline?: { y: number };
 }
 
 export interface KeyLightDef {

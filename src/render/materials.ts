@@ -25,8 +25,9 @@ const SPECS: Record<MaterialId, MatSpec> = {
   concreteDark: { color: 0x8a8a88, tex: 'concrete', texScale: 3, roughness: 0.92, metalness: 0 },
   plaster: { color: 0xffffff, tex: 'plaster', texScale: 2.5, roughness: 0.9, metalness: 0 },
   plasterDark: { color: 0x8c857a, tex: 'plaster', texScale: 2.5, roughness: 0.9, metalness: 0 },
-  marble: { color: 0xffffff, tex: 'marble', texScale: 3, roughness: 0.32, metalness: 0 },
-  marbleDark: { color: 0xffffff, tex: 'marbleDark', texScale: 3, roughness: 0.28, metalness: 0 },
+  marble: { color: 0xffffff, tex: 'marble', texScale: 3, roughness: 0.48, metalness: 0 },
+  marbleChecker: { color: 0xffffff, tex: 'marbleChecker', texScale: 2, roughness: 0.42, metalness: 0 },
+  marbleDark: { color: 0xffffff, tex: 'marbleDark', texScale: 3, roughness: 0.4, metalness: 0 },
   woodPanel: { color: 0xffffff, tex: 'wood', texScale: 1.6, roughness: 0.6, metalness: 0 },
   woodDark: { color: 0x9b8576, tex: 'wood', texScale: 1.6, roughness: 0.6, metalness: 0 },
   carpetRed: { color: 0xb8414f, tex: 'carpet', texScale: 2, roughness: 0.95, metalness: 0 },
@@ -42,12 +43,13 @@ const SPECS: Record<MaterialId, MatSpec> = {
   containerGreen: { color: 0x47875a, tex: 'corrugated', texScale: 2.6, roughness: 0.7, metalness: 0.15 },
   containerYellow: { color: 0xd4a32f, tex: 'corrugated', texScale: 2.6, roughness: 0.7, metalness: 0.15 },
   asphalt: { color: 0xffffff, tex: 'asphalt', texScale: 4, roughness: 0.95, metalness: 0 },
-  tilesBlack: { color: 0xffffff, tex: 'tiles', texScale: 2, roughness: 0.35, metalness: 0 },
+  tilesBlack: { color: 0xffffff, tex: 'tiles', texScale: 2, roughness: 0.42, metalness: 0 },
   danceFloor: { color: 0xffffff, tex: 'danceFloor', texScale: 4, roughness: 0.3, metalness: 0, emissive: 0xffffff, emissiveIntensity: 0.85, emissiveFromMap: true },
   glass: { color: 0xa8dcff, texScale: 1, roughness: 0.08, metalness: 0, transparent: true, opacity: 0.22 },
   leather: { color: 0x5a372c, texScale: 1, roughness: 0.55, metalness: 0 },
   velvet: { color: 0x8a1e42, tex: 'noise', texScale: 1, roughness: 0.92, metalness: 0 },
   brick: { color: 0xffffff, tex: 'brick', texScale: 2, roughness: 0.9, metalness: 0 },
+  wallpaper: { color: 0xffffff, tex: 'wallpaper', texScale: 2, roughness: 0.85, metalness: 0 },
   water: { color: 0x23557a, texScale: 1, roughness: 0.12, metalness: 0.1 },
   roofGravel: { color: 0xffffff, tex: 'gravel', texScale: 2, roughness: 0.96, metalness: 0 },
   hazard: { color: 0xffffff, tex: 'hazard', texScale: 1, roughness: 0.7, metalness: 0 },
@@ -89,12 +91,15 @@ export function getLevelMaterial(id: MaterialId): MeshStandardMaterial {
 
 const neonCache = new Map<string, MeshBasicMaterial>();
 
-/** Material de neón (no iluminado, siempre legible). `intensity` > 1 alimenta el bloom opcional. */
+/** Los emisores van en HDR, por encima del umbral del bloom (`BLOOM_THRESHOLD` en Renderer.ts). */
+export const EMISSIVE_HDR = 2.6;
+
+/** Material de neón (no iluminado, siempre legible). Su color en HDR alimenta el bloom. */
 export function getNeonMaterial(color: number, intensity = 1.6): MeshBasicMaterial {
   const key = `${color}:${intensity}`;
   const hit = neonCache.get(key);
   if (hit) return hit;
-  const c = new Color(color).multiplyScalar(intensity);
+  const c = new Color(color).multiplyScalar(intensity * EMISSIVE_HDR);
   const m = new MeshBasicMaterial({ color: c });
   m.name = `neon:${key}`;
   neonCache.set(key, m);
