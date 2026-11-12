@@ -182,6 +182,7 @@ export class Civilian {
     pose.aim = 0;
     if (!this.alive) this.deadFor += dt;
     pose.stateTime = this.alive ? m.stateTime : this.deadFor;
+    pose.death = 2;
     this.rig.update(pose, dt);
     if (this.alive && this.state === 'calm' && this.behavior === 'dance') {
       this.dancePhase += dt * 6.5;

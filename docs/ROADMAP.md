@@ -5,18 +5,18 @@ Qué se puede mejorar y en qué orden. Cada bloque está pensado para una sesió
 ## Estado actual
 
 - Hub, tutorial, tres contratos y Gauntlet completos y jugables de principio a fin.
-- Animación procedural con IK de piernas, codos y cabeza (`src/entities/CharacterRig.ts`).
+- Personajes procedurales con volumen y cara, y animación procedural con IK de piernas, reacciones de impacto y caídas variadas (`src/entities/CharacterRig.ts`).
 - Dirección de arte nocturna: cielo con silueta de ciudad en los exteriores, vestíbulo del Continental con papel pintado y damero de mármol, bloom y viñeta desde el preset Medio.
 - 143 pruebas unitarias y 38 e2e; CI y despliegue automático en GitHub Pages.
 
 ## Prioridad alta: lo que más se nota al jugar
 
-### 1. Segunda pasada de animación
+### 1. Tercera pasada de animación
+Ya están hechas las reacciones de impacto, las tres caídas al morir (de bruces, de espaldas o desplomado, según de dónde venga el disparo), el esprint con zancada propia y los pasos al girar en el sitio. Queda:
 - **Mano izquierda con IK** hacia el guardamanos del arma larga y hacia la pistola: ahora son ángulos fijos y las manos no siempre coinciden.
 - **Pies como hueso propio**, para que la suela quede plana en el deslizamiento y de puntillas al agacharse.
-- **Reacciones de impacto** en enemigos (sacudida hacia atrás según la dirección del disparo) y muerte según el arma: hoy todos caen igual.
 - **Vault con tiempos**: usar la duración real del estado para apoyar la mano, pasar las piernas y aterrizar.
-- **Giro en el sitio**: pasos cortos cuando el personaje rota sin desplazarse.
+- **Takedown coreografiado**: hoy es un golpe genérico.
 - Cómo comprobarlo: `npm run poses` genera capturas de perfil de cada pose en `qa-screenshots/poses/`.
 
 ### 2. Sensación de combate

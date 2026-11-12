@@ -75,10 +75,16 @@ export interface RigPose {
   swap: number;
   /** 0..1 arrodillado (enemigo aturdido o jefe entre fases). */
   kneel: number;
+  /** Sacudida al recibir un impacto, 0..1 (decae). */
+  flinch: number;
+  /** Lado del que vino el impacto (−1 izquierda, +1 derecha): ladea el torso. */
+  flinchSide: number;
+  /** Forma de caer al morir: 0 de bruces, 1 de espaldas, 2 desplomado de lado. */
+  death: 0 | 1 | 2;
 }
 
 export function idlePose(): RigPose {
-  return { speed: 0, moveAngle: 0, state: 'ground', posture: 'stand', grounded: true, aim: 0, aimPitch: 0, stateTime: 0, reload: -1, recoil: 0, melee: 0, swap: 0, kneel: 0 };
+  return { speed: 0, moveAngle: 0, state: 'ground', posture: 'stand', grounded: true, aim: 0, aimPitch: 0, stateTime: 0, reload: -1, recoil: 0, melee: 0, swap: 0, kneel: 0, flinch: 0, flinchSide: 0, death: 0 };
 }
 
 const tmpColor = new Color();
@@ -213,6 +219,9 @@ export class CharacterRig {
   private aimK = 0;
   private sprintK = 0;
   private kneelK = 0;
+  /** 0..1 girando sobre sí mismo sin desplazarse (pasos cortos en el sitio). */
+  private turnK = 0;
+  private lastYaw = 0;
   private opacity = 1;
   // Reutilizados cada frame (sin asignaciones en el bucle).
   private readonly stepL: FootStep = { along: 0, lift: 0 };
@@ -443,15 +452,24 @@ export class CharacterRig {
     const ak = this.aimK;
     const sk = this.sprintK;
     const kk = this.kneelK;
+    // Giro en el sitio: se mide cuánto rota la raíz por segundo.
+    let dYaw = this.root.rotation.y - this.lastYaw;
+    this.lastYaw = this.root.rotation.y;
+    dYaw -= Math.round(dYaw / (Math.PI * 2)) * Math.PI * 2;
+    const turnRate = dt > 1e-5 ? Math.abs(dYaw) / dt : 0;
 
     // ------------------------------------------------------------- marcha
     const moving = p.grounded && p.speed > 0.25 && onFeet;
     const speedN = clamp(p.speed / 7, 0, 1);
+    this.turnK = damp(this.turnK, !moving && onFeet && p.grounded && st !== 'locked' ? clamp((turnRate - 0.9) / 2.2, 0, 1) : 0, 10, dt);
+    const tk = this.turnK;
     if (moving) this.phase += Math.PI * cadence(p.speed) * dt;
+    else if (tk > 0.02) this.phase += Math.PI * 2.4 * tk * dt;
     const ph = this.phase;
     const amp = moving ? clamp(p.speed / 2.2, 0.3, 1) : 0;
-    const half = amp * lerp(0.2, 0.36, speedN) * (1 - 0.35 * ck);
-    const liftH = amp * lerp(0.06, 0.16, speedN) * (1 - 0.4 * ck);
+    // El esprint alarga la zancada y sube más las rodillas; girando en el sitio, pasitos sin avance.
+    const half = amp * lerp(0.2, 0.36, speedN) * (1 - 0.35 * ck) * (1 + 0.28 * sk);
+    const liftH = amp * lerp(0.06, 0.16, speedN) * (1 - 0.4 * ck) * (1 + 0.6 * sk) + 0.05 * tk;
     const cf = Math.cos(p.moveAngle);
     const cr = -Math.sin(p.moveAngle);
     const sL = footStep(ph, half, liftH, this.stepL);
@@ -469,13 +487,14 @@ export class CharacterRig {
     let rDown = hipY - sR.lift;
     let hipLocal = hipY - SPIN_Y;
 
-    let torsoX = lerp(-0.04 - 0.08 * speedN - 0.14 * sk, -0.42, ck);
+    let torsoX = lerp(-0.04 - 0.08 * speedN - 0.24 * sk, -0.42, ck);
     let torsoZ = -cr * 0.07 * amp;
     let torsoY = lead * cf * 0.16 * (armed ? 0.35 + 0.65 * sk : 1);
     let hipsYaw = -lead * cf * 0.12;
     let headX = p.aimPitch * 0.55;
     let headLevel = 0.85;
     let spinX = 0;
+    let spinZ = 0;
     let spinY = SPIN_Y;
     // Peso de las poses de arma (guardia/apuntado); los estados acrobáticos lo reducen.
     let armsFree = 0;
@@ -540,19 +559,47 @@ export class CharacterRig {
         break;
       case 'dead': {
         const t = clamp(p.stateTime / 0.55, 0, 1);
-        spinX = HALF_PI * t * t;
-        spinY = lerp(SPIN_Y, 0.16, t);
-        lF = 0.05;
-        rF = 0.22;
-        lDown = 0.9;
-        rDown = 0.8;
         lSide = -0.08;
         rSide = 0.1;
         hipLocal = 0.02;
-        torsoX = 0.05;
-        headX = 0.2;
         headLevel = 0;
         armsFree = 1;
+        if (p.death === 1) {
+          // De espaldas: el impacto lo tumba hacia atrás con las piernas abiertas.
+          spinX = HALF_PI * t * t;
+          spinY = lerp(SPIN_Y, 0.15, t);
+          lF = 0.2;
+          rF = -0.02;
+          lDown = 0.86;
+          rDown = 0.92;
+          lSide = -0.16;
+          rSide = 0.2;
+          torsoX = 0.12 * t;
+          headX = 0.25 * t;
+        } else if (p.death === 2) {
+          // Desplomado: primero ceden las rodillas, luego cae de lado.
+          const buckle = smooth(0, 0.45, t);
+          const fall = smooth(0.3, 1, t);
+          spinZ = HALF_PI * fall * fall;
+          spinX = 0.25 * fall;
+          spinY = lerp(SPIN_Y, 0.2, t);
+          lF = 0.3;
+          rF = 0.16;
+          lDown = lerp(0.9, 0.5, buckle);
+          rDown = lerp(0.9, 0.62, buckle);
+          torsoX = -0.5 * buckle;
+          headX = -0.3;
+        } else {
+          // De bruces (en huesos que suben, el giro negativo es hacia delante).
+          spinX = -HALF_PI * t * t;
+          spinY = lerp(SPIN_Y, 0.16, t);
+          lF = 0.05;
+          rF = 0.22;
+          lDown = 0.9;
+          rDown = 0.8;
+          torsoX = 0.05;
+          headX = 0.45;
+        }
         break;
       }
       default:
@@ -692,10 +739,18 @@ export class CharacterRig {
       lsz = 0.2;
       rsz = -0.2;
     } else if (st === 'dead') {
-      lsx = rsx = -0.25;
-      lel = rel = 0.35;
-      lsz = -0.95;
-      rsz = 0.95;
+      lsx = rsx = p.death === 1 ? 0.5 : -0.25;
+      lel = rel = p.death === 2 ? 0.9 : 0.35;
+      lsz = p.death === 2 ? -0.3 : -0.95;
+      rsz = p.death === 2 ? 0.5 : 0.95;
+    }
+    // Sacudida de impacto: el torso se vence hacia atrás y hacia el lado contrario al disparo.
+    if (p.flinch > 0 && st !== 'dead') {
+      torsoX += 0.34 * p.flinch;
+      torsoZ += 0.26 * p.flinch * p.flinchSide;
+      headX += 0.3 * p.flinch;
+      lel += 0.25 * p.flinch;
+      rel += 0.15 * p.flinch;
     }
     if (kk > 0.001) {
       lsx = lerp(lsx, 0.35 - torsoX, kk);
@@ -735,8 +790,10 @@ export class CharacterRig {
     // La voltereta y la caída siguen el tiempo exacto del estado (no se suavizan).
     if (exact) {
       this.spin.rotation.x = spinX;
+      this.spin.rotation.z = spinZ;
       this.spin.position.y = spinY;
     } else {
+      this.spin.rotation.z = s(this.spin.rotation.z, 0);
       // Tras una voltereta completa el giro equivale a 0: no se "desenrolla".
       if (this.spin.rotation.x < -Math.PI) this.spin.rotation.x += Math.PI * 2;
       this.spin.rotation.x = s(this.spin.rotation.x, 0);

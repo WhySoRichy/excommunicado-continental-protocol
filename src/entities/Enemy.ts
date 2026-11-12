@@ -105,6 +105,10 @@ export class Enemy {
   lastHitWasHead = false;
   /** Segundos de juego desde la muerte (para la animación de caída). */
   private deadFor = 0;
+  /** Sacudida visual al recibir un impacto (0..1) y lado del que vino. */
+  private flinch = 0;
+  private flinchSide = 0;
+  private deathStyle: 0 | 1 | 2 = 0;
 
   constructor(def: EnemySpawnDef, w: EnemyWorld, index: number) {
     this.id = def.id;
@@ -433,7 +437,19 @@ export class Enemy {
     this.lastHitWasHead = zone === 'head';
     this.perception.damaged = true;
     this.perception.damageFrom.copy(from);
-    if (r.killed) this.die();
+    // Dirección del impacto respecto a la cara (el personaje mira a −Z girado por yaw).
+    const dx = from.x - this.mover.feet.x;
+    const dz = from.z - this.mover.feet.z;
+    const yaw = this.mover.yaw;
+    const front = -Math.sin(yaw) * dx - Math.cos(yaw) * dz;
+    const right = Math.cos(yaw) * dx - Math.sin(yaw) * dz;
+    this.flinch = 1;
+    this.flinchSide = right > 0 ? -1 : 1;
+    if (r.killed) {
+      // Por la espalda cae de bruces; de frente, de espaldas (siempre si fue a la cabeza) o desplomado.
+      this.deathStyle = front < 0 ? 0 : zone === 'head' || Math.abs(right) < Math.abs(front) * 0.35 ? 1 : 2;
+      this.die();
+    }
     return r;
   }
 
@@ -486,6 +502,10 @@ export class Enemy {
     pose.stateTime = this.alive ? m.stateTime : this.deadFor;
     pose.recoil = this.recoilVis;
     pose.melee = 0;
+    this.flinch = Math.max(0, this.flinch - dt * 4.5);
+    pose.flinch = this.flinch * this.flinch;
+    pose.flinchSide = this.flinchSide;
+    pose.death = this.deathStyle;
     this.rig.update(pose, dt);
     // Feedback de impacto y telégrafo del blindado/jefe: el rim se enciende.
     const rim = this.rig.rim;

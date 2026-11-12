@@ -39,7 +39,7 @@ await shot('01-reposo');
 await ev(() => window.__EXCOM__.step(26, { moveX: 1 }));
 await shot('02-trote');
 await reset();
-await ev(() => window.__EXCOM__.step(40, { moveX: 1, sprint: true }));
+await ev(() => window.__EXCOM__.step(40, { moveY: 1, sprint: true }));
 await shot('03-sprint');
 await reset();
 await ev(() => { const q = window.__EXCOM__; q.step(1, { crouch: true }); q.step(40, {}); });
