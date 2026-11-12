@@ -57,7 +57,7 @@ export class Civilian {
     this.mover = new PlayerController(physics, new Vector3(def.pos[0], def.pos[1] + 0.02, def.pos[2]), def.yaw, Groups.CIVILIAN);
     const outfit = OUTFITS[index % OUTFITS.length]!;
     // Material compartido por todos los civiles (los colores van por vértice; el rim no cambia).
-    this.rig = new CharacterRig('civ', { colors: outfit.colors, rimColor: CIVILIAN_COLOR, rimStrength: 0.9, hair: outfit.hair, weapon: 'none' });
+    this.rig = new CharacterRig('civ', { colors: outfit.colors, rimColor: CIVILIAN_COLOR, rimStrength: 0.7, hair: outfit.hair, weapon: 'none' });
     scene.add(this.rig.root);
     this.dancePhase = rng.range(0, Math.PI * 2);
     this.behavior = def.behavior;

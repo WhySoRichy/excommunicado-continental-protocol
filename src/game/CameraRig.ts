@@ -29,10 +29,10 @@ const SHOULDER_OFFSET = 0.7;
 const SHOULDER_OFFSET_AIM = 0.7;
 const UP_OFFSET = 0.2;
 const DIST_NORMAL = 3.1;
-const DIST_AIM = 2.2;
+const DIST_AIM = 2.7;
 const DIST_SPRINT = 3.4;
 /** Zoom de FOV al apuntar (compensa la distancia mayor: el objetivo se ve igual de grande). */
-const AIM_FOV_FACTOR = 0.7;
+const AIM_FOV_FACTOR = 0.78;
 const CAM_RADIUS = 0.2;
 const MARGIN = 0.06;
 const MIN_DIST = 0.25;

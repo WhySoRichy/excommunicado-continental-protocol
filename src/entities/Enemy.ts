@@ -59,7 +59,17 @@ const _eye = new Vector3();
 const _muzzle = new Vector3();
 const _dir = new Vector3();
 const _hitPt = new Vector3();
+/** Grosor del rim en reposo: por debajo del umbral del bloom, para que solo brillen el impacto y el telégrafo. */
+const RIM_BASE = 0.8;
+/**
+ * Haz del láser: se afila hacia el extremo del objetivo (+Z tras `lookAt`), que es el que
+ * queda junto a la cámara; con grosor constante se veía como una banda.
+ */
 const laserGeo = new BoxGeometry(1, 1, 1);
+{
+  const p = laserGeo.getAttribute('position');
+  for (let i = 0; i < p.count; i++) if (p.getZ(i) > 0) p.setXY(i, p.getX(i) * 0.3, p.getY(i) * 0.3);
+}
 const RED = new Color(0xff2233);
 
 export class Enemy {
@@ -124,7 +134,7 @@ export class Enemy {
     this.rig = new CharacterRig(`enemy:${def.id}`, {
       colors: this.def.colors,
       rimColor: this.def.color,
-      rimStrength: 1.1,
+      rimStrength: RIM_BASE,
       hair: this.def.hair,
       bulk: this.def.bulk,
       vest: this.def.vest,
@@ -414,7 +424,7 @@ export class Enemy {
         this.laser.position.addVectors(_muzzle, _w).multiplyScalar(0.5);
         this.laser.lookAt(_w);
         this.laser.scale.set(0.02 + k * 0.02, 0.02 + k * 0.02, len);
-        this.laserMat.color.copy(RED).multiplyScalar(0.6 + k * 2.2);
+        this.laserMat.color.copy(RED).multiplyScalar(0.6 + k * 1.6);
         this.laser.visible = true;
         this.laserBeepT -= dt;
         if (this.laserBeepT <= 0) {
@@ -514,10 +524,10 @@ export class Enemy {
       rim.rimStrength.value = 2.4;
     } else if (this.cmd.telegraph > 0 && !this.laser && this.alive) {
       rim.rimColor.value.copy(this.baseRim).lerp(RED, this.cmd.telegraph);
-      rim.rimStrength.value = 1.1 + this.cmd.telegraph * 1.6;
+      rim.rimStrength.value = RIM_BASE + this.cmd.telegraph * 1.6;
     } else {
       rim.rimColor.value.copy(this.baseRim);
-      rim.rimStrength.value = this.alive ? 1.1 : 0.25;
+      rim.rimStrength.value = this.alive ? RIM_BASE : 0.25;
     }
     // Icono de alerta (? / !) sobre la cabeza.
     if (this.alive && this.cmd.icon !== 'none') {
