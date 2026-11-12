@@ -98,7 +98,7 @@ El navegador se abre en http://localhost:4173. La guía completa, con instalaci�
 
 - **TypeScript en modo strict** con Vite 8.
 - **Animación procedural**, sin clips grabados: las piernas se resuelven con cinemática inversa para que los pies pisen el suelo, y las poses de arma, recarga, deslizamiento o voltereta se calculan en cada frame.
-- **Three.js 0.187** para el render: personajes low-poly como un solo `SkinnedMesh`, rim light Fresnel, IBL, sombras y resolución dinámica. Los neones y carteles van en HDR y alimentan un bloom con viñeta; los exteriores tienen un cielo nocturno con la silueta de la ciudad generado en un canvas.
+- **Three.js 0.187** para el render: personajes low-poly procedurales (cuerpo, cara, pelo y ropa generados por código) como un solo `SkinnedMesh`, rim light Fresnel, IBL, sombras y resolución dinámica. Los neones y carteles van en HDR y alimentan un bloom con viñeta; los exteriores tienen un cielo nocturno con la silueta de la ciudad generado en un canvas.
 - **Rapier 0.21** para la física: el `KinematicCharacterController` mueve las cápsulas de jugador, enemigos y civiles.
 - **Bucle a paso fijo de 60 Hz** con interpolación de render y una sola máquina de estados de juego.
 - **Niveles como datos**: mallas y colliders salen de la misma fuente, y la navegación (rejilla 2.5D con A*) se genera a partir de ellos.
