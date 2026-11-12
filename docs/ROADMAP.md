@@ -7,7 +7,7 @@ Qué se puede mejorar y en qué orden. Cada bloque está pensado para una sesió
 - Hub, tutorial, tres contratos y Gauntlet completos y jugables de principio a fin.
 - Personajes procedurales con volumen y cara, y animación procedural con IK de piernas, reacciones de impacto y caídas variadas (`src/entities/CharacterRig.ts`).
 - Dirección de arte nocturna: cielo con silueta de ciudad en los exteriores, vestíbulo del Continental con papel pintado y damero de mármol, bloom y viñeta desde el preset Medio.
-- 143 pruebas unitarias y 38 e2e; CI y despliegue automático en GitHub Pages.
+- 148 pruebas unitarias y 38 e2e; CI y despliegue automático en GitHub Pages.
 
 ## Prioridad alta: lo que más se nota al jugar
 
@@ -20,9 +20,9 @@ Ya están hechas las reacciones de impacto, las tres caídas al morir (de bruces
 - Cómo comprobarlo: `npm run poses` genera capturas de perfil de cada pose en `qa-screenshots/poses/`.
 
 ### 2. Sensación de combate
-Ya hay pausa de impacto y sacudida en cada baja, casquillos y pisadas según la velocidad. Queda:
-- Humo en la boca del arma.
-- Pisadas distintas según el material del suelo.
+Ya hay pausa de impacto y sacudida en cada baja, casquillos, humo en la boca del arma y pisadas que cambian con la velocidad y con el suelo (`src/levels/surface.ts`). Queda:
+- Sonido propio para los impactos según la superficie (metal, madera, hormigón).
+- Que los enemigos también hagan ruido al andar, para oírlos venir.
 
 ### 3. Balance con jugadores reales
 - Nadie ajeno al desarrollo ha jugado una partida completa. Hace falta medir cuánto tardan en el tutorial, dónde mueren y qué rango sacan, y ajustar `parTime`, precios y daño.

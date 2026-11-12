@@ -16,6 +16,7 @@ import {
   PointsMaterial,
   Quaternion,
   type Scene,
+  Sprite,
   SpriteMaterial,
   SRGBColorSpace,
   Vector3,
@@ -31,6 +32,9 @@ import type { Vec3Like } from '../physics/Physics';
 const MAX_TRACERS = 64;
 const MAX_DECALS = 128;
 const MAX_FLASHES = 10;
+const MAX_SMOKE = 8;
+/** Vida de una voluta de humo (s). */
+const SMOKE_LIFE = 0.7;
 
 const _m = new Matrix4();
 const _q = new Quaternion();
@@ -65,6 +69,12 @@ export class Vfx {
   private flashNext = 0;
   readonly playerLight: PointLight;
   private playerLightLife = 0;
+
+  private readonly smoke: Sprite[] = [];
+  private readonly smokeLife = new Float32Array(MAX_SMOKE);
+  private readonly smokeVel: Vector3[] = [];
+  private readonly smokeTex: CanvasTexture;
+  private smokeNext = 0;
 
   constructor(private readonly scene: Scene, particleScale: number) {
     // Trazadoras: caja unitaria escalada a lo largo de Z.
@@ -119,6 +129,17 @@ export class Vfx {
     }
     this.playerLight = new PointLight(0xffc477, 0, 9, 2);
     scene.add(this.playerLight);
+
+    // Humo de la boca del arma: sprites suaves que crecen, suben y se desvanecen.
+    this.smokeTex = smokeTexture();
+    for (let i = 0; i < MAX_SMOKE; i++) {
+      const sp = new Sprite(new SpriteMaterial({ map: this.smokeTex, color: 0xcfcac2, transparent: true, opacity: 0, depthWrite: false }));
+      sp.visible = false;
+      sp.renderOrder = 9;
+      this.smoke.push(sp);
+      this.smokeVel.push(new Vector3());
+      scene.add(sp);
+    }
   }
 
   /** Trazadora de `from` a `to`. */
@@ -215,6 +236,17 @@ export class Vfx {
       this.playerLight.intensity = 6;
       this.playerLightLife = 0.05;
     }
+    // Voluta de humo que sale hacia delante y se frena.
+    const n = this.smokeNext;
+    this.smokeNext = (n + 1) % MAX_SMOKE;
+    const sp = this.smoke[n]!;
+    sp.position.set(pos.x + dir.x * 0.08, pos.y + dir.y * 0.08, pos.z + dir.z * 0.08);
+    sp.scale.setScalar(0.12);
+    sp.material.opacity = 0.5;
+    sp.material.rotation = n * 1.7;
+    sp.visible = true;
+    this.smokeVel[n]!.set(dir.x, dir.y, dir.z).multiplyScalar(2.2);
+    this.smokeLife[n] = SMOKE_LIFE;
   }
 
   update(dt: number): void {
@@ -262,6 +294,22 @@ export class Vfx {
       this.flashLife[i]! -= dt;
       if (this.flashLife[i]! <= 0) this.flashes[i]!.visible = false;
     }
+    for (let i = 0; i < MAX_SMOKE; i++) {
+      if (this.smokeLife[i]! <= 0) continue;
+      this.smokeLife[i]! -= dt;
+      const sp = this.smoke[i]!;
+      if (this.smokeLife[i]! <= 0) {
+        sp.visible = false;
+        continue;
+      }
+      const k = 1 - this.smokeLife[i]! / SMOKE_LIFE;
+      const v = this.smokeVel[i]!;
+      v.multiplyScalar(Math.exp(-5 * dt));
+      sp.position.addScaledVector(v, dt);
+      sp.position.y += 0.45 * dt;
+      sp.scale.setScalar(0.12 + 0.5 * Math.sqrt(k));
+      sp.material.opacity = 0.5 * (1 - k);
+    }
     if (this.playerLightLife > 0) {
       this.playerLightLife -= dt;
       if (this.playerLightLife <= 0) this.playerLight.intensity = 0;
@@ -269,6 +317,11 @@ export class Vfx {
   }
 
   dispose(): void {
+    for (const sp of this.smoke) {
+      this.scene.remove(sp);
+      sp.material.dispose();
+    }
+    this.smokeTex.dispose();
     this.scene.remove(this.tracers, this.points, this.decals, this.playerLight, ...this.flashes);
     this.tracers.geometry.dispose();
     this.points.geometry.dispose();
@@ -277,6 +330,22 @@ export class Vfx {
 }
 
 /** Texturas de iconos de alerta (compartidas): "?" amarillo y "!" rojo. */
+/** Mancha radial suave para el humo. */
+function smokeTexture(): CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 64;
+  c.height = 64;
+  const ctx = c.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D no disponible');
+  const g = ctx.createRadialGradient(32, 32, 2, 32, 32, 31);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.45, 'rgba(255,255,255,0.45)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 64, 64);
+  return new CanvasTexture(c);
+}
+
 const iconMats = new Map<string, SpriteMaterial>();
 
 export function alertIconMaterial(kind: 'suspicious' | 'alert'): SpriteMaterial {

@@ -1,3 +1,4 @@
+import type { Surface } from '../levels/surface';
 import type { AmbienceKind, MusicMood } from '../levels/types';
 import { MusicPlayer } from './MusicPlayer';
 import type { Vec3Like } from '../physics/Physics';
@@ -480,10 +481,31 @@ export class AudioEngine {
   }
 
   /** Pisada. `k` = fuerza (0,35 agachado, 0,65 trote, 1 esprint). */
-  footstep(k: number): void {
+  /** Pisada: `k` es la fuerza (0..1) y `surface` el tipo de suelo. */
+  footstep(k: number, surface: Surface = 'hard'): void {
     if (!this.ready) return;
-    this.noiseHit(this.sfxBus, { freq: 240 + 120 * k, q: 0.9, type: 'lowpass', gain: 0.13 * k, decay: 0.07 });
-    this.tone(this.sfxBus, { type: 'sine', f0: 95, f1: 55, gain: 0.07 * k, decay: 0.05 });
+    const d = this.sfxBus;
+    switch (surface) {
+      case 'metal':
+        this.noiseHit(d, { freq: 900 + 200 * k, q: 2.2, gain: 0.1 * k, decay: 0.06 });
+        this.tone(d, { type: 'triangle', f0: 410, f1: 330, gain: 0.05 * k, decay: 0.12 });
+        this.tone(d, { type: 'sine', f0: 110, f1: 70, gain: 0.05 * k, decay: 0.05 });
+        break;
+      case 'wood':
+        this.noiseHit(d, { freq: 320, q: 1.4, gain: 0.1 * k, decay: 0.05 });
+        this.tone(d, { type: 'sine', f0: 150, f1: 85, gain: 0.1 * k, decay: 0.08 });
+        break;
+      case 'carpet':
+        this.noiseHit(d, { freq: 170, q: 0.7, type: 'lowpass', gain: 0.09 * k, decay: 0.08 });
+        break;
+      case 'gravel':
+        this.noiseHit(d, { freq: 1500, q: 0.7, gain: 0.07 * k, decay: 0.11 });
+        this.noiseHit(d, { freq: 260, q: 0.9, type: 'lowpass', gain: 0.09 * k, decay: 0.06 });
+        break;
+      default:
+        this.noiseHit(d, { freq: 240 + 120 * k, q: 0.9, type: 'lowpass', gain: 0.13 * k, decay: 0.07 });
+        this.tone(d, { type: 'sine', f0: 95, f1: 55, gain: 0.07 * k, decay: 0.05 });
+    }
   }
 
   dodge(): void {

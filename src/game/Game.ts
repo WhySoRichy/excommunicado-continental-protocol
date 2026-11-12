@@ -1,3 +1,4 @@
+import { surfaceAt } from '../levels/surface';
 import { Vector3 } from 'three';
 import { AudioEngine } from '../audio/AudioEngine';
 import { type IntensityInput, musicIntensity } from '../audio/music';
@@ -975,7 +976,8 @@ export class Game {
         const crouched = pl.posture === 'crouch';
         if (this.stepDist >= (pl.sprinting ? 1.25 : crouched ? 0.7 : 0.95)) {
           this.stepDist = 0;
-          this.audio.footstep(crouched ? 0.35 : pl.sprinting ? 1 : 0.65);
+          const f = pl.feet;
+          this.audio.footstep(crouched ? 0.35 : pl.sprinting ? 1 : 0.65, surfaceAt(s.data.boxes, f.x, f.y, f.z));
         }
       }
     }
