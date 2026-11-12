@@ -361,7 +361,10 @@ export class Screens {
     });
     return h('section', { class: 'screen screen-controls', role: 'dialog', ariaLabel: 'Controles' }, [
       h('h2', { class: 'screen-heading', text: dev === 'pad' ? 'CONTROLES · GAMEPAD' : 'CONTROLES · TECLADO Y RATÓN' }),
-      h('table', { class: 'controls-table' }, [h('tbody', {}, rows)]),
+      h('div', { class: 'controls-cols' }, [
+        h('table', { class: 'controls-table' }, [h('tbody', {}, rows.slice(0, Math.ceil(rows.length / 2)))]),
+        h('table', { class: 'controls-table' }, [h('tbody', {}, rows.slice(Math.ceil(rows.length / 2)))]),
+      ]),
       h('p', { class: 'screen-hint', text: `${ACTION_LABELS.crouch}: C hace una cosa u otra según el contexto; el aviso en pantalla te dice cuál.` }),
       h('div', { class: 'menu' }, [button('Volver', () => this.closeSub(), 'btn btn-primary')]),
     ]);

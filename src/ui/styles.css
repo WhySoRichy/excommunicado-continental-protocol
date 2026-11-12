@@ -283,12 +283,30 @@ body {
   opacity: 0.8;
 }
 
+/* Los hijos de una pantalla no se encogen: si no cabe, aparece el scroll en vez de recortarse. */
+.screen > * {
+  flex-shrink: 0;
+}
+
+.screen-controls {
+  max-width: min(980px, 96vw);
+}
+
+.controls-cols {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 0 2.4rem;
+}
+
 .controls-table {
   border-collapse: collapse;
   font-size: 0.92rem;
 }
 
 .controls-table th {
+  max-width: 260px;
   padding: 0.32rem 1rem 0.32rem 0;
   font-weight: 500;
   text-align: right;

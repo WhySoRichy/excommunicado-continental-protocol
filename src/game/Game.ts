@@ -760,7 +760,7 @@ export class Game {
       s.renderNpcs(scaledDt);
       this.director?.frameUpdate(scaledDt);
       if (controlling) this.updateBeacon();
-    } else {
+    } else if (this.fsm.state === 'title' || this.fsm.state === 'boot') {
       this.updateAttractCamera(realDt);
     }
     if (s && (controlling || this.fsm.state === 'dead')) this.updateHud(realDt);

@@ -103,7 +103,8 @@ export class Enemy {
   stuckEvents = 0;
   /** Último atacante conocido (para la causa de muerte del jugador). */
   lastHitWasHead = false;
-  deathTime = -1;
+  /** Segundos de juego desde la muerte (para la animación de caída). */
+  private deadFor = 0;
 
   constructor(def: EnemySpawnDef, w: EnemyWorld, index: number) {
     this.id = def.id;
@@ -439,7 +440,7 @@ export class Enemy {
   private die(): void {
     this.brain.kill();
     this.mover.kill();
-    this.deathTime = performance.now();
+    this.deadFor = 0;
     // El cuerpo deja de bloquear y de recibir disparos.
     this.mover.collider.setEnabled(false);
     this.icon.visible = false;
@@ -481,7 +482,8 @@ export class Enemy {
     pose.grounded = m.grounded;
     pose.aim = this.intent.aim ? 1 : 0;
     pose.aimPitch = 0;
-    pose.stateTime = this.alive ? m.stateTime : (performance.now() - this.deathTime) / 1000;
+    if (!this.alive) this.deadFor += dt;
+    pose.stateTime = this.alive ? m.stateTime : this.deadFor;
     pose.recoil = this.recoilVis;
     pose.melee = 0;
     this.rig.update(pose, dt);

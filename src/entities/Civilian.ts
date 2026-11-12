@@ -39,7 +39,8 @@ export class Civilian {
   private readonly pose: RigPose = idlePose();
   private dancePhase: number;
   private hideTimer = 0;
-  private deathTime = -1;
+  /** Segundos de juego desde la muerte (para la animación de caída). */
+  private deadFor = 0;
   private stuckT = 0;
   private readonly progressFrom = new Vector3();
 
@@ -121,7 +122,7 @@ export class Civilian {
       this.state = 'dead';
       this.mover.kill();
       this.mover.collider.setEnabled(false);
-      this.deathTime = performance.now();
+      this.deadFor = 0;
     } else this.panic(this.feet);
     return { killed: r.killed, dealt: r.dealt };
   }
@@ -179,7 +180,8 @@ export class Civilian {
     pose.posture = m.posture;
     pose.grounded = m.grounded;
     pose.aim = 0;
-    pose.stateTime = this.alive ? m.stateTime : (performance.now() - this.deathTime) / 1000;
+    if (!this.alive) this.deadFor += dt;
+    pose.stateTime = this.alive ? m.stateTime : this.deadFor;
     this.rig.update(pose, dt);
     if (this.alive && this.state === 'calm' && this.behavior === 'dance') {
       this.dancePhase += dt * 6.5;
