@@ -134,6 +134,8 @@ export class Game {
   private cpIndex = 0;
   private deathTimer = 0;
   private deathSlowmo = 0;
+  /** Metros recorridos desde la última pisada. */
+  private stepDist = 0;
   private deathReturn: 'hub' | 'playing' = 'playing';
   private lastWeaponModel: WeaponModel = 'pistol';
   private loading = false;
@@ -964,6 +966,19 @@ export class Game {
     } else this.holdT = 0;
     const it = controlling ? this.buildIntent() : this.idleIntent;
     s.player.fixedUpdate(dt, it);
+    // Pisadas: una por zancada recorrida, más largas y fuertes al esprintar.
+    const pl = s.player;
+    if (pl.grounded && pl.state === 'ground') {
+      const v = pl.stepSpeed(dt);
+      if (v > 0.6) {
+        this.stepDist += v * dt;
+        const crouched = pl.posture === 'crouch';
+        if (this.stepDist >= (pl.sprinting ? 1.25 : crouched ? 0.7 : 0.95)) {
+          this.stepDist = 0;
+          this.audio.footstep(crouched ? 0.35 : pl.sprinting ? 1 : 0.65);
+        }
+      }
+    }
     const ci = controlling ? this.buildCombatIntent() : this.idleCIntent;
     if (s.infiniteAmmo) s.combat.weapon.mag = Math.max(s.combat.weapon.mag, 1);
     s.combat.fixedUpdate(dt, ci, s.ctx);

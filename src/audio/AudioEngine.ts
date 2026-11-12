@@ -479,6 +479,13 @@ export class AudioEngine {
     this.tone(this.sfxBus, { type: 'sine', f0: heavy ? 90 : 140, f1: 50, gain: heavy ? 0.5 : 0.3, decay: 0.18 });
   }
 
+  /** Pisada. `k` = fuerza (0,35 agachado, 0,65 trote, 1 esprint). */
+  footstep(k: number): void {
+    if (!this.ready) return;
+    this.noiseHit(this.sfxBus, { freq: 240 + 120 * k, q: 0.9, type: 'lowpass', gain: 0.13 * k, decay: 0.07 });
+    this.tone(this.sfxBus, { type: 'sine', f0: 95, f1: 55, gain: 0.07 * k, decay: 0.05 });
+  }
+
   dodge(): void {
     if (!this.ready) return;
     this.noiseHit(this.sfxBus, { freq: 700, q: 0.6, type: 'lowpass', gain: 0.22, attack: 0.04, decay: 0.2 });

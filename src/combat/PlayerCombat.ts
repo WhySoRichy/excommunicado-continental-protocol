@@ -72,6 +72,8 @@ export const SWITCH_TIME = 0.28;
 const FOCUS_MIN = 30;
 const FOCUS_DRAIN = 22;
 const FOCUS_SCALE = 0.35;
+/** Escala de tiempo durante la pausa de impacto. */
+const HIT_PAUSE_SCALE = 0.08;
 
 const _cam = new Vector3();
 const _fwd = new Vector3();
@@ -121,6 +123,8 @@ export class PlayerCombat {
   spreadDeg = 0;
   /** Recoil visual para la pose (decae). */
   recoilVis = 0;
+  /** Pausa de impacto: segundos reales que el mundo va casi congelado tras una baja. */
+  hitPause = 0;
   private lastHitEnemy: Enemy | null = null;
   private lastHitTime = -99;
   private lastRolls = 0;
@@ -160,12 +164,14 @@ export class PlayerCombat {
 
   /** Escala de tiempo deseada (Foco). */
   get timeScale(): number {
+    if (this.hitPause > 0) return HIT_PAUSE_SCALE;
     return this.focusActive ? FOCUS_SCALE : 1;
   }
 
   /** Reaparición: vitales, munición y estados transitorios limpios (sin estados colgados). */
   respawnReset(): void {
     restoreVitals(this.vitals);
+    this.hitPause = 0;
     this.dead = false;
     this.takedown = null;
     this.switchT = 0;
@@ -199,6 +205,7 @@ export class PlayerCombat {
       }
     }
     this.hitMarker.t = Math.max(0, this.hitMarker.t - realDt);
+    this.hitPause = Math.max(0, this.hitPause - realDt);
     for (const d of this.damageDirs) d.t = Math.max(0, d.t - realDt);
     for (const f of this.feed) f.t -= realDt;
     while (this.feed.length && this.feed[this.feed.length - 1]!.t <= 0) this.feed.pop();
@@ -399,6 +406,7 @@ export class PlayerCombat {
     this.stats.shotsFired++;
     if (anyEnemyHit) this.stats.shotsHit++;
     ctx.vfx.muzzle(_muzzle, base, true);
+    ctx.vfx.casing(_muzzle, base);
     ctx.audio.shot(d.id === 'carbine' ? 'carbine' : d.id === 'shotgun' ? 'shotgun' : d.noise < 12 ? 'pistolSilenced' : 'pistol');
     const k = aiming ? 0.75 : 1;
     ctx.camera.kick(rec[0] * DEG2RAD * k, -rec[1] * DEG2RAD * k);
@@ -413,6 +421,9 @@ export class PlayerCombat {
       this.hitMarker.kind = 'kill';
       this.hitMarker.t = 0.32;
       ctx.audio.hit('kill');
+      // La baja se nota: el mundo se detiene un instante y la cámara acusa el golpe.
+      this.hitPause = zone === 'head' || method === 'takedown' ? 0.085 : 0.05;
+      ctx.camera.addTrauma(method === 'gun' ? 0.1 : 0.16);
     } else {
       this.hitMarker.kind = zone === 'head' ? 'head' : armored ? 'armor' : 'body';
       this.hitMarker.t = 0.16;

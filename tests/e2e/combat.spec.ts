@@ -170,8 +170,14 @@ test.describe('Fase 2 · combate', () => {
     });
     const hurt = await page.evaluate(() => window.__EXCOM__!.combat()!);
     expect(hurt.armor + hurt.health).toBeLessThan(160);
-    const arcs = await page.locator('#hud .dmg-arc').evaluateAll((els) => els.map((e) => Number((e as HTMLElement).style.opacity || '0')));
-    expect(Math.max(...arcs)).toBeGreaterThan(0);
+    // El arco se desvanece en tiempo real: se sigue simulando hasta leerlo recién pintado.
+    await expect
+      .poll(async () => {
+        await page.evaluate(() => window.__EXCOM__!.step(20, {}));
+        const arcs = await page.locator('#hud .dmg-arc').evaluateAll((els) => els.map((e) => Number((e as HTMLElement).style.opacity || '0')));
+        return Math.max(...arcs);
+      })
+      .toBeGreaterThan(0);
     await page.screenshot({ path: shotPath('fase2-dano-direccional') });
 
     // Muerte → pantalla con causa explicada y cómo reaparecer.

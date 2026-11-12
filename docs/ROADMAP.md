@@ -20,9 +20,9 @@ Ya están hechas las reacciones de impacto, las tres caídas al morir (de bruces
 - Cómo comprobarlo: `npm run poses` genera capturas de perfil de cada pose en `qa-screenshots/poses/`.
 
 ### 2. Sensación de combate
-- Sacudida de cámara y pausa de impacto de 2 o 3 frames en headshots y takedowns.
-- Casquillos y humo en la boca del arma (con los pools de `render/vfx.ts`).
-- Sonidos de pasos según la velocidad y el material del suelo.
+Ya hay pausa de impacto y sacudida en cada baja, casquillos y pisadas según la velocidad. Queda:
+- Humo en la boca del arma.
+- Pisadas distintas según el material del suelo.
 
 ### 3. Balance con jugadores reales
 - Nadie ajeno al desarrollo ha jugado una partida completa. Hace falta medir cuánto tardan en el tutorial, dónde mueren y qué rango sacan, y ajustar `parTime`, precios y daño.

@@ -177,6 +177,29 @@ export class Vfx {
     this.decals.instanceMatrix.needsUpdate = true;
   }
 
+  /** Casquillo: sale despedido hacia la derecha del arma y cae. */
+  casing(pos: Vec3Like, dir: Vec3Like): void {
+    const i = this.pNext;
+    this.pNext = (this.pNext + 1) % this.maxParticles;
+    const j = i * 3;
+    // Derecha = dir × arriba (en el plano horizontal).
+    const l = Math.hypot(dir.x, dir.z) || 1;
+    const rx = -dir.z / l;
+    const rz = dir.x / l;
+    const jitter = 0.8 + ((this.pNext * 7) % 5) * 0.1;
+    this.pPos[j] = pos.x - dir.x * 0.12;
+    this.pPos[j + 1] = pos.y + 0.02;
+    this.pPos[j + 2] = pos.z - dir.z * 0.12;
+    this.pVel[j] = rx * 2.2 * jitter - dir.x * 0.4;
+    this.pVel[j + 1] = 2.6 * jitter;
+    this.pVel[j + 2] = rz * 2.2 * jitter - dir.z * 0.4;
+    _c.set(0xe2b04a);
+    this.pCol[j] = _c.r;
+    this.pCol[j + 1] = _c.g;
+    this.pCol[j + 2] = _c.b;
+    this.pLife[i] = 0.6;
+  }
+
   /** Fogonazo en `pos` mirando a `dir`. `player` enciende también la luz compartida. */
   muzzle(pos: Vec3Like, dir: Vec3Like, player: boolean): void {
     const f = this.flashes[this.flashNext]!;
