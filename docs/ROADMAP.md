@@ -5,17 +5,17 @@ Qué se puede mejorar y en qué orden. Cada bloque está pensado para una sesió
 ## Estado actual
 
 - Hub, tutorial, tres contratos y Gauntlet completos y jugables de principio a fin.
-- Personajes procedurales con volumen y cara, y animación procedural con IK de piernas, reacciones de impacto y caídas variadas (`src/entities/CharacterRig.ts`).
+- Personajes procedurales de diseño facetado (sombreado plano, torso en V, rasgos mínimos) y animación procedural con IK de piernas y de la mano de apoyo, pies articulados, reacciones de impacto, caídas variadas, vault en tres tiempos y takedown coreografiado (`src/entities/CharacterRig.ts`).
 - Dirección de arte nocturna: cielo con silueta de ciudad en los exteriores, vestíbulo del Continental con papel pintado y damero de mármol, bloom y viñeta desde el preset Medio.
-- 148 pruebas unitarias y 38 e2e; CI y despliegue automático en GitHub Pages.
+- 151 pruebas unitarias y 38 e2e; CI y despliegue automático en GitHub Pages.
 
 ## Prioridad alta: lo que más se nota al jugar
 
-### 1. Tercera pasada de animación
-Ya están hechas las reacciones de impacto, las tres caídas al morir (de bruces, de espaldas o desplomado, según de dónde venga el disparo), el esprint con zancada propia, los pasos al girar en el sitio y el takedown coreografiado (agarre, proyección del enemigo de espaldas y remate al pecho). Queda:
-- **Mano izquierda con IK** hacia el guardamanos del arma larga y hacia la pistola: ahora son ángulos fijos y las manos no siempre coinciden.
-- **Pies como hueso propio**, para que la suela quede plana en el deslizamiento y de puntillas al agacharse.
-- **Vault con tiempos**: usar la duración real del estado para apoyar la mano, pasar las piernas y aterrizar.
+### 1. Pulido de animación
+La tercera pasada está completa: mano izquierda con IK sobre el arma, pies como hueso propio (suela plana, puntillas al agacharse, talón al deslizarse), vault con tiempos reales y takedown coreografiado. Queda como pulido:
+- **Muñecas y dedos**: la mano es un bloque rígido; no rodea el guardamanos ni la empuñadura.
+- **Cabeza que mira al objetivo** en enemigos y NPC, independiente del torso.
+- **Transiciones del cuerpo a cuerpo** con cuchillo, que hoy reutilizan el barrido genérico.
 - Cómo comprobarlo: `npm run poses` genera capturas de perfil de cada pose en `qa-screenshots/poses/`.
 
 ### 2. Sensación de combate

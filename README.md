@@ -97,8 +97,8 @@ El navegador se abre en http://localhost:4173. La guía completa, con instalaci�
 ## Tecnología
 
 - **TypeScript en modo strict** con Vite 8.
-- **Animación procedural**, sin clips grabados: las piernas se resuelven con cinemática inversa para que los pies pisen el suelo, y las poses de arma, recarga, deslizamiento o voltereta se calculan en cada frame.
-- **Three.js 0.187** para el render: personajes low-poly procedurales (cuerpo, cara, pelo y ropa generados por código) como un solo `SkinnedMesh`, rim light Fresnel, IBL, sombras y resolución dinámica. Los neones y carteles van en HDR y alimentan un bloom con viñeta; los exteriores tienen un cielo nocturno con la silueta de la ciudad generado en un canvas.
+- **Animación procedural**, sin clips grabados: las piernas se resuelven con cinemática inversa para que los pies pisen el suelo, la mano de apoyo busca el arma con su propia IK, y las poses de recarga, deslizamiento, voltereta, vault o takedown se calculan en cada frame.
+- **Three.js 0.187** para el render: personajes low-poly facetados y procedurales (cuerpo, cara, pelo y ropa generados por código, con sombreado plano) como un solo `SkinnedMesh`, rim light Fresnel, IBL, sombras y resolución dinámica. Los neones y carteles van en HDR y alimentan un bloom con viñeta; los exteriores tienen un cielo nocturno con la silueta de la ciudad generado en un canvas.
 - **Rapier 0.21** para la física: el `KinematicCharacterController` mueve las cápsulas de jugador, enemigos y civiles.
 - **Bucle a paso fijo de 60 Hz** con interpolación de render y una sola máquina de estados de juego.
 - **Niveles como datos**: mallas y colliders salen de la misma fuente, y la navegación (rejilla 2.5D con A*) se genera a partir de ellos.
@@ -125,7 +125,7 @@ Los detalles, decisiones técnicas y convenciones están en [docs/ARQUITECTURA.m
 
 | | |
 |---|---|
-| **148 pruebas unitarias** (Vitest) | Cinemática inversa del rig, daño, estilo, rango (incluida una prueba de coherencia con 500 partidas al azar), economía, IA de los enemigos, navegación de cada nivel, guardado, reasignación de teclas, oleadas, música y superficie bajo los pies |
+| **151 pruebas unitarias** (Vitest) | Cinemática inversa de piernas y brazos del rig, daño, estilo, rango (incluida una prueba de coherencia con 500 partidas al azar), economía, IA de los enemigos, navegación de cada nivel, guardado, reasignación de teclas, oleadas, música y superficie bajo los pies |
 | **38 pruebas e2e** (Playwright) | El juego real sobre el build de producción: movimiento sin atravesar paredes ni atascarse (también con picos de lag), combate contra varios enemigos, los cuatro contratos y el Gauntlet de principio a fin, tutorial, ajustes persistentes, mando, claridad visual, mezcla de audio y rendimiento |
 | **CI** | Cada push a `main` ejecuta las pruebas y publica el juego en GitHub Pages |
 

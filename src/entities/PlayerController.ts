@@ -693,6 +693,13 @@ export class PlayerController {
 
   private readonly peekOut: { vault: 'vault' | 'mantle' | null; cover: CoverHeight | null } = { vault: null, cover: null };
 
+  /** Progreso del vault en curso (0..1), o −1 si no hay. */
+  get vaultProgress(): number {
+    const v = this.vault;
+    if (this.state !== 'vault' || !v) return -1;
+    return Math.min(1, this.stateTime / Math.max(1e-3, v.dur1 + v.dur2));
+  }
+
   private stepVault(dt: number): void {
     const v = this.vault;
     if (!v) {

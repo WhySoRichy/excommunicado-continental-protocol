@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bell, cadence, footStep, type LegAngles, legFoot, SHIN_LEN, smooth, solveLeg, THIGH_LEN } from '../../src/entities/rigMath';
+import { bell, cadence, footStep, type LegAngles, legFoot, SHIN_LEN, smooth, solveArm, solveLeg, THIGH_LEN, footPitch } from '../../src/entities/rigMath';
 
 const leg: LegAngles = { thigh: 0, shin: 0 };
 
@@ -72,5 +72,31 @@ describe('rig: ciclo de marcha', () => {
     expect(smooth(0, 1, -1)).toBe(0);
     expect(smooth(0, 1, 0.5)).toBeCloseTo(0.5);
     expect(smooth(0, 1, 3)).toBe(1);
+  });
+});
+
+describe('IK del brazo y cabeceo del pie', () => {
+  it('la mano queda a la distancia pedida del hombro', () => {
+    const out = { elbow: 0, hy: 0, hz: 0 };
+    for (const d of [0.15, 0.3, 0.45, 0.6]) {
+      const a = solveArm(d, 0.32, 0.315, out);
+      expect(Math.hypot(a.hy, a.hz)).toBeCloseTo(d, 5);
+      expect(a.elbow).toBeGreaterThan(0);
+      // El codo flexiona hacia delante: la mano nunca queda por detrás del hombro.
+      expect(a.hz).toBeLessThanOrEqual(0);
+    }
+  });
+
+  it('fuera de alcance, el brazo se estira', () => {
+    const a = solveArm(2, 0.32, 0.315, { elbow: 0, hy: 0, hz: 0 });
+    expect(a.elbow).toBeLessThan(0.3);
+    expect(Math.hypot(a.hy, a.hz)).toBeGreaterThan(0.62);
+  });
+
+  it('el pie va plano en medio del apoyo y con la punta arriba antes de pisar', () => {
+    expect(footPitch(Math.PI * 0.4)).toBeCloseTo(0, 5);
+    expect(footPitch(Math.PI * 0.98)).toBeLessThan(-0.3);
+    expect(footPitch(Math.PI * 1.8)).toBeGreaterThan(0.1);
+    expect(Math.abs(footPitch(Math.PI * 2 - 1e-6))).toBeLessThan(0.02);
   });
 });

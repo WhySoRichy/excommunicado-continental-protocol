@@ -71,8 +71,9 @@ export class LevelSession {
     this.playerRig = new CharacterRig('player', {
       colors: PLAYER_COLORS,
       rimColor: 0xe8e2d0,
-      rimStrength: 0.35,
+      rimStrength: 0.16,
       hair: 'long',
+      beard: true,
       weapon: 'pistol',
     });
     this.playerRig.setShadows(deps.quality.shadows);
