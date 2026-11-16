@@ -201,6 +201,8 @@ export function buildLevel(data: LevelData, scene: Scene, physics: PhysicsWorld,
     key.shadow.normalBias = 0.03;
   }
   root.add(key, key.target);
+  // La luz se libera con el nivel: su mapa de sombras es una textura de la GPU que nadie más suelta.
+  disposables.push(key);
 
   const points: PointLight[] = [];
   const alarmLights: PointLight[] = [];

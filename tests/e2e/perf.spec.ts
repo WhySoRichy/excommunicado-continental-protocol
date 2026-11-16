@@ -127,6 +127,34 @@ test.describe('Fase 6 · rendimiento', () => {
     console.log(`[perf frenada] ${rows.join(' | ')}`);
   });
 
+  test('cambiar de nivel no acumula texturas ni geometrías en la GPU', async ({ page }) => {
+    // Preset medio forzado: con sombras (en CI el preset automático es Bajo y no habría mapa de sombras).
+    await openGame(page, 'preset=medium');
+    await page.getByRole('button', { name: /Nueva partida|Continuar/ }).first().click();
+    await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('hub');
+    const round = async (): Promise<{ textures: number; geometries: number }> => {
+      for (const id of LEVELS) {
+        await page.evaluate((m) => window.__EXCOM__!.startContract(m), id);
+        await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('briefing');
+        // Un render completo: el mapa de sombras del nivel se crea al dibujarlo.
+        await page.evaluate(() => window.__EXCOM__!.luminance());
+        await page.evaluate(() => window.__EXCOM__!.goToHub());
+        await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('hub');
+        await page.evaluate(() => window.__EXCOM__!.luminance());
+      }
+      return page.evaluate(() => {
+        const i = window.__EXCOM__!.info();
+        return { textures: i.textures, geometries: i.geometries };
+      });
+    };
+    // La primera vuelta crea lo que se comparte entre niveles (texturas de materiales); la segunda no debe sumar nada.
+    const first = await round();
+    const second = await round();
+    console.log(`[perf] recursos tras recorrer los niveles: ${first.textures} → ${second.textures} texturas · ${first.geometries} → ${second.geometries} geometrías`);
+    expect(second.textures, 'texturas').toBeLessThanOrEqual(first.textures);
+    expect(second.geometries, 'geometrías').toBeLessThanOrEqual(first.geometries);
+  });
+
   test('bundle: JS del juego y del motor de física dentro de presupuesto', async () => {
     const dir = join(process.cwd(), 'dist', 'assets');
     const files = readdirSync(dir).filter((f) => f.endsWith('.js'));
