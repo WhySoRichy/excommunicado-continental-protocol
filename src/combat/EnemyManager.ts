@@ -164,10 +164,19 @@ export class EnemyManager implements Tactics {
 
   /** Retira (sin cadáver) a los enemigos de un grupo: el maniquí del tutorial al saltarlo. */
   despawnGroup(group: string): number {
+    return this.despawnWhere((e) => e.spawnDef.group === group);
+  }
+
+  /** Retira a los enemigos que llegaron con un evento de aparición (refuerzos), vivos o caídos. */
+  despawnEvent(event: string): number {
+    return this.despawnWhere((e) => e.spawnDef.spawnOn === event);
+  }
+
+  private despawnWhere(match: (e: Enemy) => boolean): number {
     let n = 0;
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const e = this.enemies[i]!;
-      if (e.spawnDef.group !== group) continue;
+      if (!match(e)) continue;
       for (const c of this.cover) if (c.claimedBy === e.id) c.claimedBy = null;
       this.byHandle.delete(e.collider.handle);
       e.dispose();

@@ -426,6 +426,76 @@ test.describe('Fase 4 · contratos 2 y 3', () => {
     expect(out.success).toBe(false);
     expect(out.failReason).toContain('tiempo');
   });
+
+  test('Torre Meridian: morir contra el Juez reinicia el combate (fases y refuerzos)', async ({ page }) => {
+    await enterContract(page, 'rooftop');
+    await page.evaluate(() => {
+      const q = window.__EXCOM__!;
+      q.setGod(true);
+      q.teleport(-16, 3.84, -12, 0);
+      q.step(8, {});
+      q.killEnemy('m-roofB');
+      q.killEnemy('m-roofC');
+      q.step(5, {});
+      q.teleport(4, 7.68, -14, 0);
+      q.step(8, {});
+      q.press('weapon2');
+      q.teleport(12, 7.68, -16, 0);
+      q.step(20, { aim: true });
+    });
+    // Disparos a la cabeza sin rematarlo: cuenta las veces que se arrodilla hasta dejarlo casi sin salud.
+    const fight = (): Promise<{ kneels: number; adds: number }> =>
+      page.evaluate(() => {
+        const q = window.__EXCOM__!;
+        let kneels = 0;
+        let wasStunned = false;
+        for (let i = 0; i < 160; i++) {
+          const j = q.enemies().find((e) => e.id === 'judge')!;
+          const stunned = j.state === 'stunned';
+          if (stunned && !wasStunned) kneels++;
+          wasStunned = stunned;
+          if (stunned) {
+            q.step(30, {});
+            continue;
+          }
+          if (!j.alive || j.health <= 20) break;
+          const c = q.combat()!;
+          if (c.mag === 0 && !c.reloading) q.press('reload');
+          q.aimAt(j.x, j.headY, j.z);
+          q.step(1, { aim: true });
+          q.aimAt(j.x, j.headY, j.z);
+          if (!q.combat()!.blocked) q.press('fire');
+          q.step(12, { aim: true });
+        }
+        return { kneels, adds: q.enemies().filter((e) => e.id.startsWith('p1-') || e.id.startsWith('p2-')).length };
+      });
+    const first = await fight();
+    expect(first.kneels).toBe(2);
+    expect(first.adds).toBe(3);
+    // Sin modo dios el jugador cae, gasta un marcador y reaparece en el helipuerto.
+    const back = await page.evaluate(() => {
+      const q = window.__EXCOM__!;
+      q.setGod(false);
+      for (let i = 0; i < 400 && !q.combat()!.dead; i++) q.step(30, {});
+      const died = q.combat()!.dead;
+      q.respawn();
+      q.step(4, {});
+      q.setGod(true);
+      q.teleport(12, 7.68, -16, 0);
+      q.step(20, { aim: true });
+      const all = q.enemies();
+      return { died, state: q.state(), markers: q.mission()!.markersUsed, health: all.find((e) => e.id === 'judge')!.health, adds: all.filter((e) => e.id.startsWith('p1-') || e.id.startsWith('p2-')).length };
+    });
+    expect(back.died).toBe(true);
+    expect(back.state).toBe('playing');
+    expect(back.markers).toBe(1);
+    expect(back.health).toBe(420);
+    expect(back.adds).toBe(0);
+    // El combate empieza de nuevo: vuelve a arrodillarse en cada umbral y los refuerzos regresan.
+    const second = await fight();
+    expect(second.kneels).toBe(2);
+    expect(second.adds).toBe(3);
+  });
 });
 
 test.describe('Fase 4 · Gauntlet', () => {

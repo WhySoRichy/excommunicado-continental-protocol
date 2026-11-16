@@ -369,6 +369,22 @@ export class MissionDirector {
     return true;
   }
 
+  /**
+   * El jugador reapareció en el punto de control. Los enemigos vivos vuelven con la salud completa,
+   * así que el combate con el jefe empieza de nuevo: recupera sus fases, y los refuerzos que ya
+   * habían llegado se retiran (regresan cuando cruza otra vez cada umbral).
+   */
+  onPlayerRespawned(): void {
+    if (this.bossPhaseDone.size === 0) return;
+    const enemies = this.d.session.enemies;
+    // Con el jefe ya abatido no hay combate que reiniciar.
+    if (!enemies.enemies.some((e) => e.def.type === 'boss' && e.alive)) return;
+    for (const i of this.bossPhaseDone) enemies.despawnEvent(`boss-phase-${i + 1}`);
+    this.bossPhaseDone.clear();
+    this.bossKneeling = null;
+    this.bossKneel = 0;
+  }
+
   fixedUpdate(dt: number): void {
     if (this.finished) return;
     const s = this.d.session;

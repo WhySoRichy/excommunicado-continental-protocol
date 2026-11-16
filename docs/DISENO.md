@@ -97,7 +97,7 @@ Cada contrato sigue el flujo **briefing** (3 líneas: objetivo, regla especial, 
 - **Takedown (F)** a ≤ 1,8 m mirando al enemigo: agarre → proyección → **doble tap automático** y kill garantizado. Tienes i-frames durante la animación. Funciona incluso contra blindados.
 - **Foco (Q):** se llena con estilo. Desde el 30 % activa cámara lenta (×0,35) mientras dura la barra. La mirada sigue a velocidad real, así que tienes más tiempo para apuntar.
 - **Integridad del traje:** armadura (60, mejorable) que absorbe primero y se regenera a 20/s tras 4 s sin daño, más salud (100) que no se regenera. Hay botiquines en los niveles y se restaura al reaparecer.
-- **Marcadores de sangre:** 3 vidas por contrato (4 con la mejora). Al morir gastas uno y vuelves al último checkpoint. Sin marcadores, el contrato falla.
+- **Marcadores de sangre:** 3 vidas por contrato (4 con la mejora). Al morir gastas uno y vuelves al último checkpoint: los enemigos que sigan vivos recuperan la salud y el jefe empieza su combate de nuevo, con sus fases y sus refuerzos. Sin marcadores, el contrato falla.
 
 ### 4.2 Enemigos (color e icono propios, rim light del mismo color)
 | Tipo | Color | Arma | Salud | Comportamiento | Telégrafo |

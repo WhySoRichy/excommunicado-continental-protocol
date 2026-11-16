@@ -1046,6 +1046,7 @@ export class Game {
     s.respawnAt(new Vector3(pos.x, pos.y + 0.02, pos.z), yaw);
     s.combat.respawnReset();
     s.enemies.resetAlive();
+    m?.onPlayerRespawned();
     this.aimLatched = false;
     this.camera.setYawPitch(yaw, -0.12);
     this.camera.snap();
