@@ -36,6 +36,8 @@ export interface RigColors {
 
 export type HairStyle = 'long' | 'short' | 'bald' | 'helmet' | 'cap' | 'parted' | 'slick';
 export type WeaponModel = 'pistol' | 'revolver' | 'rifle' | 'dmr' | 'smg' | 'shotgun' | 'shotgunTactical' | 'knife' | 'none';
+/** Rostro: `stern` es el común (cejas fruncidas); `wick`, el de Keanu Reeves como John Wick. */
+export type FaceStyle = 'stern' | 'wick';
 
 /** Prendas opcionales. Sin `outfit`, el personaje lleva traje de chaqueta con corbata y pañuelo. */
 export interface Outfit {
@@ -68,6 +70,8 @@ export interface RigOptions {
   beard?: boolean;
   /** Prendas que cambian la silueta además de los colores (traje de tres piezas, sumiller...). */
   outfit?: Outfit;
+  /** Rostro (por defecto `stern`). */
+  face?: FaceStyle;
   weapon: WeaponModel;
   /** Material propio (no cacheado): permite efectos por instancia (destello de impacto). */
   uniqueMaterial?: boolean;
@@ -253,7 +257,7 @@ function release(cache: Map<string, SharedGeometry>, key: string): void {
 /** Todo lo que cambia la geometría del cuerpo (el material y el rim van aparte). */
 function appearanceKey(o: RigOptions): string {
   const c = o.colors;
-  return [c.jacket, c.shirt, c.tie, c.pants, c.shoes, c.skin, c.hair, c.accent, o.hair, o.bulk ?? 1, o.vest ? 1 : 0, o.beard ? 1 : 0, JSON.stringify(o.outfit ?? {})].join('|');
+  return [c.jacket, c.shirt, c.tie, c.pants, c.shoes, c.skin, c.hair, c.accent, o.hair, o.bulk ?? 1, o.vest ? 1 : 0, o.beard ? 1 : 0, JSON.stringify(o.outfit ?? {}), o.face ?? 'stern'].join('|');
 }
 
 /**
@@ -661,7 +665,24 @@ export class CharacterRig {
       const hy = -NECK_Y;
       const dark = 0x0c0d10;
       const jawColor = o.beard ? shade(c.hair, 1.1) : c.skin;
-      const headParts: BufferGeometry[] = [
+      const wick = o.face === 'wick';
+      // Rostro de Keanu Reeves como John Wick, por bloques: cara alargada, pómulos altos, cejas rectas y
+      // gruesas que caen hacia fuera, ojos rasgados con el párpado caído y nariz larga y recta.
+      const wickFace = (): BufferGeometry[] => [
+        cprism(0.148, 0.17, 0.178, 0.198, 0.12, c.skin, 0, 0.875 + hy, 0), // cráneo
+        cprism(0.18, 0.196, 0.164, 0.184, 0.07, c.skin, 0, 0.78 + hy, 0), // pómulos altos
+        cprism(0.164, 0.184, 0.104, 0.12, 0.09, jawColor, 0, 0.7 + hy, -0.008), // mandíbula larga
+        cbox(0.058, 0.019, 0.024, c.hair, -0.044, 0.827 + hy, -0.092, 0.1), // cejas
+        cbox(0.058, 0.019, 0.024, c.hair, 0.044, 0.827 + hy, -0.092, -0.1),
+        cbox(0.04, 0.009, 0.012, shade(c.skin, 0.72), -0.045, 0.811 + hy, -0.096, 0.06), // párpados
+        cbox(0.04, 0.009, 0.012, shade(c.skin, 0.72), 0.045, 0.811 + hy, -0.096, -0.06),
+        cbox(0.034, 0.011, 0.012, 0x1c1411, -0.045, 0.801 + hy, -0.096, 0.08), // ojos
+        cbox(0.034, 0.011, 0.012, 0x1c1411, 0.045, 0.801 + hy, -0.096, -0.08),
+        cprism(0.022, 0.018, 0.04, 0.044, 0.08, shade(c.skin, 0.92), 0, 0.775 + hy, -0.105), // nariz larga
+        cbox(0.02, 0.05, 0.035, shade(c.skin, 0.9), -0.092, 0.79 + hy, 0.005), // orejas
+        cbox(0.02, 0.05, 0.035, shade(c.skin, 0.9), 0.092, 0.79 + hy, 0.005),
+      ];
+      const headParts: BufferGeometry[] = wick ? wickFace() : [
         cprism(0.15, 0.17, 0.186, 0.2, 0.12, c.skin, 0, 0.875 + hy, 0), // cráneo
         cprism(0.186, 0.2, 0.172, 0.186, 0.07, c.skin, 0, 0.78 + hy, 0), // pómulos
         cprism(0.172, 0.186, 0.105, 0.12, 0.08, jawColor, 0, 0.705 + hy, -0.008), // mandíbula
@@ -673,7 +694,21 @@ export class CharacterRig {
         cbox(0.02, 0.05, 0.035, shade(c.skin, 0.9), -0.097, 0.79 + hy, 0.005), // orejas
         cbox(0.02, 0.05, 0.035, shade(c.skin, 0.9), 0.097, 0.79 + hy, 0.005),
       ];
-      if (o.beard) {
+      if (o.beard && wick) {
+        // Barba corta y cerrada: bigote unido a la barba por las comisuras, mejillas, patillas y mentón.
+        headParts.push(
+          cbox(0.05, 0.008, 0.012, 0x2a1a14, 0, 0.716 + hy, -0.099), // boca
+          cbox(0.04, 0.01, 0.012, shade(c.skin, 0.8), 0, 0.707 + hy, -0.096), // labio inferior
+          cbox(0.068, 0.016, 0.016, jawColor, 0, 0.728 + hy, -0.1), // bigote
+          cbox(0.014, 0.032, 0.014, jawColor, -0.034, 0.712 + hy, -0.097), // comisuras
+          cbox(0.014, 0.032, 0.014, jawColor, 0.034, 0.712 + hy, -0.097),
+          cbox(0.03, 0.04, 0.012, jawColor, -0.058, 0.736 + hy, -0.093), // barba sobre las mejillas
+          cbox(0.03, 0.04, 0.012, jawColor, 0.058, 0.736 + hy, -0.093),
+          cbox(0.016, 0.085, 0.12, jawColor, -0.083, 0.73 + hy, -0.03), // patillas hasta la mandíbula
+          cbox(0.016, 0.085, 0.12, jawColor, 0.083, 0.73 + hy, -0.03),
+          cbox(0.066, 0.045, 0.03, jawColor, 0, 0.67 + hy, -0.068), // mentón
+        );
+      } else if (o.beard) {
         headParts.push(
           cbox(0.06, 0.012, 0.012, shade(c.skin, 0.6), 0, 0.726 + hy, -0.098), // boca
           cbox(0.09, 0.02, 0.014, jawColor, 0, 0.745 + hy, -0.096), // bigote
@@ -694,10 +729,12 @@ export class CharacterRig {
             cprism(0.085, 0.19, 0.104, 0.214, 0.075, c.hair, 0.04, 0.91 + hy, 0.006, -0.14),
             cbox(0.024, 0.11, 0.024, c.hair, -0.052, 0.885 + hy, -0.098, -0.6), // mechones sobre la frente
             cbox(0.024, 0.11, 0.024, c.hair, 0.052, 0.885 + hy, -0.098, 0.6),
-            cbox(0.024, 0.17, 0.05, c.hair, -0.099, 0.8 + hy, -0.065, -0.04), // caída junto a las sienes
-            cbox(0.024, 0.17, 0.05, c.hair, 0.099, 0.8 + hy, -0.065, 0.04),
-            cbox(0.024, 0.2, 0.12, c.hair, -0.1, 0.8 + hy, 0.014, -0.05), // laterales sobre las orejas
-            cbox(0.024, 0.2, 0.12, c.hair, 0.1, 0.8 + hy, 0.014, 0.05),
+            cbox(0.022, 0.2, 0.04, c.hair, -0.098, 0.785 + hy, -0.048, -0.04), // caída junto a las sienes, hasta la mandíbula
+            cbox(0.022, 0.2, 0.04, c.hair, 0.098, 0.785 + hy, -0.048, 0.04),
+            cbox(0.022, 0.21, 0.06, c.hair, -0.099, 0.795 + hy, -0.005, -0.05), // mechones sobre las orejas
+            cbox(0.022, 0.21, 0.06, c.hair, 0.099, 0.795 + hy, -0.005, 0.05),
+            cbox(0.022, 0.23, 0.065, c.hair, -0.104, 0.785 + hy, 0.052, -0.07), // mechones de detrás, algo más largos
+            cbox(0.022, 0.23, 0.065, c.hair, 0.104, 0.785 + hy, 0.052, 0.07),
             cprism(0.2, 0.09, 0.18, 0.085, 0.25, c.hair, 0, 0.785 + hy, 0.085), // melena hasta el cuello
             // Puntas a distinto largo: rompen el bloque, que es lo que más se ve desde la cámara.
             cbox(0.066, 0.07, 0.05, c.hair, -0.062, 0.65 + hy, 0.112, 0.1),
@@ -1345,18 +1382,22 @@ export const PLAYER_COLORS: RigColors = {
   tie: 0x060608,
   pants: 0x17191e,
   shoes: 0x09090b,
-  skin: 0xc99b7e,
+  skin: 0xcca48b,
   hair: 0x1f1712,
   accent: 0xc9a227,
 };
 
-/** Aspecto del Huésped: traje negro de tres piezas sin pañuelo, media melena con raya al medio y barba. */
+/**
+ * Aspecto del Huésped: John Wick con los rasgos de Keanu Reeves, por bloques. Traje negro de tres
+ * piezas sin pañuelo, media melena con raya al medio y barba corta.
+ */
 export const PLAYER_LOOK: RigOptions = {
   colors: PLAYER_COLORS,
   rimColor: 0xe8e2d0,
   rimStrength: 0.16,
   hair: 'parted',
   beard: true,
+  face: 'wick',
   weapon: 'pistol',
   outfit: { waistcoat: 0x111216, pocketSquare: false },
 };

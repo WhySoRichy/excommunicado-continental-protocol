@@ -104,9 +104,9 @@ Cada contrato sigue el flujo **briefing** (3 líneas: objetivo, regla especial, 
 |---|---|---|---|---|---|
 | Matón | Naranja | Pistola, 8 de daño | 80 | Avanza y dispara | Fogonazo previo y sonido de amartillar |
 | Escolta | Amarillo | SMG en ráfagas, 5 de daño | 90 | **Flanquea** | Grito "¡Por la izquierda!" e icono de flecha |
-| Tirador | Rojo | Rifle, 35 de daño | 70 | Fijo en altura, cubre zonas | **Láser rojo visible 1,2 s** con pitido creciente antes del disparo |
-| Blindado | Azul acero | Escopeta, 4×6 de daño | 120 + 150 de armadura | Avanza lento; el cuerpo recibe solo el 20 % del daño | Levanta el arma y parpadea en rojo 0,6 s |
-| Jefe | Magenta | SMG en ráfagas | 420 + 120 de armadura | Fases: al 50 % y al 20 % se arrodilla e invoca escoltas | El rim se enciende antes de cada ráfaga |
+| Tirador | Rojo | Rifle de tirador con mira, 35 de daño | 70 | Fijo en altura, cubre zonas | **Láser rojo visible 1,2 s** con pitido creciente antes del disparo |
+| Blindado | Azul acero | Escopeta táctica, 4×6 de daño | 120 + 150 de armadura | Avanza lento; el cuerpo recibe solo el 20 % del daño | Levanta el arma y parpadea en rojo 0,6 s |
+| Jefe | Magenta | Revólver en ráfagas | 420 + 120 de armadura | Fases: al 50 % y al 20 % se arrodilla e invoca escoltas | El rim se enciende antes de cada ráfaga |
 
 Un headshot mata de un tiro a matón, escolta y tirador. Esa regla es simple y premia la precisión.
 
@@ -239,8 +239,9 @@ Hay cinco subnotas de 0 a 100: **tiempo** (frente al par), **precisión** (impac
 - **Noir por contraste, no por oscuridad:**
   - Piso de luz ambiental en todos los niveles y suelos y paredes de valores medios.
   - Neón emisivo y cobertura con bordes claros.
-- **Personajes por bloques, propios:** prismas facetados con sombreado plano y rasgos mínimos.
-  - El Huésped viste traje negro de tres piezas, camisa y corbata negras, media melena con raya al medio y barba. Evoca el vestuario del personaje de las películas **sin reproducir el rostro de ningún actor**.
+- **Personajes por bloques:** prismas facetados con sombreado plano y rasgos mínimos.
+  - El Huésped es John Wick tal como lo interpreta Keanu Reeves, llevado al estilo de bloques: cara alargada, pómulos altos, cejas rectas, ojos de párpado caído, media melena con raya al medio y barba corta. Viste traje negro de tres piezas con camisa y corbata negras.
   - El Sommelier trabaja sin chaqueta: camisa blanca, chaleco burdeos, pajarita, delantal largo, catavinos de plata y bigote encerado.
-- **Armas reconocibles por la silueta:** pistola con compensador, carabina con visor, subfusil de culata plegable, escopeta de corredera con madera y cuchillo táctico. En los enemigos, el color de su tipo marca un detalle del arma.
+- **Armas reconocibles por la silueta:** pistola con compensador, carabina con visor y empuñadura delantera, subfusil de culata plegable, escopeta de corredera con madera y cartuchos al costado, y cuchillo táctico. Los enemigos llevan además un rifle de tirador con mira y bípode, una escopeta táctica y, el Juez, un revólver. El color de cada tipo de enemigo marca un detalle de su arma.
+- **Proyectiles:** las trazadoras viajan como balas desde la boca del arma hasta el impacto, el fogonazo tiene forma de estrella y los casquillos de latón rebotan en el suelo.
 - **Lluvia, humo y reflejos** solo como acento.

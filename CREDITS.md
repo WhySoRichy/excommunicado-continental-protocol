@@ -13,7 +13,7 @@ Todo el contenido del juego es **procedural** o se ha creado para este proyecto:
 - **Sonido y música:** sintetizados con Web Audio (`src/audio/`). No hay archivos de audio.
 - **Tipografías:** las del sistema (Georgia, system-ui). No se descarga ninguna fuente.
 
-No se usan logos, música, modelos, texturas ni capturas de la franquicia John Wick, ni el parecido de ningún actor.
+No se usan logos, música, modelos, texturas ni capturas de la franquicia John Wick. El protagonista homenajea a John Wick tal como lo interpreta Keanu Reeves, llevado al estilo de bloques del juego; ni el actor ni la productora respaldan este proyecto.
 
 ## Bibliotecas en tiempo de ejecución
 

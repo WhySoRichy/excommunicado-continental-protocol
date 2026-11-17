@@ -147,4 +147,4 @@ Con una RTX 4060 va a 144 FPS (el tope del monitor). En gráficas integradas el 
 
 Proyecto de **WhySoRichy** para la asignatura de Programación Avanzada. Bibliotecas y herramientas en [CREDITS.md](CREDITS.md). El código está bajo la [licencia MIT](LICENSE).
 
-> **Proyecto de fans sin ánimo de lucro.** No está afiliado ni respaldado por Lionsgate, 87Eleven ni los titulares de la franquicia John Wick. No usa material con copyright (logos, música, modelos o imágenes) ni el parecido de ningún actor. Los nombres y marcas citados pertenecen a sus dueños.
+> **Proyecto de fans sin ánimo de lucro.** No está afiliado ni respaldado por Lionsgate, 87Eleven, los titulares de la franquicia John Wick ni Keanu Reeves. No usa material con copyright (logos, música, modelos o imágenes): el protagonista es un homenaje por bloques, generado por código, a John Wick tal como lo interpreta Keanu Reeves. Los nombres y marcas citados pertenecen a sus dueños.
