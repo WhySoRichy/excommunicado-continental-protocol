@@ -189,6 +189,31 @@ test.describe('Fase 6 · rendimiento', () => {
     expect(s.info.triangles).toBeLessThanOrEqual(BUDGET.triangles);
   });
 
+  test('los enemigos del mismo tipo comparten la geometría', async ({ page }) => {
+    await openGame(page);
+    await page.evaluate(() => window.__EXCOM__!.playLevel('arena'));
+    await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('playing');
+    // Delante de la cámara: la geometría se sube a la GPU la primera vez que se dibuja.
+    const spawn = (count: number, z: number): Promise<number> =>
+      page.evaluate(
+        ([n, rowZ]) => {
+          const q = window.__EXCOM__!;
+          q.setManual(true);
+          q.setGod(true);
+          q.teleport(0, 0, 14, 0);
+          q.setLook(0, -0.1);
+          for (let i = 0; i < n!; i++) q.spawnEnemy('thug', -3 + i * 1.5, 0, rowZ!, false);
+          q.step(2, {});
+          q.luminance();
+          return q.info().geometries;
+        },
+        [count, z],
+      );
+    const one = await spawn(1, 8);
+    const six = await spawn(5, 6);
+    expect(six, 'geometrías con seis matones frente a uno').toBe(one);
+  });
+
   test('bundle: JS del juego y del motor de física dentro de presupuesto', async () => {
     const dir = join(process.cwd(), 'dist', 'assets');
     const files = readdirSync(dir).filter((f) => f.endsWith('.js'));

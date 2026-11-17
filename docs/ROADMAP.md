@@ -7,18 +7,13 @@ Qué se puede mejorar y en qué orden. Cada bloque está pensado para una sesió
 - Hub, tutorial, tres contratos y Gauntlet completos y jugables de principio a fin.
 - Personajes procedurales de diseño facetado (sombreado plano, torso en V, rasgos mínimos) y animación procedural con IK de piernas y de la mano de apoyo, pies articulados, reacciones de impacto, caídas variadas, vault en tres tiempos y takedown coreografiado (`src/entities/CharacterRig.ts`).
 - Dirección de arte nocturna: cielo con silueta de ciudad en los exteriores, vestíbulo del Continental con papel pintado y damero de mármol, bloom y viñeta desde el preset Medio.
-- 151 pruebas unitarias y 43 e2e; CI y despliegue automático en GitHub Pages.
-- El Gauntlet ya no se degrada con las oleadas: los caídos se retiran al empezar la siguiente y un cuerpo asentado deja de simularse y animarse. Tras doce oleadas, 81 draw calls (antes unas 400).
+- 151 pruebas unitarias y 44 e2e; CI y despliegue automático en GitHub Pages.
+- El Gauntlet ya no se degrada con las oleadas: los caídos se retiran al empezar la siguiente y un cuerpo asentado deja de simularse y animarse. Tras doce oleadas, 81 draw calls (antes unas 400). Además, los personajes de igual aspecto comparten la geometría: un enemigo que aparece ya no construye ni sube a la GPU un cuerpo nuevo.
 - Primera pasada de robustez tras revisar el juego entero, jugándolo y midiendo: el mapa de sombras se libera al cambiar de nivel, el combate con el Juez se reinicia al reaparecer, un nivel que no se descarga se explica en pantalla, el audio posicional sigue a la cámara en Firefox, abrir el juego sin empezar no crea partida y la voltereta suena.
 
 ## Antes de añadir contenido: robustez y rendimiento
 
 Lo que quedó pendiente de esa revisión. Conviene hacerlo antes del cuarto contrato, porque más contenido multiplica estos costes.
-
-### Enemigos más baratos de crear
-Cada enemigo construye su propia geometría al aparecer (dos geometrías por personaje), aunque todos los de un mismo tipo son iguales.
-- Compartir la geometría entre enemigos del mismo tipo y liberarla con el nivel.
-- Cómo comprobarlo: el número de geometrías de `info()` no crece con cada enemigo; el test del Gauntlet de `tests/e2e/perf.spec.ts` sigue en verde.
 
 ### Red de seguridad
 - Linter y detección de código sin uso; prueba de humo en Firefox dentro de la suite.

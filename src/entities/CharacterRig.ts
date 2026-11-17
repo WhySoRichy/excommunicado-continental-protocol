@@ -200,6 +200,54 @@ function merge(parts: BufferGeometry[]): BufferGeometry {
   return g;
 }
 
+/** Geometría compartida entre personajes de igual aspecto, con recuento de usos: se libera con el último. */
+interface SharedGeometry {
+  geo: BufferGeometry;
+  users: number;
+}
+const bodyGeometries = new Map<string, SharedGeometry>();
+const weaponGeometries = new Map<string, SharedGeometry>();
+
+function acquire(cache: Map<string, SharedGeometry>, key: string, build: () => BufferGeometry): BufferGeometry {
+  let e = cache.get(key);
+  if (!e) {
+    e = { geo: build(), users: 0 };
+    cache.set(key, e);
+  }
+  e.users++;
+  return e.geo;
+}
+
+function release(cache: Map<string, SharedGeometry>, key: string): void {
+  const e = cache.get(key);
+  if (!e || --e.users > 0) return;
+  e.geo.dispose();
+  cache.delete(key);
+}
+
+/** Todo lo que cambia la geometría del cuerpo (el material y el rim van aparte). */
+function appearanceKey(o: RigOptions): string {
+  const c = o.colors;
+  return [c.jacket, c.shirt, c.tie, c.pants, c.shoes, c.skin, c.hair, c.accent, o.hair, o.bulk ?? 1, o.vest ? 1 : 0, o.beard ? 1 : 0].join('|');
+}
+
+/** Geometría de cada arma (el cañón apunta a −Z del soporte). */
+function weaponGeometry(model: Exclude<WeaponModel, 'none'>, accent: number): BufferGeometry {
+  const dark = 0x1d1f23;
+  switch (model) {
+    case 'pistol':
+      return merge([cbox(0.04, 0.06, 0.2, dark, 0, 0.03, -0.08), cbox(0.035, 0.1, 0.05, dark, 0, -0.03, -0.01)]);
+    case 'rifle':
+      return merge([cbox(0.05, 0.08, 0.72, dark, 0, 0.03, -0.2), cbox(0.04, 0.14, 0.05, dark, 0, -0.06, -0.02), cbox(0.05, 0.04, 0.2, accent, 0, 0.09, -0.2), cbox(0.045, 0.1, 0.16, dark, 0, 0.01, 0.2)]);
+    case 'smg':
+      return merge([cbox(0.05, 0.08, 0.42, dark, 0, 0.03, -0.13), cbox(0.04, 0.16, 0.05, dark, 0, -0.07, -0.02), cbox(0.04, 0.06, 0.12, dark, 0, 0.02, 0.12)]);
+    case 'shotgun':
+      return merge([cbox(0.06, 0.08, 0.8, 0x3a2a1c, 0, 0.03, -0.25), cbox(0.05, 0.05, 0.6, dark, 0, 0.08, -0.32), cbox(0.05, 0.1, 0.18, 0x3a2a1c, 0, 0.0, 0.2)]);
+    case 'knife':
+      return merge([cbox(0.02, 0.03, 0.18, 0xc8ccd2, 0, 0, -0.13), cbox(0.03, 0.04, 0.08, dark, 0, 0, -0.01)]);
+  }
+}
+
 const materialCache = new Map<string, { mat: MeshStandardMaterial; rim: RimUniforms }>();
 
 /** Material por tipo de personaje (el rim es uniform por material). `unique` no se cachea. */
@@ -247,11 +295,14 @@ export class CharacterRig {
   private readonly footL = new Bone();
   private readonly footR = new Bone();
   /** Piezas pendientes de fusionar en la malla con skinning. */
-  private readonly pieces: Array<{ bone: Bone; geo: BufferGeometry }> = [];
+  private readonly pieces: Array<{ bone: Bone; make: () => BufferGeometry }> = [];
   private skeleton: Skeleton | null = null;
   readonly weaponMount = new Group();
   private weaponMesh: Mesh | null = null;
   private weaponModel: WeaponModel = 'none';
+  /** Claves de la geometría compartida que usa (cuerpo y arma). */
+  private bodyKey = '';
+  private weaponKey = '';
   private readonly meshes: Array<Mesh | SkinnedMesh> = [];
   private phase = 0;
   private time = 0;
@@ -284,99 +335,103 @@ export class CharacterRig {
     const b = o.bulk ?? 1;
 
     // --- Torso en V: pelvis, faldón, pecho, hombros rectos, cuello de camisa, solapas y corbata ---
-    const edge = trim(c.jacket);
-    const zf = -0.118 * b; // plano frontal del pecho
-    const torsoParts: BufferGeometry[] = [
-      cprism(0.33 * b, 0.19 * b, 0.3 * b, 0.17 * b, 0.16, c.pants, 0, 0, 0),
-      cprism(0.335 * b, 0.2 * b, 0.375 * b, 0.225 * b, 0.2, c.jacket, 0, 0.06, 0), // faldón
-      cprism(0.48 * b, 0.235 * b, 0.335 * b, 0.2 * b, 0.42, c.jacket, 0, 0.37, 0), // pecho
-      cprism(0.4 * b, 0.19 * b, 0.5 * b, 0.245 * b, 0.07, c.jacket, 0, 0.615, 0), // hombros
-      cprism(0.17, 0.15, 0.21, 0.18, 0.045, edge, 0, 0.652, 0.005), // cuello de la chaqueta
-      cprism(0.12, 0.125, 0.14, 0.14, 0.04, c.shirt, 0, 0.68, -0.002), // cuello de la camisa
-      ccyl(0.047, 0.05, 0.1, c.skin, 0, 0.7, 0, 1, 6),
-      cprism(0.15, 0.02, 0.03, 0.02, 0.27, c.shirt, 0, 0.485, zf), // pechera en V
-      cprism(0.036, 0.02, 0.052, 0.02, 0.22, c.tie, 0, 0.47, zf - 0.008),
-      cbox(0.046, 0.034, 0.024, c.tie, 0, 0.595, zf - 0.008), // nudo
-      cbox(0.045, 0.3, 0.02, edge, -0.07, 0.49, zf - 0.004, 0.27), // solapas
-      cbox(0.045, 0.3, 0.02, edge, 0.07, 0.49, zf - 0.004, -0.27),
-      cbox(0.055, 0.024, 0.02, c.accent, -0.15 * b, 0.5, zf + 0.002), // pañuelo de bolsillo
-      cbox(0.02, 0.02, 0.012, edge, 0, 0.3, -0.108 * b), // botón
-      cbox(0.012, 0.17, 0.012, edge, 0, 0.055, 0.108 * b), // abertura trasera
-      cbox(0.008, 0.4, 0.01, edge, 0, 0.37, 0.108 * b), // costura de la espalda
-    ];
-    if (o.vest) {
-      const plate = shade(c.accent, 0.62);
-      torsoParts.push(
-        cprism(0.45 * b, 0.3 * b, 0.37 * b, 0.27 * b, 0.33, c.accent, 0, 0.385, 0), // portaplacas
-        cbox(0.07, 0.1, 0.03, plate, -0.09, 0.3, -0.15 * b), // portacargadores
-        cbox(0.07, 0.1, 0.03, plate, 0, 0.3, -0.15 * b),
-        cbox(0.07, 0.1, 0.03, plate, 0.09, 0.3, -0.15 * b),
-        cbox(0.06, 0.1, 0.27 * b, plate, -0.14 * b, 0.6, 0), // tirantes
-        cbox(0.06, 0.1, 0.27 * b, plate, 0.14 * b, 0.6, 0),
-      );
-    }
-    this.addMesh(this.torso, merge(torsoParts));
+    this.addMesh(this.torso, () => {
+      const edge = trim(c.jacket);
+      const zf = -0.118 * b; // plano frontal del pecho
+      const torsoParts: BufferGeometry[] = [
+        cprism(0.33 * b, 0.19 * b, 0.3 * b, 0.17 * b, 0.16, c.pants, 0, 0, 0),
+        cprism(0.335 * b, 0.2 * b, 0.375 * b, 0.225 * b, 0.2, c.jacket, 0, 0.06, 0), // faldón
+        cprism(0.48 * b, 0.235 * b, 0.335 * b, 0.2 * b, 0.42, c.jacket, 0, 0.37, 0), // pecho
+        cprism(0.4 * b, 0.19 * b, 0.5 * b, 0.245 * b, 0.07, c.jacket, 0, 0.615, 0), // hombros
+        cprism(0.17, 0.15, 0.21, 0.18, 0.045, edge, 0, 0.652, 0.005), // cuello de la chaqueta
+        cprism(0.12, 0.125, 0.14, 0.14, 0.04, c.shirt, 0, 0.68, -0.002), // cuello de la camisa
+        ccyl(0.047, 0.05, 0.1, c.skin, 0, 0.7, 0, 1, 6),
+        cprism(0.15, 0.02, 0.03, 0.02, 0.27, c.shirt, 0, 0.485, zf), // pechera en V
+        cprism(0.036, 0.02, 0.052, 0.02, 0.22, c.tie, 0, 0.47, zf - 0.008),
+        cbox(0.046, 0.034, 0.024, c.tie, 0, 0.595, zf - 0.008), // nudo
+        cbox(0.045, 0.3, 0.02, edge, -0.07, 0.49, zf - 0.004, 0.27), // solapas
+        cbox(0.045, 0.3, 0.02, edge, 0.07, 0.49, zf - 0.004, -0.27),
+        cbox(0.055, 0.024, 0.02, c.accent, -0.15 * b, 0.5, zf + 0.002), // pañuelo de bolsillo
+        cbox(0.02, 0.02, 0.012, edge, 0, 0.3, -0.108 * b), // botón
+        cbox(0.012, 0.17, 0.012, edge, 0, 0.055, 0.108 * b), // abertura trasera
+        cbox(0.008, 0.4, 0.01, edge, 0, 0.37, 0.108 * b), // costura de la espalda
+      ];
+      if (o.vest) {
+        const plate = shade(c.accent, 0.62);
+        torsoParts.push(
+          cprism(0.45 * b, 0.3 * b, 0.37 * b, 0.27 * b, 0.33, c.accent, 0, 0.385, 0), // portaplacas
+          cbox(0.07, 0.1, 0.03, plate, -0.09, 0.3, -0.15 * b), // portacargadores
+          cbox(0.07, 0.1, 0.03, plate, 0, 0.3, -0.15 * b),
+          cbox(0.07, 0.1, 0.03, plate, 0.09, 0.3, -0.15 * b),
+          cbox(0.06, 0.1, 0.27 * b, plate, -0.14 * b, 0.6, 0), // tirantes
+          cbox(0.06, 0.1, 0.27 * b, plate, 0.14 * b, 0.6, 0),
+        );
+      }
+      return merge(torsoParts);
+    });
 
     // --- Cabeza facetada (hueso propio): cráneo, pómulos, mandíbula marcada y rasgos mínimos ---
-    const hy = -NECK_Y;
-    const dark = 0x0c0d10;
-    const jawColor = o.beard ? shade(c.hair, 1.1) : c.skin;
-    const headParts: BufferGeometry[] = [
-      cprism(0.15, 0.17, 0.186, 0.2, 0.12, c.skin, 0, 0.875 + hy, 0), // cráneo
-      cprism(0.186, 0.2, 0.172, 0.186, 0.07, c.skin, 0, 0.78 + hy, 0), // pómulos
-      cprism(0.172, 0.186, 0.105, 0.12, 0.08, jawColor, 0, 0.705 + hy, -0.008), // mandíbula
-      cbox(0.062, 0.016, 0.024, c.hair, -0.046, 0.824 + hy, -0.092, -0.16), // cejas fruncidas
-      cbox(0.062, 0.016, 0.024, c.hair, 0.046, 0.824 + hy, -0.092, 0.16),
-      cbox(0.036, 0.013, 0.012, dark, -0.046, 0.803 + hy, -0.096), // ojos
-      cbox(0.036, 0.013, 0.012, dark, 0.046, 0.803 + hy, -0.096),
-      cprism(0.026, 0.02, 0.042, 0.046, 0.062, shade(c.skin, 0.9), 0, 0.776 + hy, -0.106), // nariz
-      cbox(0.02, 0.05, 0.035, shade(c.skin, 0.9), -0.097, 0.79 + hy, 0.005), // orejas
-      cbox(0.02, 0.05, 0.035, shade(c.skin, 0.9), 0.097, 0.79 + hy, 0.005),
-    ];
-    if (o.beard) headParts.push(cbox(0.06, 0.012, 0.012, shade(c.skin, 0.6), 0, 0.726 + hy, -0.098), cbox(0.09, 0.02, 0.014, jawColor, 0, 0.745 + hy, -0.096));
-    else headParts.push(cbox(0.056, 0.01, 0.012, shade(c.skin, 0.55), 0, 0.722 + hy, -0.092));
-    switch (o.hair) {
-      case 'long':
-        // Melena peinada hacia atrás hasta el cuello, con dos mechones que enmarcan la cara.
-        headParts.push(
-          cprism(0.165, 0.19, 0.2, 0.215, 0.07, c.hair, 0, 0.9 + hy, 0.006),
-          cprism(0.1, 0.13, 0.165, 0.19, 0.025, c.hair, 0, 0.947 + hy, 0.012), // coronilla
-          cprism(0.2, 0.1, 0.13, 0.04, 0.26, c.hair, 0, 0.77 + hy, 0.085),
-          cbox(0.022, 0.19, 0.1, c.hair, -0.1, 0.8 + hy, 0.05),
-          cbox(0.022, 0.19, 0.1, c.hair, 0.1, 0.8 + hy, 0.05),
-          cbox(0.02, 0.13, 0.03, c.hair, -0.092, 0.825 + hy, -0.066, 0.1),
-          cbox(0.02, 0.13, 0.03, c.hair, 0.092, 0.825 + hy, -0.066, -0.1),
-        );
-        break;
-      case 'short':
-        headParts.push(
-          cprism(0.16, 0.185, 0.196, 0.212, 0.07, c.hair, 0, 0.905 + hy, 0.004),
-          cprism(0.196, 0.06, 0.18, 0.04, 0.12, c.hair, 0, 0.83 + hy, 0.085),
-          cbox(0.018, 0.07, 0.11, c.hair, -0.097, 0.845 + hy, 0.03),
-          cbox(0.018, 0.07, 0.11, c.hair, 0.097, 0.845 + hy, 0.03),
-        );
-        break;
-      case 'helmet':
-        headParts.push(
-          cprism(0.18, 0.2, 0.225, 0.245, 0.12, c.accent, 0, 0.895 + hy, 0.004),
-          cprism(0.225, 0.13, 0.21, 0.1, 0.09, c.accent, 0, 0.8 + hy, 0.06),
-          cbox(0.2, 0.04, 0.024, 0x0e1116, 0, 0.805 + hy, -0.1), // visor
-          cbox(0.012, 0.11, 0.014, 0x0e1116, -0.094, 0.755 + hy, -0.03), // barboquejo
-          cbox(0.012, 0.11, 0.014, 0x0e1116, 0.094, 0.755 + hy, -0.03),
-        );
-        break;
-      case 'cap':
-        headParts.push(
-          cprism(0.165, 0.19, 0.202, 0.218, 0.075, c.accent, 0, 0.9 + hy, 0.004),
-          cbox(0.17, 0.014, 0.11, shade(c.accent, 0.75), 0, 0.868 + hy, -0.15),
-          cprism(0.196, 0.05, 0.18, 0.04, 0.07, c.hair, 0, 0.83 + hy, 0.088),
-        );
-        break;
-      case 'bald':
-        break;
-    }
+    this.addMesh(this.head, () => {
+      const hy = -NECK_Y;
+      const dark = 0x0c0d10;
+      const jawColor = o.beard ? shade(c.hair, 1.1) : c.skin;
+      const headParts: BufferGeometry[] = [
+        cprism(0.15, 0.17, 0.186, 0.2, 0.12, c.skin, 0, 0.875 + hy, 0), // cráneo
+        cprism(0.186, 0.2, 0.172, 0.186, 0.07, c.skin, 0, 0.78 + hy, 0), // pómulos
+        cprism(0.172, 0.186, 0.105, 0.12, 0.08, jawColor, 0, 0.705 + hy, -0.008), // mandíbula
+        cbox(0.062, 0.016, 0.024, c.hair, -0.046, 0.824 + hy, -0.092, -0.16), // cejas fruncidas
+        cbox(0.062, 0.016, 0.024, c.hair, 0.046, 0.824 + hy, -0.092, 0.16),
+        cbox(0.036, 0.013, 0.012, dark, -0.046, 0.803 + hy, -0.096), // ojos
+        cbox(0.036, 0.013, 0.012, dark, 0.046, 0.803 + hy, -0.096),
+        cprism(0.026, 0.02, 0.042, 0.046, 0.062, shade(c.skin, 0.9), 0, 0.776 + hy, -0.106), // nariz
+        cbox(0.02, 0.05, 0.035, shade(c.skin, 0.9), -0.097, 0.79 + hy, 0.005), // orejas
+        cbox(0.02, 0.05, 0.035, shade(c.skin, 0.9), 0.097, 0.79 + hy, 0.005),
+      ];
+      if (o.beard) headParts.push(cbox(0.06, 0.012, 0.012, shade(c.skin, 0.6), 0, 0.726 + hy, -0.098), cbox(0.09, 0.02, 0.014, jawColor, 0, 0.745 + hy, -0.096));
+      else headParts.push(cbox(0.056, 0.01, 0.012, shade(c.skin, 0.55), 0, 0.722 + hy, -0.092));
+      switch (o.hair) {
+        case 'long':
+          // Melena peinada hacia atrás hasta el cuello, con dos mechones que enmarcan la cara.
+          headParts.push(
+            cprism(0.165, 0.19, 0.2, 0.215, 0.07, c.hair, 0, 0.9 + hy, 0.006),
+            cprism(0.1, 0.13, 0.165, 0.19, 0.025, c.hair, 0, 0.947 + hy, 0.012), // coronilla
+            cprism(0.2, 0.1, 0.13, 0.04, 0.26, c.hair, 0, 0.77 + hy, 0.085),
+            cbox(0.022, 0.19, 0.1, c.hair, -0.1, 0.8 + hy, 0.05),
+            cbox(0.022, 0.19, 0.1, c.hair, 0.1, 0.8 + hy, 0.05),
+            cbox(0.02, 0.13, 0.03, c.hair, -0.092, 0.825 + hy, -0.066, 0.1),
+            cbox(0.02, 0.13, 0.03, c.hair, 0.092, 0.825 + hy, -0.066, -0.1),
+          );
+          break;
+        case 'short':
+          headParts.push(
+            cprism(0.16, 0.185, 0.196, 0.212, 0.07, c.hair, 0, 0.905 + hy, 0.004),
+            cprism(0.196, 0.06, 0.18, 0.04, 0.12, c.hair, 0, 0.83 + hy, 0.085),
+            cbox(0.018, 0.07, 0.11, c.hair, -0.097, 0.845 + hy, 0.03),
+            cbox(0.018, 0.07, 0.11, c.hair, 0.097, 0.845 + hy, 0.03),
+          );
+          break;
+        case 'helmet':
+          headParts.push(
+            cprism(0.18, 0.2, 0.225, 0.245, 0.12, c.accent, 0, 0.895 + hy, 0.004),
+            cprism(0.225, 0.13, 0.21, 0.1, 0.09, c.accent, 0, 0.8 + hy, 0.06),
+            cbox(0.2, 0.04, 0.024, 0x0e1116, 0, 0.805 + hy, -0.1), // visor
+            cbox(0.012, 0.11, 0.014, 0x0e1116, -0.094, 0.755 + hy, -0.03), // barboquejo
+            cbox(0.012, 0.11, 0.014, 0x0e1116, 0.094, 0.755 + hy, -0.03),
+          );
+          break;
+        case 'cap':
+          headParts.push(
+            cprism(0.165, 0.19, 0.202, 0.218, 0.075, c.accent, 0, 0.9 + hy, 0.004),
+            cbox(0.17, 0.014, 0.11, shade(c.accent, 0.75), 0, 0.868 + hy, -0.15),
+            cprism(0.196, 0.05, 0.18, 0.04, 0.07, c.hair, 0, 0.83 + hy, 0.088),
+          );
+          break;
+        case 'bald':
+          break;
+      }
+      return merge(headParts);
+    });
     this.head.position.set(0, NECK_Y, 0);
-    this.addMesh(this.head, merge(headParts));
     this.torso.add(this.head);
 
     // --- Brazos: hombrera, brazo y antebrazo que se afinan, puño de camisa y mano con pulgar ---
@@ -393,10 +448,10 @@ export class CharacterRig {
     this.armR.position.set(0.285 * b, SHOULDER_Y, 0);
     this.foreL.position.set(0, ELBOW_Y, 0);
     this.foreR.position.set(0, ELBOW_Y, 0);
-    this.addMesh(this.armL, upperGeo());
-    this.addMesh(this.armR, upperGeo());
-    this.addMesh(this.foreL, foreGeo());
-    this.addMesh(this.foreR, foreGeo());
+    this.addMesh(this.armL, upperGeo);
+    this.addMesh(this.armR, upperGeo);
+    this.addMesh(this.foreL, foreGeo);
+    this.addMesh(this.foreR, foreGeo);
     this.armL.add(this.foreL);
     this.armR.add(this.foreR);
     this.torso.add(this.armL, this.armR);
@@ -421,12 +476,12 @@ export class CharacterRig {
     this.shinR.position.set(0, -0.46, 0);
     this.footL.position.set(0, ANKLE_Y, 0);
     this.footR.position.set(0, ANKLE_Y, 0);
-    this.addMesh(this.thighL, thighGeo());
-    this.addMesh(this.thighR, thighGeo());
-    this.addMesh(this.shinL, shinGeo());
-    this.addMesh(this.shinR, shinGeo());
-    this.addMesh(this.footL, footGeo());
-    this.addMesh(this.footR, footGeo());
+    this.addMesh(this.thighL, thighGeo);
+    this.addMesh(this.thighR, thighGeo);
+    this.addMesh(this.shinL, shinGeo);
+    this.addMesh(this.shinR, shinGeo);
+    this.addMesh(this.footL, footGeo);
+    this.addMesh(this.footR, footGeo);
     this.shinL.add(this.footL);
     this.shinR.add(this.footR);
     this.thighL.add(this.shinL);
@@ -437,37 +492,46 @@ export class CharacterRig {
     this.spin.position.set(0, SPIN_Y, 0);
     this.spin.add(this.hips);
     this.root.add(this.spin);
-    this.buildSkin();
+    this.buildSkin(appearanceKey(o));
     this.setWeapon(o.weapon, c.accent);
   }
 
-  private addMesh(bone: Bone, geo: BufferGeometry): void {
-    this.pieces.push({ bone, geo });
+  /** Registra una pieza; su geometría solo se construye si ese aspecto aún no existe (`buildSkin`). */
+  private addMesh(bone: Bone, make: () => BufferGeometry): void {
+    this.pieces.push({ bone, make });
   }
 
-  /** Fusiona las piezas en una SkinnedMesh: cada vértice va a su hueso con peso 1. */
-  private buildSkin(): void {
+  /**
+   * Fusiona las piezas en una SkinnedMesh: cada vértice va a su hueso con peso 1. Los personajes de
+   * igual aspecto (todos los matones, los civiles con el mismo atuendo) comparten esta geometría:
+   * solo se construye la primera vez. El esqueleto sí es de cada uno.
+   */
+  private buildSkin(key: string): void {
     const bones = [this.spin, this.hips, this.torso, this.head, this.armL, this.armR, this.foreL, this.foreR, this.thighL, this.thighR, this.shinL, this.shinR, this.footL, this.footR];
     this.root.updateMatrixWorld(true);
-    _rootInv.copy(this.root.matrixWorld).invert();
-    const geos: BufferGeometry[] = [];
-    for (const { bone, geo } of this.pieces) {
-      // Pose de reposo: la pieza pasa del espacio de su hueso al de la raíz.
-      geo.applyMatrix4(_local.multiplyMatrices(_rootInv, bone.matrixWorld));
-      const n = geo.getAttribute('position').count;
-      const idx = bones.indexOf(bone);
-      const si = new Uint16Array(n * 4);
-      const sw = new Float32Array(n * 4);
-      for (let i = 0; i < n; i++) {
-        si[i * 4] = idx;
-        sw[i * 4] = 1;
+    const geo = acquire(bodyGeometries, key, () => {
+      _rootInv.copy(this.root.matrixWorld).invert();
+      const geos: BufferGeometry[] = [];
+      for (const { bone, make } of this.pieces) {
+        // Pose de reposo: la pieza pasa del espacio de su hueso al de la raíz.
+        const g = make().applyMatrix4(_local.multiplyMatrices(_rootInv, bone.matrixWorld));
+        const n = g.getAttribute('position').count;
+        const idx = bones.indexOf(bone);
+        const si = new Uint16Array(n * 4);
+        const sw = new Float32Array(n * 4);
+        for (let i = 0; i < n; i++) {
+          si[i * 4] = idx;
+          sw[i * 4] = 1;
+        }
+        g.setAttribute('skinIndex', new Uint16BufferAttribute(si, 4));
+        g.setAttribute('skinWeight', new Float32BufferAttribute(sw, 4));
+        geos.push(g);
       }
-      geo.setAttribute('skinIndex', new Uint16BufferAttribute(si, 4));
-      geo.setAttribute('skinWeight', new Float32BufferAttribute(sw, 4));
-      geos.push(geo);
-    }
+      return merge(geos);
+    });
+    this.bodyKey = key;
     this.pieces.length = 0;
-    const mesh = new SkinnedMesh(merge(geos), this.material);
+    const mesh = new SkinnedMesh(geo, this.material);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     mesh.boundingSphere = new Sphere(CULL_CENTER.clone(), CULL_RADIUS);
@@ -478,40 +542,19 @@ export class CharacterRig {
     this.meshes.push(mesh);
   }
 
-  /** Cambia el arma visible (geometría propia por modelo). El cañón apunta a −Z del soporte. */
+  /** Cambia el arma visible. La misma arma del mismo color se comparte entre personajes. */
   setWeapon(model: WeaponModel, accent = 0x888888): void {
     if (this.weaponMesh) {
       this.weaponMount.remove(this.weaponMesh);
-      this.weaponMesh.geometry.dispose();
+      release(weaponGeometries, this.weaponKey);
       this.weaponMesh = null;
     }
     this.weaponModel = model;
-    const dark = 0x1d1f23;
-    let geo: BufferGeometry | null = null;
-    switch (model) {
-      case 'pistol':
-        geo = merge([cbox(0.04, 0.06, 0.2, dark, 0, 0.03, -0.08), cbox(0.035, 0.1, 0.05, dark, 0, -0.03, -0.01)]);
-        break;
-      case 'rifle':
-        geo = merge([cbox(0.05, 0.08, 0.72, dark, 0, 0.03, -0.2), cbox(0.04, 0.14, 0.05, dark, 0, -0.06, -0.02), cbox(0.05, 0.04, 0.2, accent, 0, 0.09, -0.2), cbox(0.045, 0.1, 0.16, dark, 0, 0.01, 0.2)]);
-        break;
-      case 'smg':
-        geo = merge([cbox(0.05, 0.08, 0.42, dark, 0, 0.03, -0.13), cbox(0.04, 0.16, 0.05, dark, 0, -0.07, -0.02), cbox(0.04, 0.06, 0.12, dark, 0, 0.02, 0.12)]);
-        break;
-      case 'shotgun':
-        geo = merge([cbox(0.06, 0.08, 0.8, 0x3a2a1c, 0, 0.03, -0.25), cbox(0.05, 0.05, 0.6, dark, 0, 0.08, -0.32), cbox(0.05, 0.1, 0.18, 0x3a2a1c, 0, 0.0, 0.2)]);
-        break;
-      case 'knife':
-        geo = merge([cbox(0.02, 0.03, 0.18, 0xc8ccd2, 0, 0, -0.13), cbox(0.03, 0.04, 0.08, dark, 0, 0, -0.01)]);
-        break;
-      case 'none':
-        break;
-    }
-    if (geo) {
-      this.weaponMesh = new Mesh(geo, this.material);
-      this.weaponMesh.castShadow = true;
-      this.weaponMount.add(this.weaponMesh);
-    }
+    if (model === 'none') return;
+    this.weaponKey = `${model}|${accent}`;
+    this.weaponMesh = new Mesh(acquire(weaponGeometries, this.weaponKey, () => weaponGeometry(model, accent)), this.material);
+    this.weaponMesh.castShadow = true;
+    this.weaponMount.add(this.weaponMesh);
   }
 
   setShadows(on: boolean): void {
@@ -961,9 +1004,11 @@ export class CharacterRig {
   }
 
   dispose(): void {
-    for (const m of this.meshes) m.geometry.dispose();
+    // La geometría es compartida: se libera cuando la suelta el último personaje que la usa.
+    release(bodyGeometries, this.bodyKey);
+    this.bodyKey = '';
+    this.setWeapon('none');
     this.skeleton?.dispose();
-    this.weaponMesh?.geometry.dispose();
     this.root.removeFromParent();
   }
 }
