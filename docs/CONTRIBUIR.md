@@ -57,6 +57,9 @@ La primera vez que se ejecuten las e2e: `npx playwright install chromium`. Requi
 - **Estado que sobrevive al cambiar de nivel.** `loadSession` debe limpiar todo lo transitorio (toasts, balizas, interactivos usados).
 - **Bloom que lava la imagen.** El bloom actúa antes del mapeo de tonos: cualquier superficie que pase del umbral (`BLOOM_THRESHOLD` en `render/Renderer.ts`) brilla entera. Un suelo claro y pulido con mucha luz lo superaba y el vestíbulo quedaba blanco. Solo los emisores van en HDR (`EMISSIVE_HDR` en `render/materials.ts`); las superficies iluminadas deben quedar por debajo de 1.
 - **Shaders compilados dos veces.** Con posprocesado la escena se dibuja en un destino intermedio y sus programas no son los de pantalla. `prewarm()` compila contra ese destino; si no, el presupuesto de programas se dispara.
+- **Recursos de GPU que no cuelgan de una geometría ni de un material.** El mapa de sombras pertenece a la luz: quitarla de la escena no lo libera, hay que llamar a su `dispose()`. Se escapaban dos texturas por cada cambio de nivel; `tests/e2e/perf.spec.ts` lo vigila.
+- **Estado de misión que no acompaña a la reaparición.** Al reaparecer, los enemigos vivos recuperan la salud; lo que dependa de esa salud (las fases del jefe) debe reiniciarse a la vez (`MissionDirector.onPlayerRespawned`).
+- **Un `await` sin camino de error.** Una carga que fallaba dejaba el juego en `loading` para siempre. Todo flujo asíncrono que cambie de estado necesita su salida (`Game.tryLoadSession`).
 - **Niveles:** escalones de más de 0,32 m o muebles sin `noWalk` rompen la navegación de los enemigos. Los tests de navegación lo detectan.
 
 ## Despliegue

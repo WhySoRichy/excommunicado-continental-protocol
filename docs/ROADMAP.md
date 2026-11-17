@@ -7,7 +7,36 @@ Qué se puede mejorar y en qué orden. Cada bloque está pensado para una sesió
 - Hub, tutorial, tres contratos y Gauntlet completos y jugables de principio a fin.
 - Personajes procedurales de diseño facetado (sombreado plano, torso en V, rasgos mínimos) y animación procedural con IK de piernas y de la mano de apoyo, pies articulados, reacciones de impacto, caídas variadas, vault en tres tiempos y takedown coreografiado (`src/entities/CharacterRig.ts`).
 - Dirección de arte nocturna: cielo con silueta de ciudad en los exteriores, vestíbulo del Continental con papel pintado y damero de mármol, bloom y viñeta desde el preset Medio.
-- 151 pruebas unitarias y 38 e2e; CI y despliegue automático en GitHub Pages.
+- 151 pruebas unitarias y 42 e2e; CI y despliegue automático en GitHub Pages.
+- Primera pasada de robustez tras revisar el juego entero, jugándolo y midiendo: el mapa de sombras se libera al cambiar de nivel, el combate con el Juez se reinicia al reaparecer, un nivel que no se descarga se explica en pantalla, el audio posicional sigue a la cámara en Firefox, abrir el juego sin empezar no crea partida y la voltereta suena.
+
+## Antes de añadir contenido: robustez y rendimiento
+
+Lo que quedó pendiente de esa revisión. Conviene hacerlo antes del cuarto contrato, porque más contenido multiplica estos costes.
+
+### Gauntlet sostenible
+Los cuerpos caídos y los objetos recogidos nunca se retiran. En la oleada 10 ya hay unas 400 draw calls y 128 000 triángulos sin un solo enemigo vivo, por encima del presupuesto de cualquier nivel; en la 20, casi 13 ms de CPU por frame.
+- Retirar los cuerpos al cerrar la oleada (o desvanecerlos a los pocos segundos) y dejar de simular y animar los que ya cayeron.
+- Compartir la geometría entre enemigos del mismo tipo.
+- Cómo comprobarlo: un test de presupuesto en la oleada 15 con los límites de `tests/e2e/perf.spec.ts`.
+
+### Red de seguridad
+- Linter y detección de código sin uso; prueba de humo en Firefox dentro de la suite.
+- Validar el guion de cada misión (un `enemyId` o un `group` mal escrito deja el objetivo sin completarse) y que `tests/unit/hubNav.test.ts` recorra todos los niveles del registro.
+- Avisar cuando el navegador pierde el contexto gráfico y recuperar la iluminación de entorno al volver.
+- CI: límite de tiempo por trabajo y no cancelar un despliegue en curso.
+
+### Trucos fuera de la versión publicada
+Los comandos del panel F3 (monedas, modo dios) funcionan para cualquiera en la versión pública. Deben quedar solo con `?qa=1` o en desarrollo; es requisito para la tabla de récords en línea.
+
+### Lo que ya existe y no se ve
+- Pantalla de logros (hay 17 y solo aparecen al conseguirlos) y de estadísticas (el tiempo jugado se guarda y no se muestra).
+- Selector de dificultad: los multiplicadores de puntería y daño de los enemigos ya están cableados.
+- Registro local de partidas exportable, para medir el balance con jugadores reales (punto 3).
+- La lluvia declarada en los niveles (`weather`) no se dibuja.
+
+### Mantenibilidad
+- Repartir `src/game/Game.ts` (unas 1500 líneas) y pasar la lógica de objetivos y fases de `MissionDirector` a un módulo puro con tests.
 
 ## Prioridad alta: lo que más se nota al jugar
 
