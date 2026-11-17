@@ -131,6 +131,8 @@ export interface QaApi {
   /** Ruta A* (suavizada) desde el jugador hasta un punto: lista de waypoints. */
   pathTo(x: number, y: number, z: number): Array<{ x: number; y: number; z: number }>;
   combatInconsistencies(): number;
+  /** Trazadoras y casquillos que siguen activos. */
+  vfx(): { tracers: number; casings: number };
   respawn(): void;
   hud(): { deathVisible: boolean; reloadVisible: boolean; hitmark: string; style: string; ammo: string; objective: string; zone: string; toast: string };
   // --- Hub, perfil y menús ---
@@ -419,6 +421,7 @@ export function installQa(game: Game): void {
       });
     },
     combatInconsistencies: () => game.combatInconsistencies,
+    vfx: () => game.session?.vfx.activeEffects ?? { tracers: 0, casings: 0 },
     respawn: () => game.qaRespawn(),
     hud: () => {
       game.qaRefreshHud();

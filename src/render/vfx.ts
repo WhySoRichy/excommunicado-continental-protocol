@@ -25,6 +25,7 @@ import {
   Vector3,
 } from 'three';
 import type { Vec3Like } from '../physics/Physics';
+import { type TracerSpan, tracerSpan } from './tracerPath';
 
 /**
  * Efectos visuales con POOLS de tamaño fijo (cero asignaciones por frame, R7):
@@ -53,6 +54,7 @@ const _d = new Vector3();
 const _z = new Vector3(0, 0, 1);
 const _c = new Color();
 const _e = new Euler();
+const _span: TracerSpan = { head: 0, tail: 0, done: false };
 const HIDE = new Matrix4().makeScale(0, 0, 0);
 
 export type ImpactKind = 'spark' | 'blood' | 'dust';
@@ -210,9 +212,8 @@ export class Vfx {
   private placeTracer(i: number): boolean {
     const j = i * 3;
     const dist = this.tracerDist[i]!;
-    const head = Math.min(dist, TRACER_SPEED * this.tracerAge[i]!);
-    const tail = Math.max(0, head - Math.min(TRACER_LEN, dist * 0.6));
-    if (tail >= dist - 1e-3) {
+    const { head, tail, done } = tracerSpan(this.tracerAge[i]!, dist, TRACER_SPEED, TRACER_LEN, _span);
+    if (done) {
       this.tracers.setMatrixAt(i, HIDE);
       return false;
     }
@@ -418,6 +419,15 @@ export class Vfx {
       this.playerLightLife -= dt;
       if (this.playerLightLife <= 0) this.playerLight.intensity = 0;
     }
+  }
+
+  /** Trazadoras y casquillos activos (QA: vuelven a cero poco después de dejar de disparar). */
+  get activeEffects(): { tracers: number; casings: number } {
+    let tracers = 0;
+    for (let i = 0; i < MAX_TRACERS; i++) if (this.tracerLife[i]! > 0) tracers++;
+    let casings = 0;
+    for (let i = 0; i < MAX_CASINGS; i++) if (this.cLife[i]! > 0) casings++;
+    return { tracers, casings };
   }
 
   dispose(): void {

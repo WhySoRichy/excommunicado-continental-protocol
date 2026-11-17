@@ -44,7 +44,9 @@ test.describe('Arsenal', () => {
       q.step(30, {});
       const rev = q.combat()!;
       q.press('fire');
-      q.step(10, {});
+      q.step(1, {});
+      const fxShot = q.vfx();
+      q.step(9, {});
       const afterShot = q.combat()!.mag;
       // Tecla 1 dos veces: la carabina y después el rifle de tirador.
       q.press('weapon1');
@@ -60,8 +62,14 @@ test.describe('Arsenal', () => {
       q.step(30, {});
       q.step(40, { aim: true });
       const fovCarbine = q.camera().fov;
-      return { loadout, rev: { weapon: rev.weapon, mag: rev.mag, magMax: rev.magMax }, afterShot, first, dmr: { weapon: dmr.weapon, magMax: dmr.magMax }, fovDmr, fovCarbine };
+      // Pasados unos segundos sin disparar no queda ningún efecto vivo (las trazadoras se quedaban flotando).
+      q.step(150, {});
+      const fxEnd = q.vfx();
+      return { loadout, rev: { weapon: rev.weapon, mag: rev.mag, magMax: rev.magMax }, afterShot, first, dmr: { weapon: dmr.weapon, magMax: dmr.magMax }, fovDmr, fovCarbine, fxShot, fxEnd };
     });
+    expect(r.fxShot.tracers).toBeGreaterThanOrEqual(1);
+    expect(r.fxShot.casings).toBeGreaterThanOrEqual(1);
+    expect(r.fxEnd).toEqual({ tracers: 0, casings: 0 });
     expect(r.loadout).toEqual(['carbine', 'dmr', 'pistol', 'revolver', 'knife']);
     expect(r.rev).toEqual({ weapon: 'revolver', mag: 6, magMax: 6 });
     expect(r.afterShot).toBe(5);
