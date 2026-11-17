@@ -147,9 +147,10 @@ function paint(g: BufferGeometry, color: number): BufferGeometry {
   return g;
 }
 
-/** Caja con color por vértice, desplazada. `rz` la inclina antes de colocarla. */
-function cbox(w: number, h: number, d: number, color: number, x = 0, y = 0, z = 0, rz = 0): BufferGeometry {
+/** Caja con color por vértice, desplazada. `rz` y `rx` la inclinan antes de colocarla. */
+function cbox(w: number, h: number, d: number, color: number, x = 0, y = 0, z = 0, rz = 0, rx = 0): BufferGeometry {
   const g = new BoxGeometry(w, h, d);
+  if (rx !== 0) g.rotateX(rx);
   if (rz !== 0) g.rotateZ(rz);
   g.translate(x, y, z);
   return paint(g, color);
@@ -167,7 +168,7 @@ function ccyl(rx: number, rz: number, h: number, color: number, x = 0, y = 0, z 
  * Prisma: caja cuya cara superior e inferior tienen medidas distintas. Es la pieza base del
  * diseño facetado (torso en V, mandíbula, miembros que se afinan).
  */
-function cprism(wTop: number, dTop: number, wBot: number, dBot: number, h: number, color: number, x = 0, y = 0, z = 0): BufferGeometry {
+function cprism(wTop: number, dTop: number, wBot: number, dBot: number, h: number, color: number, x = 0, y = 0, z = 0, rz = 0): BufferGeometry {
   const g = new BoxGeometry(1, h, 1);
   const pos = g.getAttribute('position');
   for (let i = 0; i < pos.count; i++) {
@@ -176,6 +177,7 @@ function cprism(wTop: number, dTop: number, wBot: number, dBot: number, h: numbe
     pos.setZ(i, pos.getZ(i) * (top ? dTop : dBot));
   }
   g.computeVertexNormals();
+  if (rz !== 0) g.rotateZ(rz);
   g.translate(x, y, z);
   return paint(g, color);
 }
@@ -231,20 +233,95 @@ function appearanceKey(o: RigOptions): string {
   return [c.jacket, c.shirt, c.tie, c.pants, c.shoes, c.skin, c.hair, c.accent, o.hair, o.bulk ?? 1, o.vest ? 1 : 0, o.beard ? 1 : 0].join('|');
 }
 
-/** Geometría de cada arma (el cañón apunta a −Z del soporte). */
+/**
+ * Geometría de cada arma, por bloques: el cañón apunta a −Z del soporte y la empuñadura queda en la
+ * mano (el origen). El color de acento marca un detalle (raíl, base del cargador); en los enemigos es
+ * el color de su tipo.
+ */
 function weaponGeometry(model: Exclude<WeaponModel, 'none'>, accent: number): BufferGeometry {
-  const dark = 0x1d1f23;
+  const dark = 0x272a31; // acero pavonado
+  const black = 0x17181d; // polímero
+  const steel = 0x8b919a; // piezas pulidas
+  const wood = 0x5b3a22;
   switch (model) {
     case 'pistol':
-      return merge([cbox(0.04, 0.06, 0.2, dark, 0, 0.03, -0.08), cbox(0.035, 0.1, 0.05, dark, 0, -0.03, -0.01)]);
+      // Pistola de competición: corredera larga con estrías, compensador y cachas.
+      return merge([
+        cbox(0.032, 0.036, 0.2, dark, 0, 0.046, -0.09), // corredera
+        cbox(0.0335, 0.028, 0.026, black, 0, 0.046, -0.002), // estrías
+        cbox(0.016, 0.006, 0.042, steel, 0.005, 0.065, -0.06), // cañón en la ventana de expulsión
+        cbox(0.036, 0.042, 0.034, dark, 0, 0.043, -0.205), // compensador
+        cbox(0.02, 0.004, 0.022, black, 0, 0.0645, -0.205),
+        cbox(0.03, 0.022, 0.13, black, 0, 0.017, -0.08), // armazón con raíl
+        cbox(0.008, 0.008, 0.05, black, 0, -0.012, -0.05), // guardamonte
+        cbox(0.008, 0.028, 0.008, black, 0, 0, -0.075),
+        cbox(0.006, 0.018, 0.006, steel, 0, 0, -0.04), // gatillo
+        cbox(0.03, 0.105, 0.046, black, 0, -0.034, -0.008, 0, -0.26), // empuñadura
+        cbox(0.033, 0.07, 0.032, dark, 0, -0.038, -0.004, 0, -0.26), // cachas
+        cbox(0.034, 0.012, 0.05, steel, 0, -0.088, 0.006, 0, -0.26), // base del cargador
+        cbox(0.03, 0.01, 0.03, black, 0, 0.026, 0.018), // cola de castor
+        cbox(0.008, 0.01, 0.01, black, 0, 0.069, -0.178), // punto de mira
+        cbox(0.028, 0.012, 0.012, black, 0, 0.07, 0), // alza
+      ]);
     case 'rifle':
-      return merge([cbox(0.05, 0.08, 0.72, dark, 0, 0.03, -0.2), cbox(0.04, 0.14, 0.05, dark, 0, -0.06, -0.02), cbox(0.05, 0.04, 0.2, accent, 0, 0.09, -0.2), cbox(0.045, 0.1, 0.16, dark, 0, 0.01, 0.2)]);
+      // Carabina: visor de punto rojo, guardamanos largo con raíl y culata telescópica.
+      return merge([
+        cbox(0.046, 0.058, 0.25, dark, 0, 0.04, -0.07), // cajón superior
+        cbox(0.042, 0.042, 0.15, black, 0, -0.005, -0.045), // cajón inferior
+        cbox(0.054, 0.064, 0.28, black, 0, 0.03, -0.33), // guardamanos
+        cbox(0.02, 0.008, 0.26, accent, 0, 0.066, -0.33), // raíl superior
+        cbox(0.02, 0.02, 0.11, dark, 0, 0.035, -0.52), // cañón
+        cbox(0.03, 0.032, 0.05, black, 0, 0.035, -0.6), // bocacha
+        cbox(0.034, 0.088, 0.044, black, 0, -0.055, 0.03, 0, -0.32), // empuñadura
+        cbox(0.03, 0.12, 0.062, dark, 0, -0.08, -0.09, 0, 0.18), // cargador
+        cbox(0.032, 0.012, 0.066, black, 0, -0.145, -0.102, 0, 0.18),
+        cbox(0.028, 0.028, 0.12, dark, 0, 0.034, 0.1), // tubo de la culata
+        cbox(0.044, 0.09, 0.12, black, 0, 0.018, 0.2), // culata
+        cbox(0.03, 0.022, 0.07, dark, 0, 0.08, -0.07), // base del visor
+        cbox(0.038, 0.044, 0.07, black, 0, 0.112, -0.07), // visor
+        cbox(0.026, 0.026, 0.004, 0x3a7ca5, 0, 0.112, -0.1055), // lente
+      ]);
     case 'smg':
-      return merge([cbox(0.05, 0.08, 0.42, dark, 0, 0.03, -0.13), cbox(0.04, 0.16, 0.05, dark, 0, -0.07, -0.02), cbox(0.04, 0.06, 0.12, dark, 0, 0.02, 0.12)]);
+      // Subfusil compacto: culata plegable de alambre y cargador recto.
+      return merge([
+        cbox(0.046, 0.066, 0.24, dark, 0, 0.035, -0.075), // cajón
+        cbox(0.05, 0.05, 0.1, black, 0, 0.02, -0.245), // guardamanos
+        cbox(0.03, 0.03, 0.06, black, 0, 0.035, -0.325), // cañón
+        cbox(0.034, 0.085, 0.044, black, 0, -0.036, 0.015, 0, -0.26), // empuñadura
+        cbox(0.028, 0.13, 0.036, dark, 0, -0.055, -0.13, 0, 0.12), // cargador
+        cbox(0.032, 0.012, 0.042, accent, 0, -0.1255, -0.1385, 0, 0.12),
+        cbox(0.018, 0.016, 0.14, dark, 0, 0.05, 0.11), // culata plegable
+        cbox(0.018, 0.016, 0.12, dark, 0, -0.005, 0.1),
+        cbox(0.04, 0.08, 0.02, black, 0, 0.022, 0.18),
+        cbox(0.03, 0.018, 0.02, black, 0, 0.076, 0.02), // alza
+        cbox(0.02, 0.022, 0.012, black, 0, 0.071, -0.185), // punto de mira
+      ]);
     case 'shotgun':
-      return merge([cbox(0.06, 0.08, 0.8, 0x3a2a1c, 0, 0.03, -0.25), cbox(0.05, 0.05, 0.6, dark, 0, 0.08, -0.32), cbox(0.05, 0.1, 0.18, 0x3a2a1c, 0, 0.0, 0.2)]);
+      // Escopeta de corredera: madera, depósito tubular bajo el cañón y punto de mira.
+      return merge([
+        cbox(0.05, 0.068, 0.2, dark, 0, 0.03, -0.06), // cajón
+        cbox(0.03, 0.03, 0.5, dark, 0, 0.05, -0.41), // cañón
+        cbox(0.028, 0.026, 0.4, black, 0, 0.016, -0.36), // depósito tubular
+        cbox(0.05, 0.048, 0.17, wood, 0, 0.02, -0.44), // corredera
+        cbox(0.01, 0.012, 0.012, steel, 0, 0.071, -0.65), // punto de mira
+        cbox(0.008, 0.008, 0.05, black, 0, -0.012, -0.03), // guardamonte
+        cbox(0.006, 0.018, 0.006, steel, 0, -0.002, -0.025), // gatillo
+        cbox(0.034, 0.08, 0.05, wood, 0, -0.03, 0.055, 0, -0.35), // garganta de la culata
+        cbox(0.046, 0.09, 0.22, wood, 0, -0.016, 0.19, 0, 0.12), // culata
+        cbox(0.048, 0.094, 0.02, black, 0, -0.03, 0.3, 0, 0.12), // cantonera
+      ]);
     case 'knife':
-      return merge([cbox(0.02, 0.03, 0.18, 0xc8ccd2, 0, 0, -0.13), cbox(0.03, 0.04, 0.08, dark, 0, 0, -0.01)]);
+      // Cuchillo táctico: hoja con punta recortada, filo claro y mango con anillas.
+      return merge([
+        cbox(0.007, 0.032, 0.13, 0xb9bec6, 0, 0.004, -0.115), // hoja
+        cbox(0.006, 0.02, 0.045, 0xb9bec6, 0, 0.01, -0.2025), // punta
+        cbox(0.008, 0.007, 0.13, 0xe6e9ed, 0, -0.0115, -0.115), // filo
+        cbox(0.016, 0.05, 0.012, black, 0, 0.002, -0.045), // guarda
+        cbox(0.022, 0.03, 0.085, 0x26282d, 0, -0.002, 0.004), // mango
+        cbox(0.024, 0.032, 0.008, black, 0, -0.002, -0.016), // anillas
+        cbox(0.024, 0.032, 0.008, black, 0, -0.002, 0.02),
+        cbox(0.024, 0.026, 0.014, steel, 0, -0.002, 0.053), // pomo
+      ]);
   }
 }
 
