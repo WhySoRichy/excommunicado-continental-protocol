@@ -34,8 +34,26 @@ export interface RigColors {
   accent: number;
 }
 
-export type HairStyle = 'long' | 'short' | 'bald' | 'helmet' | 'cap';
+export type HairStyle = 'long' | 'short' | 'bald' | 'helmet' | 'cap' | 'parted' | 'slick';
 export type WeaponModel = 'pistol' | 'rifle' | 'smg' | 'shotgun' | 'knife' | 'none';
+
+/** Prendas opcionales. Sin `outfit`, el personaje lleva traje de chaqueta con corbata y pañuelo. */
+export interface Outfit {
+  /** Chaqueta (por defecto sí). Sin ella se ven el chaleco y las mangas de la camisa. */
+  jacket?: boolean;
+  /** Chaleco de vestir: color. */
+  waistcoat?: number;
+  /** Pañuelo de bolsillo en el color de acento (por defecto sí). */
+  pocketSquare?: boolean;
+  /** Pajarita en lugar de corbata. */
+  bowTie?: boolean;
+  /** Delantal largo de sumiller: color. */
+  apron?: number;
+  /** Catavinos de plata colgado del cuello. */
+  tastevin?: boolean;
+  /** Bigote encerado (solo sin barba). */
+  mustache?: boolean;
+}
 
 export interface RigOptions {
   colors: RigColors;
@@ -48,6 +66,8 @@ export interface RigOptions {
   vest?: boolean;
   /** Barba cerrada (la mandíbula va del color del pelo). */
   beard?: boolean;
+  /** Prendas que cambian la silueta además de los colores (traje de tres piezas, sumiller...). */
+  outfit?: Outfit;
   weapon: WeaponModel;
   /** Material propio (no cacheado): permite efectos por instancia (destello de impacto). */
   uniqueMaterial?: boolean;
@@ -230,7 +250,7 @@ function release(cache: Map<string, SharedGeometry>, key: string): void {
 /** Todo lo que cambia la geometría del cuerpo (el material y el rim van aparte). */
 function appearanceKey(o: RigOptions): string {
   const c = o.colors;
-  return [c.jacket, c.shirt, c.tie, c.pants, c.shoes, c.skin, c.hair, c.accent, o.hair, o.bulk ?? 1, o.vest ? 1 : 0, o.beard ? 1 : 0].join('|');
+  return [c.jacket, c.shirt, c.tie, c.pants, c.shoes, c.skin, c.hair, c.accent, o.hair, o.bulk ?? 1, o.vest ? 1 : 0, o.beard ? 1 : 0, JSON.stringify(o.outfit ?? {})].join('|');
 }
 
 /**
@@ -415,24 +435,80 @@ export class CharacterRig {
     this.addMesh(this.torso, () => {
       const edge = trim(c.jacket);
       const zf = -0.118 * b; // plano frontal del pecho
+      const fit: Outfit = o.outfit ?? {};
+      const jacket = fit.jacket !== false;
       const torsoParts: BufferGeometry[] = [
         cprism(0.33 * b, 0.19 * b, 0.3 * b, 0.17 * b, 0.16, c.pants, 0, 0, 0),
-        cprism(0.335 * b, 0.2 * b, 0.375 * b, 0.225 * b, 0.2, c.jacket, 0, 0.06, 0), // faldón
+        cprism(0.335 * b, 0.2 * b, 0.375 * b, 0.225 * b, 0.2, jacket ? c.jacket : c.pants, 0, 0.06, 0), // faldón (sin chaqueta, la cintura del pantalón)
         cprism(0.48 * b, 0.235 * b, 0.335 * b, 0.2 * b, 0.42, c.jacket, 0, 0.37, 0), // pecho
         cprism(0.4 * b, 0.19 * b, 0.5 * b, 0.245 * b, 0.07, c.jacket, 0, 0.615, 0), // hombros
-        cprism(0.17, 0.15, 0.21, 0.18, 0.045, edge, 0, 0.652, 0.005), // cuello de la chaqueta
         cprism(0.12, 0.125, 0.14, 0.14, 0.04, c.shirt, 0, 0.68, -0.002), // cuello de la camisa
         ccyl(0.047, 0.05, 0.1, c.skin, 0, 0.7, 0, 1, 6),
         cprism(0.15, 0.02, 0.03, 0.02, 0.27, c.shirt, 0, 0.485, zf), // pechera en V
-        cprism(0.036, 0.02, 0.052, 0.02, 0.22, c.tie, 0, 0.47, zf - 0.008),
-        cbox(0.046, 0.034, 0.024, c.tie, 0, 0.595, zf - 0.008), // nudo
-        cbox(0.045, 0.3, 0.02, edge, -0.07, 0.49, zf - 0.004, 0.27), // solapas
-        cbox(0.045, 0.3, 0.02, edge, 0.07, 0.49, zf - 0.004, -0.27),
-        cbox(0.055, 0.024, 0.02, c.accent, -0.15 * b, 0.5, zf + 0.002), // pañuelo de bolsillo
-        cbox(0.02, 0.02, 0.012, edge, 0, 0.3, -0.108 * b), // botón
-        cbox(0.012, 0.17, 0.012, edge, 0, 0.055, 0.108 * b), // abertura trasera
-        cbox(0.008, 0.4, 0.01, edge, 0, 0.37, 0.108 * b), // costura de la espalda
       ];
+      if (jacket) {
+        torsoParts.push(
+          cprism(0.17, 0.15, 0.21, 0.18, 0.045, c.jacket, 0, 0.652, 0.005), // cuello de la chaqueta
+          // Solapas: paño de la chaqueta algo levantado, con el borde de la abertura marcado.
+          cbox(0.06, 0.3, 0.03, c.jacket, -0.078, 0.49, zf - 0.011, 0.27),
+          cbox(0.06, 0.3, 0.03, c.jacket, 0.078, 0.49, zf - 0.011, -0.27),
+          cbox(0.01, 0.3, 0.032, edge, -0.054, 0.497, zf - 0.011, 0.27),
+          cbox(0.01, 0.3, 0.032, edge, 0.054, 0.497, zf - 0.011, -0.27),
+          cbox(0.02, 0.02, 0.012, edge, 0, 0.3, -0.108 * b), // botón
+          cbox(0.012, 0.17, 0.012, edge, 0, 0.055, 0.108 * b), // abertura trasera
+          cbox(0.008, 0.4, 0.01, edge, 0, 0.37, 0.108 * b), // costura de la espalda
+        );
+        if (fit.pocketSquare !== false) torsoParts.push(cbox(0.055, 0.024, 0.02, c.accent, -0.15 * b, 0.5, zf + 0.002)); // pañuelo de bolsillo
+      }
+      if (fit.bowTie) {
+        torsoParts.push(
+          cbox(0.04, 0.03, 0.016, c.tie, -0.026, 0.645, zf + 0.013), // pajarita
+          cbox(0.04, 0.03, 0.016, c.tie, 0.026, 0.645, zf + 0.013),
+          cbox(0.018, 0.022, 0.02, c.tie, 0, 0.645, zf + 0.011),
+        );
+      } else {
+        torsoParts.push(
+          cprism(0.036, 0.02, 0.052, 0.02, 0.22, c.tie, 0, 0.47, zf - 0.008), // corbata
+          cbox(0.046, 0.034, 0.024, c.tie, 0, 0.595, zf - 0.008), // nudo
+        );
+      }
+      if (fit.waistcoat !== undefined) {
+        const wc = fit.waistcoat;
+        const btn = trim(wc);
+        if (jacket) {
+          // Traje de tres piezas: el chaleco asoma entre las solapas y la corbata se ve por encima.
+          torsoParts.push(
+            cbox(0.062, 0.22, 0.012, wc, -0.03, 0.42, zf - 0.016, 0.18),
+            cbox(0.062, 0.22, 0.012, wc, 0.03, 0.42, zf - 0.016, -0.18),
+            cbox(0.012, 0.012, 0.006, btn, 0, 0.37, zf - 0.024),
+            cbox(0.012, 0.012, 0.006, btn, 0, 0.42, zf - 0.024),
+          );
+        } else {
+          // Sin chaqueta el chaleco cubre el pecho y deja a la vista las mangas de la camisa.
+          torsoParts.push(
+            cprism(0.42 * b, 0.25 * b, 0.345 * b, 0.215 * b, 0.38, wc, 0, 0.35, 0),
+            cbox(0.012, 0.012, 0.008, btn, 0, 0.2, -0.116 * b),
+            cbox(0.012, 0.012, 0.008, btn, 0, 0.25, -0.118 * b),
+            cbox(0.012, 0.012, 0.008, btn, 0, 0.3, -0.12 * b),
+          );
+        }
+      }
+      if (fit.apron !== undefined) {
+        const ap = fit.apron;
+        torsoParts.push(
+          cbox(0.35 * b, 0.03, 0.214 * b, ap, 0, 0.13, 0), // cinta
+          cprism(0.34 * b, 0.016, 0.4 * b, 0.016, 0.68, ap, 0, -0.21, -0.118 * b), // delantal hasta debajo de la rodilla
+          cbox(0.13, 0.01, 0.006, trim(ap), 0.07, -0.12, -0.129 * b), // borde del bolsillo
+        );
+      }
+      if (fit.tastevin) {
+        // Catavinos de plata colgado de una cadena.
+        const silver = 0xc9cdd3;
+        const cup = new CylinderGeometry(0.03, 0.03, 0.012, 8);
+        cup.rotateX(HALF_PI);
+        cup.translate(0, 0.36, -0.135);
+        torsoParts.push(cbox(0.006, 0.253, 0.006, silver, -0.02, 0.515, -0.132, 0.159), cbox(0.006, 0.253, 0.006, silver, 0.02, 0.515, -0.132, -0.159), paint(cup, silver));
+      }
       if (o.vest) {
         const plate = shade(c.accent, 0.62);
         torsoParts.push(
@@ -464,9 +540,48 @@ export class CharacterRig {
         cbox(0.02, 0.05, 0.035, shade(c.skin, 0.9), -0.097, 0.79 + hy, 0.005), // orejas
         cbox(0.02, 0.05, 0.035, shade(c.skin, 0.9), 0.097, 0.79 + hy, 0.005),
       ];
-      if (o.beard) headParts.push(cbox(0.06, 0.012, 0.012, shade(c.skin, 0.6), 0, 0.726 + hy, -0.098), cbox(0.09, 0.02, 0.014, jawColor, 0, 0.745 + hy, -0.096));
-      else headParts.push(cbox(0.056, 0.01, 0.012, shade(c.skin, 0.55), 0, 0.722 + hy, -0.092));
+      if (o.beard) {
+        headParts.push(
+          cbox(0.06, 0.012, 0.012, shade(c.skin, 0.6), 0, 0.726 + hy, -0.098), // boca
+          cbox(0.09, 0.02, 0.014, jawColor, 0, 0.745 + hy, -0.096), // bigote
+          cbox(0.018, 0.1, 0.12, jawColor, -0.088, 0.74 + hy, -0.025), // barba de las mejillas
+          cbox(0.018, 0.1, 0.12, jawColor, 0.088, 0.74 + hy, -0.025),
+          cbox(0.07, 0.04, 0.03, jawColor, 0, 0.68 + hy, -0.07), // mentón
+        );
+      } else {
+        headParts.push(cbox(0.056, 0.01, 0.012, shade(c.skin, 0.55), 0, 0.722 + hy, -0.092));
+        // Bigote encerado con las puntas hacia arriba.
+        if (o.outfit?.mustache) headParts.push(cbox(0.042, 0.013, 0.016, c.hair, -0.022, 0.738 + hy, -0.1, -0.2), cbox(0.042, 0.013, 0.016, c.hair, 0.022, 0.738 + hy, -0.1, 0.2));
+      }
       switch (o.hair) {
+        case 'parted':
+          // Media melena con raya al medio: cae a los lados de la cara y por detrás hasta el cuello.
+          headParts.push(
+            cprism(0.085, 0.19, 0.104, 0.214, 0.075, c.hair, -0.04, 0.91 + hy, 0.006, 0.14), // mitades de la raya
+            cprism(0.085, 0.19, 0.104, 0.214, 0.075, c.hair, 0.04, 0.91 + hy, 0.006, -0.14),
+            cbox(0.024, 0.11, 0.024, c.hair, -0.052, 0.885 + hy, -0.098, -0.6), // mechones sobre la frente
+            cbox(0.024, 0.11, 0.024, c.hair, 0.052, 0.885 + hy, -0.098, 0.6),
+            cbox(0.024, 0.17, 0.05, c.hair, -0.099, 0.8 + hy, -0.065, -0.04), // caída junto a las sienes
+            cbox(0.024, 0.17, 0.05, c.hair, 0.099, 0.8 + hy, -0.065, 0.04),
+            cbox(0.024, 0.2, 0.12, c.hair, -0.1, 0.8 + hy, 0.014, -0.05), // laterales sobre las orejas
+            cbox(0.024, 0.2, 0.12, c.hair, 0.1, 0.8 + hy, 0.014, 0.05),
+            cprism(0.2, 0.09, 0.18, 0.085, 0.25, c.hair, 0, 0.785 + hy, 0.085), // melena hasta el cuello
+            // Puntas a distinto largo: rompen el bloque, que es lo que más se ve desde la cámara.
+            cbox(0.066, 0.07, 0.05, c.hair, -0.062, 0.65 + hy, 0.112, 0.1),
+            cbox(0.07, 0.085, 0.055, c.hair, 0, 0.635 + hy, 0.112),
+            cbox(0.066, 0.07, 0.05, c.hair, 0.062, 0.65 + hy, 0.112, -0.1),
+          );
+          break;
+        case 'slick':
+          // Engominado hacia atrás: pegado al cráneo, con una onda sobre la frente y la nuca recogida.
+          headParts.push(
+            cprism(0.15, 0.17, 0.178, 0.208, 0.07, c.hair, 0, 0.915 + hy, 0.012),
+            cprism(0.12, 0.05, 0.15, 0.065, 0.035, c.hair, 0, 0.955 + hy, -0.058), // onda
+            cprism(0.18, 0.06, 0.16, 0.045, 0.12, c.hair, 0, 0.84 + hy, 0.075), // nuca
+            cbox(0.012, 0.07, 0.1, c.hair, -0.094, 0.855 + hy, 0.03),
+            cbox(0.012, 0.07, 0.1, c.hair, 0.094, 0.855 + hy, 0.03),
+          );
+          break;
         case 'long':
           // Melena peinada hacia atrás hasta el cuello, con dos mechones que enmarcan la cara.
           headParts.push(
@@ -1090,7 +1205,7 @@ export class CharacterRig {
   }
 }
 
-/** Paleta del Huésped (jugador): traje negro, camisa y corbata negras, pañuelo dorado, melena y barba oscuras. */
+/** Paleta del Huésped (jugador): traje negro, camisa y corbata negras, media melena y barba oscuras. */
 export const PLAYER_COLORS: RigColors = {
   jacket: 0x1b1d23,
   shirt: 0x0c0d10,
@@ -1100,4 +1215,15 @@ export const PLAYER_COLORS: RigColors = {
   skin: 0xc99b7e,
   hair: 0x1f1712,
   accent: 0xc9a227,
+};
+
+/** Aspecto del Huésped: traje negro de tres piezas sin pañuelo, media melena con raya al medio y barba. */
+export const PLAYER_LOOK: RigOptions = {
+  colors: PLAYER_COLORS,
+  rimColor: 0xe8e2d0,
+  rimStrength: 0.16,
+  hair: 'parted',
+  beard: true,
+  weapon: 'pistol',
+  outfit: { waistcoat: 0x111216, pocketSquare: false },
 };

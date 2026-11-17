@@ -1,7 +1,7 @@
 import { type Scene, type Sprite, Vector3 } from 'three';
 import { dampAngle, wrapAngle } from '../core/math';
 import { disposeSprite, makeTextSprite } from '../render/labels';
-import { CharacterRig, type HairStyle, idlePose, type RigColors, type RigPose } from './CharacterRig';
+import { CharacterRig, type HairStyle, idlePose, type Outfit, type RigColors, type RigPose } from './CharacterRig';
 import { yawFromDir } from './PlayerController';
 
 export interface NpcDef {
@@ -13,6 +13,7 @@ export interface NpcDef {
   hair: HairStyle;
   vest?: boolean;
   bulk?: number;
+  outfit?: Outfit;
 }
 
 /** Distancia a la que el NPC se gira hacia el jugador. */
@@ -46,6 +47,7 @@ export class Npc {
       hair: def.hair,
       vest: def.vest,
       bulk: def.bulk,
+      outfit: def.outfit,
       weapon: 'none',
     });
     this.rig.root.position.copy(this.pos);
@@ -82,17 +84,19 @@ export class Npc {
 }
 
 /** Paletas de los NPC del Continental (personajes propios, sin parecido con actores). */
-export const NPC_LOOKS: Record<'charon' | 'sommelier' | 'winston', Pick<NpcDef, 'name' | 'colors' | 'hair' | 'vest' | 'bulk'>> = {
+export const NPC_LOOKS: Record<'charon' | 'sommelier' | 'winston', Pick<NpcDef, 'name' | 'colors' | 'hair' | 'vest' | 'bulk' | 'outfit'>> = {
   charon: {
     name: 'Charon · Conserje',
     colors: { jacket: 0x1b1d22, shirt: 0xf1ece0, tie: 0x7a1020, pants: 0x1b1d22, shoes: 0x0b0b0d, skin: 0x5a3b2a, hair: 0x1a1512, accent: 0xd4af37 },
     hair: 'bald',
   },
+  // Sumiller de la armería: sin chaqueta (camisa blanca a la vista), chaleco burdeos, pajarita,
+  // delantal largo, catavinos de plata, bigote encerado y pelo engominado hacia atrás.
   sommelier: {
     name: 'Sommelier · Armería',
-    colors: { jacket: 0x5a1f2a, shirt: 0xf1ece0, tie: 0x1b1d22, pants: 0x2a2228, shoes: 0x0b0b0d, skin: 0xd9b08c, hair: 0x6b4a2b, accent: 0xd4af37 },
-    hair: 'short',
-    vest: true,
+    colors: { jacket: 0xece6da, shirt: 0xece6da, tie: 0x111216, pants: 0x1c1c22, shoes: 0x0b0b0d, skin: 0xd9b08c, hair: 0x2b1d14, accent: 0xd4af37 },
+    hair: 'slick',
+    outfit: { jacket: false, waistcoat: 0x5a1a28, bowTie: true, apron: 0x16171b, tastevin: true, mustache: true },
   },
   winston: {
     name: 'Winston · Gerente',

@@ -239,5 +239,8 @@ Hay cinco subnotas de 0 a 100: **tiempo** (frente al par), **precisión** (impac
 - **Noir por contraste, no por oscuridad:**
   - Piso de luz ambiental en todos los niveles y suelos y paredes de valores medios.
   - Neón emisivo y cobertura con bordes claros.
-- **Personajes low-poly propios.** El Huésped lleva traje carbón con camisa negra y silueta de cabello largo; **no se parece a ningún actor**.
+- **Personajes por bloques, propios:** prismas facetados con sombreado plano y rasgos mínimos.
+  - El Huésped viste traje negro de tres piezas, camisa y corbata negras, media melena con raya al medio y barba. Evoca el vestuario del personaje de las películas **sin reproducir el rostro de ningún actor**.
+  - El Sommelier trabaja sin chaqueta: camisa blanca, chaleco burdeos, pajarita, delantal largo, catavinos de plata y bigote encerado.
+- **Armas reconocibles por la silueta:** pistola con compensador, carabina con visor, subfusil de culata plegable, escopeta de corredera con madera y cuchillo táctico. En los enemigos, el color de su tipo marca un detalle del arma.
 - **Lluvia, humo y reflejos** solo como acento.

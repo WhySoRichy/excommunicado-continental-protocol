@@ -6,7 +6,7 @@ import { type CombatCtx, PlayerCombat } from '../combat/PlayerCombat';
 import { loadoutFor, type UpgradeId } from '../combat/weapons';
 import type { Rng } from '../core/rng';
 import type { Enemy, PlayerTarget } from '../entities/Enemy';
-import { CharacterRig, PLAYER_COLORS } from '../entities/CharacterRig';
+import { CharacterRig, PLAYER_LOOK } from '../entities/CharacterRig';
 import { CivilianManager } from '../entities/Civilian';
 import { Npc, NPC_LOOKS } from '../entities/Npc';
 import { PlayerController } from '../entities/PlayerController';
@@ -68,14 +68,7 @@ export class LevelSession {
     const s = data.spawn.pos;
     this.player = new PlayerController(this.physics, new Vector3(s[0], s[1] + 0.02, s[2]), data.spawn.yaw);
     this.player.killY = data.killY;
-    this.playerRig = new CharacterRig('player', {
-      colors: PLAYER_COLORS,
-      rimColor: 0xe8e2d0,
-      rimStrength: 0.16,
-      hair: 'long',
-      beard: true,
-      weapon: 'pistol',
-    });
+    this.playerRig = new CharacterRig('player', PLAYER_LOOK);
     this.playerRig.setShadows(deps.quality.shadows);
     scene.add(this.playerRig.root);
     this.vfx = new Vfx(scene, deps.quality.particles);
