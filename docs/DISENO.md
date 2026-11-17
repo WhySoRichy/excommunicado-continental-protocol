@@ -88,9 +88,12 @@ Cada contrato sigue el flujo **briefing** (3 líneas: objetivo, regla especial, 
 |---|---|---|---|---|---|---|---|
 | Carabina TR-4 | 1 | 30 | ×3 | 540 rpm automática | 24 (+96) | 1,9 s | Patrón de recoil fijo y aprendible |
 | Escopeta "Sommelier" (se compra) | 1 | 8×14 | ×1,5 | 70 rpm | 6 (+30) | 2,4 s | Corto alcance |
+| Rifle de tirador "Meridian" (se compra) | 1 | 75 | ×2,5 | Semiautomático, 150 rpm | 10 (+40) | 2,3 s | Mira de aumento al apuntar; poco preciso sin apuntar |
 | Pistola P-45 | 2 | 34 | ×3 | Semiautomática | 12 (reserva ∞) | 1,25 s | **Reserva infinita: nunca te quedas sin poder disparar** |
+| Revólver "Juez" (se compra) | 2 | 70 | ×3 | Semiautomático, 120 rpm | 6 (reserva ∞) | 2,1 s | Mucho retroceso y ruido; el cargador extendido no le afecta |
 | Cuchillo | 3 | 120 | — | 0,55 s | — | — | Silencioso; por la espalda mata siempre |
 
+- **Cada tecla recorre su grupo** entre las armas que tengas: 1 carabina, escopeta y rifle de tirador; 2 pistola y revólver; 3 cuchillo. La munición que sueltan los enemigos sirve para todas las armas de reserva limitada.
 - **Hitscan:** rayo desde la cámara por la mira para encontrar el punto apuntado y después rayo desde la boca del arma hasta ese punto. Si una pared tapa el arma, la mira se pone gris con una X ("bloqueado").
 - **Spread:** sube al moverte y al disparar seguido, y baja al apuntar o agacharte. La mira muestra el spread real.
 - **Recarga perfecta:** durante la recarga aparece una barra con una ventana dorada. Si pulsas R dentro, recargas al instante y ganas un bonus de estilo. Si fallas, la recarga tarda +0,35 s.
@@ -164,13 +167,15 @@ Hay cinco subnotas de 0 a 100: **tiempo** (frente al par), **precisión** (impac
 
 | Mejora | Precio | Efecto |
 |---|---|---|
-| Cargador extendido | 5 | Carabina +8, pistola +4 |
+| Cargador extendido | 5 | Carabina +8; rifle de tirador y pistola +4 |
 | Silenciador | 6 | La pistola solo alerta a 8 m |
 | Punta hueca | 7 | +15 % de daño |
 | Compensador | 5 | −35 % de recoil |
 | Traje balístico I / II / III | 4 / 7 / 10 | +20 de armadura cada uno |
 | Cuchillo táctico | 4 | Alcance 2,2 m y golpe 0,4 s |
 | Escopeta "Sommelier" | 8 | Nueva arma primaria |
+| Revólver "Juez" | 9 | Arma corta de seis tiros con mucho daño |
+| Rifle de tirador "Meridian" | 11 | Primaria de largo alcance con mira de aumento |
 | Marcador adicional | 12 | 4 vidas por contrato |
 
 ### 5.3 Logros y desafíos (dan monedas una vez)

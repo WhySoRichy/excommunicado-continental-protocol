@@ -14,7 +14,7 @@ import type { EnemyManager } from './EnemyManager';
 import type { Pickups } from './Pickups';
 import { STYLE_LABELS, type StyleAction, StyleMeter } from './StyleMeter';
 import { WeaponState } from './WeaponState';
-import { applyUpgrades, loadoutFor, suitArmor, type UpgradeId, type WeaponId, WEAPONS } from './weapons';
+import { applyUpgrades, loadoutFor, SLOT_GROUPS, suitArmor, type UpgradeId, type WeaponId, WEAPONS } from './weapons';
 
 export interface CombatIntent {
   fireHeld: boolean;
@@ -306,13 +306,16 @@ export class PlayerCombat {
   }
 
   private handleSwitch(it: CombatIntent): void {
-    let target: WeaponId | null = it.select;
-    if (!target && it.cycle !== 0) {
+    let target: WeaponId | null = null;
+    if (it.select) {
+      // Cada tecla recorre las armas de su grupo que tengas (1: carabina → escopeta → rifle de tirador).
+      const group = SLOT_GROUPS[WEAPONS[it.select].slot].filter((id) => this.weapons.has(id));
+      const i = group.indexOf(this.current);
+      target = group[i >= 0 ? (i + 1) % group.length : 0] ?? null;
+    } else if (it.cycle !== 0) {
       const i = this.loadout.indexOf(this.current);
       target = this.loadout[(i + it.cycle + this.loadout.length) % this.loadout.length] ?? null;
     }
-    // La tecla 1 alterna entre las primarias (carabina ⇄ escopeta) si se compró la escopeta.
-    if (target === 'carbine' && this.weapons.has('shotgun') && (this.current === 'carbine' || !this.weapons.has('carbine'))) target = 'shotgun';
     if (!target || target === this.current || !this.weapons.has(target)) return;
     this.weapon.cancelReload();
     this.current = target;
@@ -408,10 +411,10 @@ export class PlayerCombat {
     if (anyEnemyHit) this.stats.shotsHit++;
     ctx.vfx.muzzle(_muzzle, base, true);
     ctx.vfx.casing(_muzzle, base, p.feet.y);
-    ctx.audio.shot(d.id === 'carbine' ? 'carbine' : d.id === 'shotgun' ? 'shotgun' : d.noise < 12 ? 'pistolSilenced' : 'pistol');
+    ctx.audio.shot(d.id === 'carbine' ? 'carbine' : d.id === 'shotgun' ? 'shotgun' : d.id === 'dmr' ? 'dmr' : d.id === 'revolver' ? 'revolver' : d.noise < 12 ? 'pistolSilenced' : 'pistol');
     const k = aiming ? 0.75 : 1;
     ctx.camera.kick(rec[0] * DEG2RAD * k, -rec[1] * DEG2RAD * k);
-    ctx.camera.addTrauma(d.id === 'shotgun' ? 0.22 : 0.07);
+    ctx.camera.addTrauma(d.id === 'shotgun' ? 0.22 : d.id === 'dmr' || d.id === 'revolver' ? 0.14 : 0.07);
     this.recoilVis = 1;
     ctx.enemies.noise(p.feet, d.noise);
     ctx.civilians?.noise(p.feet, Math.max(d.noise, 12));
@@ -452,9 +455,7 @@ export class PlayerCombat {
     if (zone === 'head') this.stats.headshots++;
     if (method === 'knife') this.stats.knifeKills++;
     // Botín: munición casi siempre (nunca te quedas sin balas).
-    const carb = this.weapons.get('carbine') ?? this.weapons.get('shotgun');
-    const lowAmmo = !carb || carb.reserve < carb.def.mag;
-    if (lowAmmo || ctx.rng.chance(0.65)) ctx.pickups.add('ammo', enemy.feet, 40);
+    if (this.ammoBelow(true) || ctx.rng.chance(0.65)) ctx.pickups.add('ammo', enemy.feet, 40);
     else if (this.vitals.health < 60 && ctx.rng.chance(0.5)) ctx.pickups.add('medkit', enemy.feet, 40);
   }
 
@@ -627,18 +628,27 @@ export class PlayerCombat {
   lastPlayerPos = new Vector3();
 
   // =============================================================== pickups
+  /** ¿Alguna arma de reserva limitada está por debajo de un cargador (`low`) o sin la reserva llena? */
+  private ammoBelow(low: boolean): boolean {
+    for (const w of this.weapons.values()) {
+      if (!w.isGun || !Number.isFinite(w.def.reserve)) continue;
+      if (w.reserve < (low ? w.def.mag : w.def.reserve)) return true;
+    }
+    return false;
+  }
+
   private collectPickups(ctx: CombatCtx): void {
-    const carb = this.weapons.get('carbine') ?? this.weapons.get('shotgun');
     const kind = ctx.pickups.collect(ctx.player.feet, (k: PickupKind) => {
-      if (k === 'ammo') return !!carb && carb.reserve < carb.def.reserve;
+      if (k === 'ammo') return this.ammoBelow(false);
       if (k === 'medkit') return this.vitals.health < this.vitals.maxHealth;
       return this.vitals.armor < this.vitals.maxArmor;
     });
     if (!kind) return;
     ctx.audio.ui('confirm');
-    if (kind === 'ammo' && carb) {
-      carb.addReserve(carb.def.mag * 1.5);
-      this.pushFeed(`+ Munición (${carb.def.name})`);
+    if (kind === 'ammo') {
+      // Sirve para todas las armas de reserva limitada (carabina, escopeta, rifle de tirador).
+      for (const w of this.weapons.values()) if (w.isGun && Number.isFinite(w.def.reserve)) w.addReserve(w.def.mag * 1.5);
+      this.pushFeed('+ Munición');
     } else if (kind === 'medkit') {
       heal(this.vitals, 50);
       this.pushFeed('+ Botiquín');

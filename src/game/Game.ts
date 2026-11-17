@@ -58,13 +58,15 @@ export interface QaInvariants {
   lastViolation: string;
 }
 
-const WEAPON_MODEL: Record<WeaponId, WeaponModel> = { carbine: 'rifle', shotgun: 'shotgun', pistol: 'pistol', knife: 'knife' };
+const WEAPON_MODEL: Record<WeaponId, WeaponModel> = { carbine: 'rifle', shotgun: 'shotgun', dmr: 'dmr', pistol: 'pistol', revolver: 'revolver', knife: 'knife' };
 /** Nivel que se carga para cada contrato. */
 const MISSION_LEVEL: Record<MissionId, LevelId> = { practice: 'practice', nightclub: 'nightclub', docks: 'docks', rooftop: 'rooftop', gauntlet: 'hub' };
 const SUB_LABELS = { time: 'Tiempo', accuracy: 'Precisión', damage: 'Daño recibido', variety: 'Variedad', civilians: 'Civiles ilesos' } as const;
 /** Margen (fracción de media pantalla) donde se pega la flecha de la baliza fuera de pantalla. */
 const BEACON_EDGE = 0.88;
-const SLOT_ACTIONS: Record<WeaponId, Action> = { carbine: 'weapon1', shotgun: 'weapon1', pistol: 'weapon2', knife: 'weapon3' };
+const SLOT_ACTIONS: Record<WeaponId, Action> = { carbine: 'weapon1', shotgun: 'weapon1', dmr: 'weapon1', pistol: 'weapon2', revolver: 'weapon2', knife: 'weapon3' };
+/** Nombre corto de cada arma en el HUD. */
+const SLOT_NAMES: Record<WeaponId, string> = { carbine: 'Carabina', shotgun: 'Escopeta', dmr: 'Rifle', pistol: 'Pistola', revolver: 'Revólver', knife: 'Cuchillo' };
 /** Tiempo mínimo en la pantalla de muerte antes de poder reaparecer. */
 const DEATH_MIN = 1.2;
 /** Autoguardado del tiempo de juego. */
@@ -1123,7 +1125,7 @@ export class Game {
     if (!s) return;
     const p = s.player;
     p.renderFeet(alpha, _feet);
-    this.camera.update({ feet: _feet, posture: p.posture, aiming: p.aiming, sprinting: p.sprinting, dt: realDt }, s.physics);
+    this.camera.update({ feet: _feet, posture: p.posture, aiming: p.aiming, sprinting: p.sprinting, dt: realDt, zoom: s.combat.weapon.def.aimFov }, s.physics);
     if (this.opts.qa) this.checkCameraInvariants();
     const rig = s.playerRig;
     rig.root.position.copy(_feet);
@@ -1195,7 +1197,7 @@ export class Game {
     c.loadout.forEach((id, i) => {
       const slot = d.slots[i]!;
       slot.key = this.input.label(SLOT_ACTIONS[id]);
-      slot.name = id === 'carbine' ? 'Carabina' : id === 'shotgun' ? 'Escopeta' : id === 'pistol' ? 'Pistola' : 'Cuchillo';
+      slot.name = SLOT_NAMES[id];
       slot.active = id === c.current;
     });
     d.reload = w.reloadProgress;

@@ -1,0 +1,44 @@
+import { describe, expect, it } from 'vitest';
+import { applyUpgrades, loadoutFor, SLOT_GROUPS, type UpgradeId, WEAPONS } from '../../src/combat/weapons';
+import { ALL_UPGRADES, newProfile } from '../../src/core/Save';
+import { buy, canBuy, SHOP } from '../../src/hub/economy';
+
+describe('arsenal: revólver y rifle de tirador', () => {
+  it('se suman al equipo al comprarlos, cada uno en el grupo de su tecla', () => {
+    expect(loadoutFor(new Set())).toEqual(['carbine', 'pistol', 'knife']);
+    const all = new Set<UpgradeId>(['shotgun', 'dmr', 'revolver']);
+    expect(loadoutFor(all)).toEqual(['carbine', 'shotgun', 'dmr', 'pistol', 'revolver', 'knife']);
+    for (const [slot, ids] of Object.entries(SLOT_GROUPS)) for (const id of ids) expect(WEAPONS[id].slot).toBe(Number(slot));
+  });
+
+  it('el revólver pega más y dispara menos que la pistola; el rifle de tirador tiene más alcance y aumento que la carabina', () => {
+    const { revolver, pistol, dmr, carbine } = WEAPONS;
+    expect(revolver.damage).toBeGreaterThan(pistol.damage * 2);
+    expect(revolver.mag).toBeLessThan(pistol.mag);
+    expect(revolver.rpm).toBeLessThan(pistol.rpm);
+    expect(revolver.reserve).toBe(Number.POSITIVE_INFINITY);
+    expect(dmr.range).toBeGreaterThan(carbine.range);
+    expect(dmr.auto).toBe(false);
+    expect(dmr.aimFov).toBeLessThan(0.7);
+    expect(dmr.spreadAim).toBeLessThan(carbine.spreadAim);
+    expect(dmr.spreadHip).toBeGreaterThan(carbine.spreadHip);
+  });
+
+  it('el cargador extendido amplía el rifle de tirador pero no el tambor del revólver', () => {
+    const owned = new Set<UpgradeId>(['extMag']);
+    expect(applyUpgrades(WEAPONS.dmr, owned).mag).toBe(WEAPONS.dmr.mag + 4);
+    expect(applyUpgrades(WEAPONS.revolver, owned).mag).toBe(6);
+  });
+
+  it('se compran en la armería y el guardado los reconoce', () => {
+    const p = newProfile(0);
+    p.coins = 20;
+    expect(SHOP.some((s) => s.id === 'revolver')).toBe(true);
+    expect(canBuy(p, 'dmr')).toBe('ok');
+    expect(buy(p, 'revolver')).toBe(true);
+    expect(buy(p, 'dmr')).toBe(true);
+    expect(p.coins).toBe(0);
+    expect(ALL_UPGRADES).toContain('revolver');
+    expect(ALL_UPGRADES).toContain('dmr');
+  });
+});

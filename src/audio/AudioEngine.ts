@@ -15,7 +15,7 @@ export interface AudioVolumes {
   ui: number;
 }
 
-export type ShotSound = 'carbine' | 'pistol' | 'pistolSilenced' | 'shotgun' | 'enemyPistol' | 'enemySmg' | 'enemyRifle' | 'enemyShotgun';
+export type ShotSound = 'carbine' | 'pistol' | 'pistolSilenced' | 'revolver' | 'dmr' | 'shotgun' | 'enemyPistol' | 'enemySmg' | 'enemyRifle' | 'enemyShotgun';
 
 /** Ganancia del bus de música respecto a su volumen y atenuación en menús. */
 const MUSIC_BUS = 0.8;
@@ -398,6 +398,16 @@ export class AudioEngine {
       case 'shotgun':
         this.noiseHit(d, { freq: 900, q: 0.4, gain: 0.7, decay: 0.25 });
         this.tone(d, { type: 'triangle', f0: 110, f1: 35, gain: 0.7, decay: 0.22 });
+        break;
+      case 'revolver':
+        // Estampido grave y largo: más cuerpo que la pistola.
+        this.noiseHit(d, { freq: 1500, q: 0.5, gain: 0.62, decay: 0.16 });
+        this.tone(d, { type: 'triangle', f0: 140, f1: 38, gain: 0.6, decay: 0.2 });
+        break;
+      case 'dmr':
+        // Chasquido seco con cola: el disparo que más lejos se oye.
+        this.noiseHit(d, { freq: 2200, q: 0.45, gain: 0.66, decay: 0.2 });
+        this.tone(d, { type: 'sawtooth', f0: 120, f1: 32, gain: 0.45, decay: 0.24 });
         break;
       case 'enemyPistol':
         this.noiseHit(d, { freq: 2000, q: 0.7, gain: 0.4, decay: 0.09 });

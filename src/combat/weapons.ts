@@ -1,7 +1,7 @@
 import type { WeaponModel } from '../entities/CharacterRig';
 
 /** Definiciones de armas (datos). Valores en grados, metros, segundos. DISENO §4.1. */
-export type WeaponId = 'carbine' | 'shotgun' | 'pistol' | 'knife';
+export type WeaponId = 'carbine' | 'shotgun' | 'dmr' | 'pistol' | 'revolver' | 'knife';
 
 export interface WeaponDef {
   id: WeaponId;
@@ -42,6 +42,8 @@ export interface WeaponDef {
   model: WeaponModel;
   meleeRange?: number;
   meleeArcDeg?: number;
+  /** Fracción del campo de visión al apuntar (por defecto la de la cámara; el rifle de tirador tiene más aumento). */
+  aimFov?: number;
 }
 
 const CARBINE_RECOIL: Array<[number, number]> = [
@@ -132,6 +134,41 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     noise: 35,
     model: 'shotgun',
   },
+  dmr: {
+    id: 'dmr',
+    name: 'Rifle de tirador "Meridian"',
+    slot: 1,
+    kind: 'gun',
+    damage: 75,
+    headMult: 2.5,
+    pellets: 1,
+    rpm: 150,
+    auto: false,
+    mag: 10,
+    reserve: 40,
+    reloadTime: 2.3,
+    perfectStart: 0.45,
+    perfectEnd: 0.58,
+    jamPenalty: 0.4,
+    spreadHip: 4.5,
+    spreadAim: 0.12,
+    spreadMove: 2.2,
+    bloomPerShot: 0.9,
+    bloomDecay: 4,
+    maxBloom: 3,
+    recoil: [
+      [2.6, 0.2],
+      [2.8, -0.25],
+      [3.0, 0.3],
+    ],
+    recoilReset: 0.5,
+    range: 200,
+    falloffStart: 80,
+    falloffEnd: 160,
+    noise: 45,
+    model: 'dmr',
+    aimFov: 0.45,
+  },
   pistol: {
     id: 'pistol',
     name: 'Pistola P-45',
@@ -166,6 +203,40 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     falloffEnd: 45,
     noise: 28,
     model: 'pistol',
+  },
+  revolver: {
+    id: 'revolver',
+    name: 'Revólver "Juez"',
+    slot: 2,
+    kind: 'gun',
+    damage: 70,
+    headMult: 3,
+    pellets: 1,
+    rpm: 120,
+    auto: false,
+    mag: 6,
+    reserve: Number.POSITIVE_INFINITY,
+    reloadTime: 2.1,
+    perfectStart: 0.5,
+    perfectEnd: 0.64,
+    jamPenalty: 0.4,
+    spreadHip: 2.6,
+    spreadAim: 0.3,
+    spreadMove: 1.4,
+    bloomPerShot: 1.1,
+    bloomDecay: 4,
+    maxBloom: 3,
+    recoil: [
+      [3.4, 0.3],
+      [3.6, -0.35],
+      [3.8, 0.4],
+    ],
+    recoilReset: 0.45,
+    range: 90,
+    falloffStart: 25,
+    falloffEnd: 55,
+    noise: 40,
+    model: 'revolver',
   },
   knife: {
     id: 'knife',
@@ -202,7 +273,10 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
 };
 
 /** Mejoras de la armería (DISENO §5.2). */
-export type UpgradeId = 'extMag' | 'suppressor' | 'hollowPoint' | 'compensator' | 'suit1' | 'suit2' | 'suit3' | 'tacticalKnife' | 'shotgun' | 'extraMarker';
+export type UpgradeId = 'extMag' | 'suppressor' | 'hollowPoint' | 'compensator' | 'suit1' | 'suit2' | 'suit3' | 'tacticalKnife' | 'shotgun' | 'revolver' | 'dmr' | 'extraMarker';
+
+/** Cada tecla de arma recorre las que tengas de su grupo: 1 primarias, 2 armas cortas, 3 cuchillo. */
+export const SLOT_GROUPS: Readonly<Record<1 | 2 | 3, readonly WeaponId[]>> = { 1: ['carbine', 'shotgun', 'dmr'], 2: ['pistol', 'revolver'], 3: ['knife'] };
 
 /** Aplica las mejoras compradas a una definición (pura: devuelve una copia). */
 export function applyUpgrades(base: WeaponDef, owned: ReadonlySet<UpgradeId>): WeaponDef {
@@ -210,7 +284,7 @@ export function applyUpgrades(base: WeaponDef, owned: ReadonlySet<UpgradeId>): W
   if (d.kind === 'gun') {
     if (owned.has('extMag')) {
       if (d.id === 'carbine') d.mag += 8;
-      if (d.id === 'pistol') d.mag += 4;
+      if (d.id === 'dmr' || d.id === 'pistol') d.mag += 4;
     }
     if (owned.has('hollowPoint')) d.damage = Math.round(d.damage * 1.15 * 10) / 10;
     if (owned.has('compensator')) d.recoil = d.recoil.map(([p, y]) => [p * 0.65, y * 0.65] as const);
@@ -233,7 +307,13 @@ export function markersPerContract(owned: ReadonlySet<UpgradeId>): number {
   return owned.has('extraMarker') ? 4 : 3;
 }
 
-/** Equipo del jugador según las mejoras compradas (la escopeta se suma a la carabina). */
+/** Equipo del jugador según las mejoras compradas: las armas compradas se suman a las de su grupo. */
 export function loadoutFor(owned: ReadonlySet<UpgradeId>): WeaponId[] {
-  return owned.has('shotgun') ? ['carbine', 'shotgun', 'pistol', 'knife'] : ['carbine', 'pistol', 'knife'];
+  const out: WeaponId[] = ['carbine'];
+  if (owned.has('shotgun')) out.push('shotgun');
+  if (owned.has('dmr')) out.push('dmr');
+  out.push('pistol');
+  if (owned.has('revolver')) out.push('revolver');
+  out.push('knife');
+  return out;
 }

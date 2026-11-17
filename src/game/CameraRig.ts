@@ -52,6 +52,8 @@ export interface CameraFrameInput {
   aiming: boolean;
   sprinting: boolean;
   dt: number;
+  /** Fracción del campo de visión al apuntar con el arma en la mano (el rifle de tirador tiene más aumento). */
+  zoom?: number;
 }
 
 /**
@@ -75,6 +77,7 @@ export class CameraRig {
   private dist = DIST_NORMAL;
   private pivotH = PIVOT_STAND;
   private fovCur = 68;
+  private aimFovFactor = AIM_FOV_FACTOR;
   private aimK = 0;
   private trauma = 0;
   private recoilPitch = 0;
@@ -136,6 +139,7 @@ export class CameraRig {
     this.time += dt;
     this.recover(dt);
     this.aimK = damp(this.aimK, f.aiming ? 1 : 0, 14, dt);
+    this.aimFovFactor = f.zoom ?? AIM_FOV_FACTOR;
     this.shoulderCur = damp(this.shoulderCur, this.shoulderSide, 10, dt);
     this.pivotH = damp(this.pivotH, f.posture === 'crouch' ? PIVOT_CROUCH : PIVOT_STAND, 12, dt);
 
@@ -202,7 +206,7 @@ export class CameraRig {
     cam.rotation.set(this.pitch + shakeP, this.yaw + shakeY, 0, 'YXZ');
     const baseFov = this.settings.fov;
     let fovTarget = baseFov + 6 * sprintK;
-    fovTarget += (baseFov * AIM_FOV_FACTOR - fovTarget) * this.aimK;
+    fovTarget += (baseFov * this.aimFovFactor - fovTarget) * this.aimK;
     this.fovCur = damp(this.fovCur, fovTarget, 8, dt);
     if (Math.abs(cam.fov - this.fovCur) > 0.01) {
       cam.fov = this.fovCur;
