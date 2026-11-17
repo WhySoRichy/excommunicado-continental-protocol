@@ -126,7 +126,7 @@ Los detalles, decisiones técnicas y convenciones están en [docs/ARQUITECTURA.m
 | | |
 |---|---|
 | **151 pruebas unitarias** (Vitest) | Cinemática inversa de piernas y brazos del rig, daño, estilo, rango (incluida una prueba de coherencia con 500 partidas al azar), economía, IA de los enemigos, navegación de cada nivel, guardado, reasignación de teclas, oleadas, música y superficie bajo los pies |
-| **42 pruebas e2e** (Playwright) | El juego real sobre el build de producción: movimiento sin atravesar paredes ni atascarse (también con picos de lag), combate contra varios enemigos, los cuatro contratos y el Gauntlet de principio a fin, tutorial, ajustes persistentes, mando, claridad visual, mezcla de audio, rendimiento (también que cambiar de nivel no deje recursos en la GPU) y robustez ante un nivel que no se descarga |
+| **43 pruebas e2e** (Playwright) | El juego real sobre el build de producción: movimiento sin atravesar paredes ni atascarse (también con picos de lag), combate contra varios enemigos, los cuatro contratos y el Gauntlet de principio a fin, tutorial, ajustes persistentes, mando, claridad visual, mezcla de audio, rendimiento (también que cambiar de nivel no deje recursos en la GPU) y robustez ante un nivel que no se descarga |
 | **CI** | Cada push a `main` ejecuta las pruebas y publica el juego en GitHub Pages |
 
 ### Rendimiento
