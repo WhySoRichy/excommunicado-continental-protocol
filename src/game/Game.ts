@@ -29,7 +29,7 @@ import { MissionDirector, type MissionOutcome } from '../missions/MissionDirecto
 import { type MissionId, MISSIONS } from '../missions/types';
 import { loadRapier, QueryGroups, type Rapier } from '../physics/Physics';
 import { GameRenderer, type QualityPreset } from '../render/Renderer';
-import { hideBoot, setBootProgress } from '../ui/boot';
+import { type FatalText, hideBoot, setBootProgress, showFatal } from '../ui/boot';
 import { h } from '../ui/dom';
 import { Hud, type HudData, type PromptSpec } from '../ui/Hud';
 import type { IntelView } from '../ui/Intel';
@@ -69,6 +69,12 @@ const SLOT_ACTIONS: Record<WeaponId, Action> = { carbine: 'weapon1', shotgun: 'w
 const DEATH_MIN = 1.2;
 /** Autoguardado del tiempo de juego. */
 const AUTOSAVE_SEC = 30;
+/** Lo que se le dice al jugador cuando un nivel no llega a cargarse. */
+const LEVEL_LOAD_FAILED: FatalText = {
+  title: 'No se pudo cargar el nivel',
+  hint: 'Puede ser un corte de conexión, o que el juego se haya actualizado mientras lo tenías abierto. Tu partida está guardada: recarga la página para seguir.',
+  reload: true,
+};
 
 const _head = new Vector3();
 const _feet = new Vector3();
@@ -309,6 +315,23 @@ export class Game {
     this.lastWeaponModel = 'none';
   }
 
+  /**
+   * Carga un nivel con el juego ya en marcha. Si falla (corte de red, o una versión nueva publicada
+   * con la pestaña abierta, que cambia los nombres de los archivos) se explica en pantalla y se
+   * ofrece recargar: sin esto el juego se quedaba en "cargando", sin interfaz ni salida.
+   */
+  private async tryLoadSession(id: LevelId): Promise<boolean> {
+    try {
+      await this.loadSession(id);
+      return true;
+    } catch (err) {
+      this.loading = false;
+      if (document.pointerLockElement) document.exitPointerLock();
+      showFatal(err, LEVEL_LOAD_FAILED);
+      return false;
+    }
+  }
+
   // =========================================================== guardado
   saveNow(): void {
     this.profile.playtimeSec += Math.floor(this.autosaveT);
@@ -372,7 +395,7 @@ export class Game {
     this.requestLock();
     this.fsm.go('loading');
     // Tras un contrato (o el Gauntlet sobre el propio hub) la sesión queda sucia: se recarga limpia.
-    if (this.currentLevel !== 'hub' || !this.session || this.mission) await this.loadSession('hub');
+    if ((this.currentLevel !== 'hub' || !this.session || this.mission) && !(await this.tryLoadSession('hub'))) return;
     const s = this.session;
     if (!s) {
       this.loading = false;
@@ -408,7 +431,7 @@ export class Game {
     // El clic/tecla que llega aquí es un gesto del usuario: se pide el pointer lock antes del await.
     this.requestLock();
     this.fsm.go('loading');
-    if (id !== this.currentLevel || !this.session || this.director || this.mission) await this.loadSession(id);
+    if ((id !== this.currentLevel || !this.session || this.director || this.mission) && !(await this.tryLoadSession(id))) return;
     const s = this.session;
     if (!s) {
       this.loading = false;
@@ -440,7 +463,7 @@ export class Game {
     this.loading = true;
     this.audio.init();
     this.fsm.go('loading');
-    await this.loadSession(MISSION_LEVEL[id]);
+    if (!(await this.tryLoadSession(MISSION_LEVEL[id]))) return;
     const s = this.session;
     if (!s) {
       this.loading = false;

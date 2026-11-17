@@ -1,0 +1,31 @@
+import { expect, test } from '@playwright/test';
+import { openGame } from './helpers';
+
+/**
+ * Robustez ante lo que el jugador no controla: la red y el cierre de la pestaña.
+ */
+test.describe('Robustez', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/?qa=1');
+    await page.evaluate(() => window.localStorage.clear());
+  });
+
+  test('si un nivel no se puede descargar, se explica en pantalla y recargar devuelve al juego', async ({ page }) => {
+    await openGame(page);
+    await page.getByRole('button', { name: /Nueva partida|Continuar/ }).first().click();
+    await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('hub');
+    // El archivo del nivel deja de estar disponible: sin red, o un despliegue nuevo con otros nombres.
+    await page.route('**/assets/nightclub-*.js', (route) => route.abort('failed'));
+    await page.evaluate(() => window.__EXCOM__!.startContract('nightclub'));
+    await expect(page.locator('.fatal h1')).toHaveText('No se pudo cargar el nivel');
+    await expect(page.locator('.fatal')).toContainText('Tu partida está guardada');
+    // Recargar (ya con el archivo disponible) devuelve al juego con la partida intacta.
+    await page.unroute('**/assets/nightclub-*.js');
+    await page.getByRole('button', { name: 'Recargar' }).click();
+    await page.waitForFunction(() => window.__EXCOM__?.ready === true, null, { timeout: 90_000 });
+    await page.getByRole('button', { name: 'Continuar' }).click();
+    await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('hub');
+    await page.evaluate(() => window.__EXCOM__!.startContract('nightclub'));
+    await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('briefing');
+  });
+});

@@ -29,8 +29,21 @@ export function hideBoot(instant = false): void {
   );
 }
 
-/** Error fatal visible (nunca se traga un error en silencio). */
-export function showFatal(err: unknown): void {
+/** Textos de la pantalla de error. */
+export interface FatalText {
+  title: string;
+  hint: string;
+  /** Ofrece un botón para recargar la página (cuando recargar lo arregla). */
+  reload?: boolean;
+}
+
+const BOOT_FAILED: FatalText = {
+  title: 'No se pudo iniciar el juego',
+  hint: 'Tu navegador necesita WebGL2 y WebAssembly. Prueba con Chrome, Edge o Firefox actualizados.',
+};
+
+/** Error fatal visible (nunca se traga un error en silencio). Sin `text`, es el error de arranque. */
+export function showFatal(err: unknown, text: FatalText = BOOT_FAILED): void {
   const msg = err instanceof Error ? `${err.message}\n\n${err.stack ?? ''}` : String(err);
   console.error(err);
   const el = document.getElementById('boot') ?? document.body.appendChild(document.createElement('div'));
@@ -40,11 +53,21 @@ export function showFatal(err: unknown): void {
   const box = document.createElement('div');
   box.className = 'fatal';
   const h = document.createElement('h1');
-  h.textContent = 'No se pudo iniciar el juego';
+  h.textContent = text.title;
   const p = document.createElement('p');
-  p.textContent = 'Tu navegador necesita WebGL2 y WebAssembly. Prueba con Chrome, Edge o Firefox actualizados.';
+  p.textContent = text.hint;
   const pre = document.createElement('pre');
   pre.textContent = msg;
-  box.append(h, p, pre);
+  box.append(h, p);
+  if (text.reload) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'btn btn-primary';
+    b.textContent = 'Recargar';
+    b.addEventListener('click', () => window.location.reload());
+    box.appendChild(b);
+  }
+  box.appendChild(pre);
   el.appendChild(box);
+  box.querySelector('button')?.focus();
 }
