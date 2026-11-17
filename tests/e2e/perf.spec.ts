@@ -228,4 +228,15 @@ test.describe('Fase 6 · rendimiento', () => {
     expect(app).toBeLessThanOrEqual(BUDGET.appGzKb);
     expect(rapier).toBeLessThanOrEqual(BUDGET.rapierGzKb);
   });
+
+  test('build público: sin la API de QA ni los comandos de depuración', async () => {
+    // `dist` es lo que se publica en Pages; las e2e corren sobre `dist-qa` (npm run build:qa).
+    const dir = join(process.cwd(), 'dist', 'assets');
+    const code = readdirSync(dir)
+      .filter((f) => f.endsWith('.js'))
+      .map((f) => readFileSync(join(dir, f), 'utf8'));
+    for (const marker of ['__EXCOM__', 'God mode']) {
+      expect(code.some((js) => js.includes(marker)), `"${marker}" no debe llegar al build público`).toBe(false);
+    }
+  });
 });

@@ -19,7 +19,7 @@ import { FrameStats } from '../debug/FrameStats';
 import { idlePose, type RigPose, type WeaponModel } from '../entities/CharacterRig';
 import { emptyIntent, type PlayerIntent } from '../entities/PlayerController';
 import { DIALOGUE, HUB_TEXT, rulesPlaque } from '../hub/dialogue';
-import { addCoins, buy } from '../hub/economy';
+import { buy } from '../hub/economy';
 import { HubDirector } from '../hub/HubDirector';
 import { loadLevelData } from '../levels/registry';
 import type { EnemyType, InteractableDef, LevelId, MusicMood } from '../levels/types';
@@ -140,7 +140,6 @@ export class Game {
   private peekTimer = 0;
   private orbit = 0;
   private lastCpuMs = 0;
-  private cpIndex = 0;
   private deathTimer = 0;
   private deathSlowmo = 0;
   /** Metros recorridos desde la última pisada. */
@@ -243,7 +242,6 @@ export class Game {
       focusReady: false,
       focusKey: 'Q',
     };
-    this.registerDebugCommands();
     this.applySettings(this.settings, false);
     // El primer gesto del usuario desbloquea el audio (política de autoplay).
     const unlockAudio = (): void => this.audio.init();
@@ -313,7 +311,6 @@ export class Game {
     this.hud.setMarkers(0, 0);
     this.hud.setCombatVisible(true);
     this.audio.ambience(data.ambience);
-    this.cpIndex = 0;
     this.lastWeaponModel = 'none';
   }
 
@@ -1387,107 +1384,7 @@ export class Game {
     }
   }
 
-  /** QA/debug: aparece un enemigo alertado delante del jugador. */
-  spawnEnemyAhead(type: EnemyType, dist = 10): void {
-    const s = this.session;
-    if (!s) return;
-    const f = s.player.feet;
-    const yaw = this.camera.yaw;
-    const x = f.x - Math.sin(yaw) * dist;
-    const z = f.z - Math.cos(yaw) * dist;
-    const n = s.nav.nearestNode(x, f.y, z, 4);
-    if (n < 0) return;
-    const pos = s.nav.pos(n, new Vector3());
-    s.enemies.spawnAt(type, pos, yaw + Math.PI, f.clone());
-  }
-
   // =========================================================== debug
-  private registerDebugCommands(): void {
-    const d = this.debug;
-    d.addCommand(
-      'collisions',
-      'Colisiones',
-      () => {
-        this.collisionView.setEnabled(!this.collisionView.enabled);
-        if (this.session) this.collisionView.refresh(this.session.physics);
-      },
-      { hotkey: 'KeyU', isOn: () => this.collisionView.enabled },
-    );
-    d.addCommand(
-      'god',
-      'God mode',
-      () => {
-        if (this.session) this.session.god = !this.session.god;
-      },
-      { hotkey: 'KeyG', isOn: () => !!this.session?.god },
-    );
-    d.addCommand(
-      'ammo',
-      'Munición infinita',
-      () => {
-        if (this.session) this.session.infiniteAmmo = !this.session.infiniteAmmo;
-      },
-      { hotkey: 'KeyM', isOn: () => !!this.session?.infiniteAmmo },
-    );
-    d.addCommand('spawn', 'Spawn enemigo', () => this.spawnEnemyAhead(this.rng.pick(['thug', 'escort', 'heavy'] as const)), { hotkey: 'KeyJ' });
-    d.addCommand(
-      'killAll',
-      'Matar enemigos',
-      () => {
-        const s = this.session;
-        if (!s) return;
-        for (const e of s.enemies.enemies) if (e.alive) e.applyHit(9999, 'body', s.player.feet, 1, true);
-      },
-      { hotkey: 'KeyK' },
-    );
-    d.addCommand(
-      'coins',
-      '+10 monedas',
-      () => {
-        addCoins(this.profile, 10);
-        this.saveNow();
-        this.screens.refresh();
-      },
-      { hotkey: 'KeyI' },
-    );
-    d.addCommand(
-      'nextCheckpoint',
-      'Siguiente checkpoint',
-      () => {
-        const s = this.session;
-        if (!s || s.data.checkpoints.length === 0) return;
-        this.cpIndex = (this.cpIndex + 1) % s.data.checkpoints.length;
-        const cp = s.data.checkpoints[this.cpIndex];
-        if (!cp) return;
-        s.respawnAt(new Vector3(cp.pos[0], cp.pos[1] + 0.02, cp.pos[2]), cp.yaw);
-        this.camera.setYawPitch(cp.yaw, -0.12);
-        this.camera.snap();
-      },
-      { hotkey: 'KeyN' },
-    );
-    d.addCommand(
-      'speed',
-      'Velocidad ×3 (estrés)',
-      () => {
-        const p = this.session?.player;
-        if (p) p.speedMultiplier = p.speedMultiplier === 1 ? 3 : 1;
-      },
-      { hotkey: 'KeyP', isOn: () => (this.session?.player.speedMultiplier ?? 1) !== 1 },
-    );
-    d.addCommand(
-      'slowmo',
-      'Cámara lenta',
-      () => {
-        const c = this.session?.combat;
-        if (c) {
-          c.focus = 100;
-          c.focusActive = !c.focusActive;
-        }
-      },
-      { hotkey: 'KeyO', isOn: () => !!this.session?.combat.focusActive },
-    );
-  }
-
   debugText(): string {
     const info = this.renderer.renderer.info;
     const s = this.session;

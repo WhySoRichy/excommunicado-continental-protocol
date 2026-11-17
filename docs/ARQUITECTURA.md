@@ -48,7 +48,7 @@ src/
   ui/         HUD, pantallas (título, pausa, ajustes, tienda...), Intel, estilos
   audio/      motor de audio, patrones y reproductor de música
   render/     renderer, materiales, texturas procedurales, VFX, resolución dinámica
-  debug/      overlay F3 y API de QA (window.__EXCOM__ con ?qa=1)
+  debug/      overlay F3 y API de QA (window.__EXCOM__ con ?qa=1; fuera del build público)
 tests/
   unit/       Vitest: lógica pura
   e2e/        Playwright: el juego real sobre el build de producción
@@ -111,7 +111,7 @@ Las transiciones válidas están declaradas y cualquier otra lanza un error: no 
 | UI | DOM y CSS encima del canvas | Accesible con teclado y fácil de iterar |
 | Audio | Web Audio procedural, iniciado tras el primer gesto del usuario | Sin archivos ni licencias; cumple la política de autoplay |
 | Guardado | `localStorage` versionado y validado; partida (`excom.profile`) y ajustes (`excom.settings`) por separado | Un guardado corrupto se respalda y se empieza de cero sin romper el juego |
-| Pruebas | Vitest para la lógica pura; Playwright sobre el build con `?qa=1` | Lo importante se verifica jugando de verdad, no solo con tests de funciones |
+| Pruebas | Vitest para la lógica pura; Playwright con `?qa=1` sobre un build de pruebas, separado del que se publica | Lo importante se verifica jugando de verdad, no solo con tests de funciones; la versión pública no lleva herramientas de prueba |
 
 ## 5. Principios de render y robustez (R1–R7)
 
@@ -167,17 +167,20 @@ Al añadir un nivel nuevo, los tests de `tests/unit/levels.test.ts` y `tests/uni
 | Comando | Qué hace |
 |---|---|
 | `npm test` | Vitest con la lógica pura |
-| `npm run test:e2e` | Playwright sobre el build de producción. Las capturas quedan en `qa-screenshots/` (no se versionan) |
+| `npm run test:e2e` | Genera el build de pruebas en `dist-qa/` y ejecuta Playwright sobre él. Las capturas quedan en `qa-screenshots/` (no se versionan) |
 | `CI=1 npm run test:e2e` | Lo mismo con render por software (SwiftShader), como en GitHub Actions |
+| `npm run build:qa` | Solo el build de pruebas: el mismo juego que el público, más la API de QA y los comandos de depuración del F3 |
 | `npm run qa` | Build + Vitest + Playwright |
 
-Con `?qa=1` el juego expone `window.__EXCOM__`, una API de pruebas que permite:
+En desarrollo (`npm start`) y en el build de pruebas, `?qa=1` expone `window.__EXCOM__`, una API de pruebas que permite:
 
 - avanzar la simulación paso a paso de forma determinista (`setManual`, `step`);
 - teletransportar, mirar, mantener o pulsar acciones como si fuera el teclado;
 - leer el estado del jugador, el combate, los enemigos, la misión y el HUD;
 - contar invariantes que deben quedar en cero: penetraciones en la geometría, cámara dentro de paredes, estados de combate inconsistentes;
 - medir FPS, luminancia, audio y reparto de CPU.
+
+El build público (`npm run build`, lo que se sube a Pages) no incluye la API ni los comandos de depuración del F3 (modo dios, monedas...): la condición se resuelve al compilar y Vite elimina ese código. Dos e2e lo vigilan: ningún archivo de `dist/` contiene `__EXCOM__` y, sin `?qa=1`, el F3 solo muestra métricas.
 
 Qué cubren los e2e, a grandes rasgos:
 

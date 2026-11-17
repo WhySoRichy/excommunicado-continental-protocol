@@ -7,9 +7,11 @@ import { addCoins } from '../hub/economy';
 import type { Game, QaInvariants } from '../game/Game';
 import type { MissionId } from '../missions/types';
 import type { Settings } from '../core/Settings';
+import { registerDebugCommands } from './commands';
 
 /**
- * API de QA expuesta en `window.__EXCOM__` (solo con ?qa=1 o en dev).
+ * API de QA expuesta en `window.__EXCOM__`: en dev, o con ?qa=1 en el build de pruebas
+ * (`npm run build:qa`). El build público no la incluye (ver `src/main.ts`).
  * Los tests de Playwright la usan para verificar gates corriendo el juego REAL.
  */
 export interface QaStepIntent {
@@ -216,6 +218,7 @@ declare global {
 }
 
 export function installQa(game: Game): void {
+  registerDebugCommands(game);
   const holds: Action[] = ['sprint', 'aim'];
   const readHud = (): ReturnType<QaApi['hud']> => ({
     deathVisible: !(document.querySelector('#hud .death') as HTMLElement | null)?.hidden,

@@ -1,5 +1,5 @@
 // Capturas de perfil de cada pose del jugador y de enemigos apuntando, para revisar animaciones.
-// Uso: en una terminal `npm run build && npm run preview`; en otra, `npm run poses`.
+// Uso: en una terminal `npm run build:qa && npm run preview:qa` (build de pruebas); en otra, `npm run poses`.
 // Salida: qa-screenshots/poses/ (no se versiona).
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';

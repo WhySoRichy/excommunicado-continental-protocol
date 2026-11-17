@@ -30,7 +30,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run preview',
+    command: 'npm run preview:qa',
     url: 'http://localhost:4173',
     reuseExistingServer: !isCI,
     timeout: 120_000,

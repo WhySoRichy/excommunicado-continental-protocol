@@ -33,7 +33,7 @@ La primera vez que se ejecuten las e2e: `npx playwright install chromium`. Requi
 
 1. **Entender antes de cambiar.** Leer el archivo y sus tests. Las reglas del proyecto (bucle sin asignaciones, niveles como datos, una sola máquina de estados, arreglar la causa y no el síntoma) están en [ARQUITECTURA.md](ARQUITECTURA.md#7-convenciones-de-código).
 2. **La lógica pura va con test unitario.** Si algo se puede decidir sin three ni DOM, va en un archivo aparte con su test en `tests/unit/`.
-3. **Lo que se ve o se juega se comprueba jugando.** Las e2e usan la API de pruebas `window.__EXCOM__` (se activa con `?qa=1`; definida en `src/debug/qa.ts`). Permite avanzar paso a paso, teletransportar, pulsar acciones y leer el estado. Para cambios visuales, sacar capturas y mirarlas.
+3. **Lo que se ve o se juega se comprueba jugando.** Las e2e usan la API de pruebas `window.__EXCOM__` (se activa con `?qa=1` en desarrollo y en el build de pruebas; definida en `src/debug/qa.ts`). Permite avanzar paso a paso, teletransportar, pulsar acciones y leer el estado. Para cambios visuales, sacar capturas y mirarlas.
 4. **Antes de cada commit:** `npm run build`, `npm test` y `npm run test:e2e` en verde. Para reproducir el entorno de GitHub Actions (render por software, muy pocos FPS): `CI=1 npm run test:e2e`.
 5. **Commits** convencionales y en español (`feat:`, `fix:`, `perf:`, `test:`, `docs:`, `chore:`), con un cuerpo que explique el porqué.
 6. **Documentación al día:** si cambia una mecánica, actualizar `DISENO.md`; si cambia una decisión técnica, `ARQUITECTURA.md`; al terminar algo del roadmap, moverlo a "Estado actual".
@@ -42,9 +42,10 @@ La primera vez que se ejecuten las e2e: `npx playwright install chromium`. Requi
 
 | Comando | Para qué |
 |---|---|
-| `npm run poses` | Capturas de perfil de cada pose del jugador en `qa-screenshots/poses/`. Imprescindible al tocar animaciones |
+| `npm run poses` | Capturas de perfil de cada pose del jugador en `qa-screenshots/poses/`, con el build de pruebas servido en otra terminal (`npm run build:qa && npm run preview:qa`). Imprescindible al tocar animaciones |
 | `npm run media` | Regenera las capturas y el GIF del README (necesita ffmpeg) |
-| F3 en el juego | FPS, draw calls, estado, y botones de depuración (colisiones, modo dios, matar enemigos...) |
+| F3 en el juego | FPS, draw calls y estado. Con `?qa=1`, también botones de depuración (colisiones, modo dios, matar enemigos...) |
+| `?qa=1` | API de pruebas y comandos del F3. Solo en desarrollo (`npm start`) y en el build de pruebas (`npm run build:qa`); la versión publicada no los incluye |
 | `?level=arena` | Arena de pruebas de movimiento |
 | `?preset=low\|medium\|high` | Fuerza la calidad gráfica |
 
@@ -58,6 +59,7 @@ La primera vez que se ejecuten las e2e: `npx playwright install chromium`. Requi
 - **Bloom que lava la imagen.** El bloom actúa antes del mapeo de tonos: cualquier superficie que pase del umbral (`BLOOM_THRESHOLD` en `render/Renderer.ts`) brilla entera. Un suelo claro y pulido con mucha luz lo superaba y el vestíbulo quedaba blanco. Solo los emisores van en HDR (`EMISSIVE_HDR` en `render/materials.ts`); las superficies iluminadas deben quedar por debajo de 1.
 - **Shaders compilados dos veces.** Con posprocesado la escena se dibuja en un destino intermedio y sus programas no son los de pantalla. `prewarm()` compila contra ese destino; si no, el presupuesto de programas se dispara.
 - **Recursos de GPU que no cuelgan de una geometría ni de un material.** El mapa de sombras pertenece a la luz: quitarla de la escena no lo libera, hay que llamar a su `dispose()`. Se escapaban dos texturas por cada cambio de nivel; `tests/e2e/perf.spec.ts` lo vigila.
+- **Herramientas de prueba en la versión pública.** Con `?qa=1`, cualquiera podía usar en Pages la API de pruebas y los comandos del F3 (monedas, modo dios). Ahora solo existen en desarrollo y en el build de pruebas, y dos e2e lo vigilan. Una herramienta de depuración nueva va en `src/debug/` y se registra desde `installQa`, nunca desde el código del juego.
 - **Estado de misión que no acompaña a la reaparición.** Al reaparecer, los enemigos vivos recuperan la salud; lo que dependa de esa salud (las fases del jefe) debe reiniciarse a la vez (`MissionDirector.onPlayerRespawned`).
 - **Efectos que no terminan.** La cola de la trazadora se calculaba desde la cabeza ya detenida en el impacto y nunca llegaba al final: los destellos se quedaban flotando hasta reciclarse. El tramo se calcula en `render/tracerPath.ts` (lógica pura con test) y la e2e del arsenal comprueba con `vfx()` que no queda ningún efecto vivo.
 - **Un `await` sin camino de error.** Una carga que fallaba dejaba el juego en `loading` para siempre. Todo flujo asíncrono que cambie de estado necesita su salida (`Game.tryLoadSession`).

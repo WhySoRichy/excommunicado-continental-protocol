@@ -6,7 +6,13 @@ import type { QualityPreset } from './render/Renderer';
 import { showFatal } from './ui/boot';
 
 const params = new URLSearchParams(window.location.search);
-const qa = params.has('qa') || import.meta.env.DEV;
+/**
+ * La API de QA (`window.__EXCOM__`) y los comandos del overlay F3 solo existen en desarrollo y
+ * en el build de pruebas (`npm run build:qa`). En el build público la condición es constante y
+ * falsa, así que Vite elimina del bundle `installQa` y, con ella, `src/debug/commands.ts`.
+ */
+const QA_BUILD = import.meta.env.DEV || import.meta.env.MODE === 'qa';
+const qa = QA_BUILD && (params.has('qa') || import.meta.env.DEV);
 const presetParam = params.get('preset');
 // `?preset=` fuerza un preset (QA/perf); si no, manda el de Ajustes.
 const preset: QualityPreset | undefined = presetParam === 'low' || presetParam === 'medium' || presetParam === 'high' ? presetParam : undefined;

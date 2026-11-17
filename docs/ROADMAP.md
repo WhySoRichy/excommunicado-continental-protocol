@@ -8,10 +8,11 @@ Qué se puede mejorar y en qué orden. Cada bloque está pensado para una sesió
 - Personajes procedurales de diseño facetado (sombreado plano, torso en V, rasgos mínimos) y animación procedural con IK de piernas y de la mano de apoyo, pies articulados, reacciones de impacto, caídas variadas, vault en tres tiempos y takedown coreografiado (`src/entities/CharacterRig.ts`).
 - Rediseño con más detalle dentro del estilo de bloques: el Huésped con los rasgos de Keanu Reeves (traje de tres piezas, media melena con raya al medio y barba), el Sommelier (camisa, chaleco, pajarita, delantal y catavinos), ocho modelos de arma y proyectiles más vistosos (trazadoras que viajan, fogonazo en estrella y casquillos de latón). Los personajes admiten prendas opcionales y rostros (`Outfit` y `FaceStyle` en `src/entities/CharacterRig.ts`).
 - Dirección de arte nocturna: cielo con silueta de ciudad en los exteriores, vestíbulo del Continental con papel pintado y damero de mármol, bloom y viñeta desde el preset Medio.
-- 157 pruebas unitarias y 45 e2e; CI y despliegue automático en GitHub Pages.
+- 157 pruebas unitarias y 47 e2e; CI y despliegue automático en GitHub Pages.
 - Arsenal ampliado: el revólver «Juez» y el rifle de tirador «Meridian» (con mira de aumento) se compran en la armería, y cada tecla de arma recorre su grupo.
 - El Gauntlet ya no se degrada con las oleadas: los caídos se retiran al empezar la siguiente y un cuerpo asentado deja de simularse y animarse. Tras doce oleadas, 81 draw calls (antes unas 400). Además, los personajes de igual aspecto comparten la geometría: un enemigo que aparece ya no construye ni sube a la GPU un cuerpo nuevo.
 - Primera pasada de robustez tras revisar el juego entero, jugándolo y midiendo: el mapa de sombras se libera al cambiar de nivel, el combate con el Juez se reinicia al reaparecer, un nivel que no se descarga se explica en pantalla, el audio posicional sigue a la cámara en Firefox, abrir el juego sin empezar no crea partida y la voltereta suena.
+- Build de pruebas separado del público: la API de QA y los comandos del F3 (monedas, modo dios) solo existen en desarrollo y en `npm run build:qa`. La versión publicada ya no los incluye, requisito previo de la tabla de récords en línea.
 
 ## Antes de añadir contenido: robustez y rendimiento
 
@@ -23,9 +24,6 @@ Lo que quedó pendiente de esa revisión. Conviene hacerlo antes del cuarto cont
 - Avisar cuando el navegador pierde el contexto gráfico y recuperar la iluminación de entorno al volver.
 - CI: límite de tiempo por trabajo y no cancelar un despliegue en curso.
 
-### Trucos fuera de la versión publicada
-Los comandos del panel F3 (monedas, modo dios) funcionan para cualquiera en la versión pública. Deben quedar solo con `?qa=1` o en desarrollo; es requisito para la tabla de récords en línea.
-
 ### Lo que ya existe y no se ve
 - Pantalla de logros (hay 17 y solo aparecen al conseguirlos) y de estadísticas (el tiempo jugado se guarda y no se muestra).
 - Selector de dificultad: los multiplicadores de puntería y daño de los enemigos ya están cableados.
@@ -33,7 +31,7 @@ Los comandos del panel F3 (monedas, modo dios) funcionan para cualquiera en la v
 - La lluvia declarada en los niveles (`weather`) no se dibuja.
 
 ### Mantenibilidad
-- Repartir `src/game/Game.ts` (unas 1500 líneas) y pasar la lógica de objetivos y fases de `MissionDirector` a un módulo puro con tests.
+- Repartir `src/game/Game.ts` (unas 1400 líneas) y pasar la lógica de objetivos y fases de `MissionDirector` a un módulo puro con tests.
 
 ## Prioridad alta: lo que más se nota al jugar
 

@@ -29,11 +29,13 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
     "build": "npm run typecheck && vite build",
     "preview": "vite preview --port 4173 --strictPort",
+    "build:qa": "vite build --mode qa --outDir dist-qa",
+    "preview:qa": "vite preview --outDir dist-qa --port 4173 --strictPort",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test",
+    "test:e2e": "npm run build:qa && playwright test",
     "qa": "npm run build && npm test && npm run test:e2e",
-    "media": "npm run build && playwright test -c playwright.media.config.ts && node scripts/make-gif.mjs",
+    "media": "npm run build:qa && playwright test -c playwright.media.config.ts && node scripts/make-gif.mjs",
     "poses": "node scripts/poses.mjs"
   },
   "dependencies": {

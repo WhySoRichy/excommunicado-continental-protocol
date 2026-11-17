@@ -17,5 +17,5 @@ export default defineConfig({
     launchOptions: { args: ['--enable-gpu', '--ignore-gpu-blocklist', '--use-angle=d3d11', '--autoplay-policy=no-user-gesture-required'] },
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 720 }, channel: 'chromium' } }],
-  webServer: { command: 'npm run preview', url: 'http://localhost:4173', reuseExistingServer: true, timeout: 120_000 },
+  webServer: { command: 'npm run preview:qa', url: 'http://localhost:4173', reuseExistingServer: true, timeout: 120_000 },
 });

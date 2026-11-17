@@ -1,8 +1,9 @@
 import { expect, test } from '@playwright/test';
-import { openGame } from './helpers';
+import { collectErrors, openGame } from './helpers';
 
 /**
- * Robustez ante lo que el jugador no controla: la red y el cierre de la pestaña.
+ * Robustez ante lo que el jugador no controla (la red y el cierre de la pestaña) y frente a
+ * herramientas de prueba que no deben estar a su alcance.
  */
 test.describe('Robustez', () => {
   test.beforeEach(async ({ page }) => {
@@ -42,5 +43,17 @@ test.describe('Robustez', () => {
     await page.reload();
     await page.waitForFunction(() => window.__EXCOM__?.ready === true, null, { timeout: 90_000 });
     await expect(page.getByRole('button', { name: 'Continuar' })).toBeVisible();
+  });
+
+  test('sin ?qa=1 no hay API de pruebas ni comandos de depuración en el F3', async ({ page }) => {
+    // Así funciona la versión publicada, que además no incluye la API (lo comprueba perf.spec.ts).
+    const errors = collectErrors(page);
+    await page.goto('/');
+    await expect(page.getByRole('button', { name: 'Nueva partida' })).toBeVisible({ timeout: 90_000 });
+    expect(await page.evaluate(() => window.__EXCOM__ === undefined)).toBe(true);
+    await page.keyboard.press('F3');
+    await expect(page.locator('#debug-text')).toContainText('FPS');
+    await expect(page.locator('#debug-overlay .debug-btn')).toHaveCount(0);
+    expect(errors).toEqual([]);
   });
 });
