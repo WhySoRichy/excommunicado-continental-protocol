@@ -155,6 +155,40 @@ test.describe('Fase 6 · rendimiento', () => {
     expect(second.geometries, 'geometrías').toBeLessThanOrEqual(first.geometries);
   });
 
+  test('Gauntlet: tras doce oleadas la escena sigue dentro del presupuesto (los caídos se retiran)', async ({ page }) => {
+    await openGame(page, 'preset=medium');
+    await page.getByRole('button', { name: /Nueva partida|Continuar/ }).first().click();
+    await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('hub');
+    await page.evaluate(() => window.__EXCOM__!.startContract('gauntlet'));
+    await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('briefing');
+    const waves = await page.evaluate(() => {
+      const q = window.__EXCOM__!;
+      q.beginContract();
+      q.setManual(true);
+      q.setGod(true);
+      // Desde recepción mirando al sur se ve todo el vestíbulo y las dos entradas.
+      q.teleport(0, 0, -9.3, Math.PI);
+      q.setLook(Math.PI, -0.12);
+      for (let w = 1; w <= 12; w++) {
+        for (let i = 0; i < 200 && (q.mission()!.wave < w || q.mission()!.wavePending > 0); i++) q.step(15, {});
+        q.step(150, {});
+        q.runDebug('killAll');
+        q.step(90, {});
+      }
+      q.setLook(Math.PI, -0.12);
+      q.setManual(false);
+      return q.mission()!.wavesCleared;
+    });
+    expect(waves).toBe(12);
+    // En el respiro: sin enemigos vivos, solo quedan los caídos de la última oleada.
+    await page.evaluate(() => window.__EXCOM__!.measureFps(0.4));
+    const s = await page.evaluate(() => ({ info: window.__EXCOM__!.info(), bodies: window.__EXCOM__!.enemies().length }));
+    console.log(`[perf] gauntlet oleada 12: ${s.bodies} cuerpos · ${s.info.calls} calls · ${(s.info.triangles / 1000).toFixed(1)}k tris`);
+    expect(s.bodies).toBeLessThanOrEqual(10);
+    expect(s.info.calls).toBeLessThanOrEqual(BUDGET.calls);
+    expect(s.info.triangles).toBeLessThanOrEqual(BUDGET.triangles);
+  });
+
   test('bundle: JS del juego y del motor de física dentro de presupuesto', async () => {
     const dir = join(process.cwd(), 'dist', 'assets');
     const files = readdirSync(dir).filter((f) => f.endsWith('.js'));

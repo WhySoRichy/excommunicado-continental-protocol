@@ -61,6 +61,8 @@ const _dir = new Vector3();
 const _hitPt = new Vector3();
 /** Lo que tarda el agarre del takedown en tumbar al enemigo (s). */
 const THROW_DELAY = 0.1;
+/** Tiempo tras la muerte en el que el cuerpo termina de caer; después ni se simula ni se anima (s). */
+const CORPSE_SETTLE = 3;
 /** Grosor del rim en reposo: por debajo del umbral del bloom, para que solo brillen el impacto y el telégrafo. */
 const RIM_BASE = 0.8;
 /**
@@ -117,6 +119,8 @@ export class Enemy {
   lastHitWasHead = false;
   /** Segundos de juego desde la muerte (para la animación de caída). */
   private deadFor = 0;
+  /** Segundos de simulación desde la muerte (hasta que el cuerpo se asienta). */
+  private deadSim = 0;
   /** Sacudida visual al recibir un impacto (0..1) y lado del que vino. */
   private flinch = 0;
   private flinchSide = 0;
@@ -191,7 +195,11 @@ export class Enemy {
     this.hitFlash = Math.max(0, this.hitFlash - dt);
     this.recoilVis = Math.max(0, this.recoilVis - dt * 6);
     if (!this.alive) {
-      this.mover.fixedUpdate(dt, this.intent);
+      // El cuerpo cae y se asienta; después ya no hace falta moverlo.
+      if (this.deadSim < CORPSE_SETTLE) {
+        this.deadSim += dt;
+        this.mover.fixedUpdate(dt, this.intent);
+      }
       return;
     }
     this.perceive(dt, target);
@@ -511,6 +519,8 @@ export class Enemy {
 
   // ======================================================== render
   renderUpdate(alpha: number, dt: number): void {
+    // Un cuerpo ya asentado no se anima más: conserva su última pose.
+    if (!this.alive && this.deadFor > CORPSE_SETTLE) return;
     const m = this.mover;
     m.renderFeet(alpha, this.rig.root.position);
     this.rig.root.rotation.y = m.renderYaw(alpha);

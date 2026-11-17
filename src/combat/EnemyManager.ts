@@ -172,6 +172,11 @@ export class EnemyManager implements Tactics {
     return this.despawnWhere((e) => e.spawnDef.spawnOn === event);
   }
 
+  /** Retira los cuerpos caídos (entre oleadas del Gauntlet: si no, se acumulan sin límite). */
+  despawnDead(): number {
+    return this.despawnWhere((e) => !e.alive);
+  }
+
   private despawnWhere(match: (e: Enemy) => boolean): number {
     let n = 0;
     for (let i = this.enemies.length - 1; i >= 0; i--) {

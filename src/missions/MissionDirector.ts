@@ -511,6 +511,8 @@ export class MissionDirector {
 
   private startWave(): void {
     this.gauntletWave++;
+    // Los caídos de la oleada anterior se quedan durante el respiro y se retiran al empezar la siguiente.
+    this.d.session.enemies.despawnDead();
     this.waveQueue.length = 0;
     this.waveQueue.push(...waveQueue(gauntletWave(this.gauntletWave)));
     this.spawnT = 0;

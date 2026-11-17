@@ -65,8 +65,14 @@ export class Pickups {
 
   update(dt: number): void {
     this.t += dt;
-    for (const p of this.list) {
-      if (p.taken) continue;
+    for (let i = this.list.length - 1; i >= 0; i--) {
+      const p = this.list[i]!;
+      if (p.taken) {
+        // Recogido o caducado: fuera de la escena y de la lista (en el Gauntlet se acumulaban sin fin).
+        this.scene.remove(p.mesh);
+        this.list.splice(i, 1);
+        continue;
+      }
       p.ttl -= dt;
       if (p.ttl <= 0) {
         p.taken = true;
