@@ -45,7 +45,10 @@ const ENEMY_SHOT_SOUND: Record<string, ShotSound> = {
   pistol: 'enemyPistol',
   smg: 'enemySmg',
   rifle: 'enemyRifle',
+  dmr: 'enemyRifle',
+  revolver: 'enemyRifle',
   shotgun: 'enemyShotgun',
+  shotgunTactical: 'enemyShotgun',
 };
 
 /** Segundos sin progreso antes de replanificar; nº de replanes antes de avisar "atascado" al cerebro. */
