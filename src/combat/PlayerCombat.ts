@@ -227,6 +227,7 @@ export class PlayerCombat {
     if (rolls !== this.lastRolls) {
       this.lastRolls = rolls;
       this.sinceDodge = 0;
+      ctx.audio.dodge();
     }
     if (p.state === 'cover') this.sinceCover = 0;
     for (const w of this.weapons.values()) w.update(dt);
