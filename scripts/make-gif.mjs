@@ -7,8 +7,9 @@ import { join } from 'node:path';
 const media = join(process.cwd(), 'docs', 'media');
 const frames = join(media, 'frames');
 const out = join(media, 'gameplay.gif');
-const FPS = 12;
-const WIDTH = 720;
+// Se graba a 12 fotogramas por segundo de juego y se reproduce a 10: algo más pausado que el tiempo real.
+const FPS = 10;
+const WIDTH = 640;
 
 if (!existsSync(join(frames, 'frame-000.png'))) {
   console.error('[gif] no hay fotogramas en docs/media/frames: ejecuta primero `npm run media`.');
