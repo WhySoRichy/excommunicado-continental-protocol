@@ -28,4 +28,19 @@ test.describe('Robustez', () => {
     await page.evaluate(() => window.__EXCOM__!.startContract('nightclub'));
     await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('briefing');
   });
+
+  test('abrir el juego y salir sin empezar no deja una partida guardada', async ({ page }) => {
+    await openGame(page);
+    await expect(page.getByRole('button', { name: 'Nueva partida' })).toBeVisible();
+    await page.reload();
+    await page.waitForFunction(() => window.__EXCOM__?.ready === true, null, { timeout: 90_000 });
+    expect(await page.evaluate(() => window.localStorage.getItem('excom.profile'))).toBeNull();
+    await expect(page.getByRole('button', { name: 'Continuar' })).toHaveCount(0);
+    // En cuanto se empieza una partida, sí queda guardada.
+    await page.getByRole('button', { name: 'Nueva partida' }).click();
+    await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('hub');
+    await page.reload();
+    await page.waitForFunction(() => window.__EXCOM__?.ready === true, null, { timeout: 90_000 });
+    await expect(page.getByRole('button', { name: 'Continuar' })).toBeVisible();
+  });
 });

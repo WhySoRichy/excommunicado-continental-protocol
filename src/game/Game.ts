@@ -248,9 +248,9 @@ export class Game {
     window.addEventListener('pointerdown', unlockAudio);
     window.addEventListener('keydown', unlockAudio);
     // Guardar al salir o al ocultar la pestaña.
-    window.addEventListener('pagehide', () => this.saveNow());
+    window.addEventListener('pagehide', () => this.saveOnExit());
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') this.saveNow();
+      if (document.visibilityState === 'hidden') this.saveOnExit();
     });
     // F3 y teclas rápidas de debug (solo con el overlay abierto) fuera del mapa de acciones.
     window.addEventListener('keydown', (e) => {
@@ -337,6 +337,15 @@ export class Game {
     this.profile.playtimeSec += Math.floor(this.autosaveT);
     this.autosaveT = 0;
     saveProfile(this.store, this.profile);
+  }
+
+  /**
+   * Guardado al cerrar u ocultar la pestaña. Quien abre el juego y se va sin empezar no deja partida:
+   * antes se guardaba un perfil vacío y, a la vuelta, el título ofrecía "Continuar" a quien nunca jugó.
+   */
+  private saveOnExit(): void {
+    const untouched = (this.fsm.state === 'boot' || this.fsm.state === 'title') && this.store.get(PROFILE_KEY) === null;
+    if (!untouched) this.saveNow();
   }
 
   /** Aplica unos ajustes en caliente (y los guarda). El preset de la URL manda hasta que el jugador lo cambie. */
