@@ -407,7 +407,7 @@ export class PlayerCombat {
     this.stats.shotsFired++;
     if (anyEnemyHit) this.stats.shotsHit++;
     ctx.vfx.muzzle(_muzzle, base, true);
-    ctx.vfx.casing(_muzzle, base);
+    ctx.vfx.casing(_muzzle, base, p.feet.y);
     ctx.audio.shot(d.id === 'carbine' ? 'carbine' : d.id === 'shotgun' ? 'shotgun' : d.noise < 12 ? 'pistolSilenced' : 'pistol');
     const k = aiming ? 0.75 : 1;
     ctx.camera.kick(rec[0] * DEG2RAD * k, -rec[1] * DEG2RAD * k);

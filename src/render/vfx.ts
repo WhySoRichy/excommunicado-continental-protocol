@@ -5,11 +5,14 @@ import {
   BufferGeometry,
   CanvasTexture,
   Color,
+  DoubleSide,
   DynamicDrawUsage,
+  Euler,
   InstancedMesh,
   Matrix4,
   Mesh,
   MeshBasicMaterial,
+  MeshStandardMaterial,
   PlaneGeometry,
   PointLight,
   Points,
@@ -35,6 +38,12 @@ const MAX_FLASHES = 10;
 const MAX_SMOKE = 8;
 /** Vida de una voluta de humo (s). */
 const SMOKE_LIFE = 0.7;
+/** Trazadoras: velocidad visual (m/s) y largo del destello (m). El disparo es instantáneo; esto solo se ve. */
+const TRACER_SPEED = 420;
+const TRACER_LEN = 1.6;
+/** Casquillos de latón: cuántos a la vez y cuánto duran (caen, rebotan y se quedan un momento en el suelo). */
+const MAX_CASINGS = 24;
+const CASING_LIFE = 1.6;
 
 const _m = new Matrix4();
 const _q = new Quaternion();
@@ -43,6 +52,7 @@ const _p = new Vector3();
 const _d = new Vector3();
 const _z = new Vector3(0, 0, 1);
 const _c = new Color();
+const _e = new Euler();
 const HIDE = new Matrix4().makeScale(0, 0, 0);
 
 export type ImpactKind = 'spark' | 'blood' | 'dust';
@@ -52,6 +62,21 @@ export class Vfx {
   private readonly tracerLife = new Float32Array(MAX_TRACERS);
   private readonly tracerColor: Color[] = [];
   private tracerNext = 0;
+  private readonly tracerFrom = new Float32Array(MAX_TRACERS * 3);
+  private readonly tracerDir = new Float32Array(MAX_TRACERS * 3);
+  private readonly tracerDist = new Float32Array(MAX_TRACERS);
+  private readonly tracerAge = new Float32Array(MAX_TRACERS);
+  private readonly tracerWidth = new Float32Array(MAX_TRACERS);
+
+  private readonly casings: InstancedMesh;
+  private readonly cPos = new Float32Array(MAX_CASINGS * 3);
+  private readonly cVel = new Float32Array(MAX_CASINGS * 3);
+  private readonly cRot = new Float32Array(MAX_CASINGS * 3);
+  private readonly cSpin = new Float32Array(MAX_CASINGS * 3);
+  private readonly cLife = new Float32Array(MAX_CASINGS);
+  private readonly cFloor = new Float32Array(MAX_CASINGS);
+  private casingNext = 0;
+  private readonly flashTex: CanvasTexture[];
 
   private readonly points: Points;
   private readonly pPos: Float32Array;
@@ -77,8 +102,10 @@ export class Vfx {
   private smokeNext = 0;
 
   constructor(private readonly scene: Scene, particleScale: number) {
-    // Trazadoras: caja unitaria escalada a lo largo de Z.
+    // Trazadoras: caja unitaria escalada a lo largo de Z y afilada hacia la cola (la cabeza va delante, en +Z).
     const tgeo = new BoxGeometry(1, 1, 1);
+    const tp = tgeo.getAttribute('position');
+    for (let i = 0; i < tp.count; i++) if (tp.getZ(i) < 0) tp.setXY(i, tp.getX(i) * 0.2, tp.getY(i) * 0.2);
     const tmat = new MeshBasicMaterial({ color: 0xffffff, blending: AdditiveBlending, transparent: true, depthWrite: false, toneMapped: false });
     this.tracers = new InstancedMesh(tgeo, tmat, MAX_TRACERS);
     this.tracers.instanceMatrix.setUsage(DynamicDrawUsage);
@@ -115,13 +142,18 @@ export class Vfx {
     for (let i = 0; i < MAX_DECALS; i++) this.decals.setMatrixAt(i, HIDE);
     scene.add(this.decals);
 
-    // Fogonazos (dos planos cruzados aditivos).
-    const fmat = new MeshBasicMaterial({ color: new Color(0xffd08a).multiplyScalar(3), blending: AdditiveBlending, transparent: true, depthWrite: false, toneMapped: false });
-    const fgeo = new PlaneGeometry(0.32, 0.32);
+    // Fogonazos: estrella de frente y llamarada que se abre hacia delante vista de lado.
+    this.flashTex = [flashTexture('star'), flashTexture('flame')];
+    const flashColor = new Color(0xffd08a).multiplyScalar(3);
+    const fmat = new MeshBasicMaterial({ map: this.flashTex[0], color: flashColor, blending: AdditiveBlending, transparent: true, depthWrite: false, toneMapped: false, side: DoubleSide });
+    const smat = new MeshBasicMaterial({ map: this.flashTex[1], color: flashColor, blending: AdditiveBlending, transparent: true, depthWrite: false, toneMapped: false, side: DoubleSide });
+    const fgeo = new PlaneGeometry(0.3, 0.3);
+    const sgeo = new PlaneGeometry(0.42, 0.2);
     for (let i = 0; i < MAX_FLASHES; i++) {
       const f = new Mesh(fgeo, fmat);
-      const g = new Mesh(fgeo, fmat);
-      g.rotation.y = Math.PI / 2;
+      const g = new Mesh(sgeo, smat);
+      g.rotation.y = -Math.PI / 2;
+      g.position.z = 0.17;
       f.add(g);
       f.visible = false;
       this.flashes.push(f);
@@ -129,6 +161,13 @@ export class Vfx {
     }
     this.playerLight = new PointLight(0xffc477, 0, 9, 2);
     scene.add(this.playerLight);
+
+    // Casquillos de latón (instanciados): giran, rebotan en el suelo y desaparecen encogiéndose.
+    this.casings = new InstancedMesh(new BoxGeometry(0.011, 0.011, 0.026), new MeshStandardMaterial({ color: 0xc9a14a, metalness: 0.5, roughness: 0.35 }), MAX_CASINGS);
+    this.casings.instanceMatrix.setUsage(DynamicDrawUsage);
+    this.casings.frustumCulled = false;
+    for (let i = 0; i < MAX_CASINGS; i++) this.casings.setMatrixAt(i, HIDE);
+    scene.add(this.casings);
 
     // Humo de la boca del arma: sprites suaves que crecen, suben y se desvanecen.
     this.smokeTex = smokeTexture();
@@ -142,24 +181,53 @@ export class Vfx {
     }
   }
 
-  /** Trazadora de `from` a `to`. */
+  /** Trazadora de `from` a `to`: un destello que viaja como una bala hasta el impacto. */
   tracer(from: Vec3Like, to: Vec3Like, color: number, width = 0.022): void {
-    const i = this.tracerNext;
-    this.tracerNext = (this.tracerNext + 1) % MAX_TRACERS;
     _d.set(to.x - from.x, to.y - from.y, to.z - from.z);
     const len = _d.length();
     if (len < 0.05) return;
     _d.multiplyScalar(1 / len);
-    _q.setFromUnitVectors(_z, _d);
-    _p.set((from.x + to.x) / 2, (from.y + to.y) / 2, (from.z + to.z) / 2);
-    _s.set(width, width, len);
-    _m.compose(_p, _q, _s);
-    this.tracers.setMatrixAt(i, _m);
+    const i = this.tracerNext;
+    this.tracerNext = (this.tracerNext + 1) % MAX_TRACERS;
+    const j = i * 3;
+    this.tracerFrom[j] = from.x;
+    this.tracerFrom[j + 1] = from.y;
+    this.tracerFrom[j + 2] = from.z;
+    this.tracerDir[j] = _d.x;
+    this.tracerDir[j + 1] = _d.y;
+    this.tracerDir[j + 2] = _d.z;
+    this.tracerDist[i] = len;
+    this.tracerAge[i] = 0;
+    this.tracerWidth[i] = width;
+    this.tracerLife[i] = 1;
     this.tracerColor[i]!.set(color);
-    this.tracers.setColorAt(i, this.tracerColor[i]!);
-    this.tracerLife[i] = 0.07;
+    this.placeTracer(i);
     this.tracers.instanceMatrix.needsUpdate = true;
     if (this.tracers.instanceColor) this.tracers.instanceColor.needsUpdate = true;
+  }
+
+  /** Coloca la trazadora `i` según su edad: el tramo entre la cola y la cabeza avanza por el recorrido. */
+  private placeTracer(i: number): boolean {
+    const j = i * 3;
+    const dist = this.tracerDist[i]!;
+    const head = Math.min(dist, TRACER_SPEED * this.tracerAge[i]!);
+    const tail = Math.max(0, head - Math.min(TRACER_LEN, dist * 0.6));
+    if (tail >= dist - 1e-3) {
+      this.tracers.setMatrixAt(i, HIDE);
+      return false;
+    }
+    _d.set(this.tracerDir[j]!, this.tracerDir[j + 1]!, this.tracerDir[j + 2]!);
+    _q.setFromUnitVectors(_z, _d);
+    const mid = (head + tail) / 2;
+    _p.set(this.tracerFrom[j]! + _d.x * mid, this.tracerFrom[j + 1]! + _d.y * mid, this.tracerFrom[j + 2]! + _d.z * mid);
+    const w = this.tracerWidth[i]!;
+    _s.set(w, w, Math.max(0.05, head - tail));
+    _m.compose(_p, _q, _s);
+    this.tracers.setMatrixAt(i, _m);
+    // Brillo en HDR (lo recoge el bloom): intenso al salir del cañón y algo más tenue al llegar.
+    _c.copy(this.tracerColor[i]!).multiplyScalar(2.2 - 1.0 * (head / dist));
+    this.tracers.setColorAt(i, _c);
+    return true;
   }
 
   impact(point: Vec3Like, normal: Vec3Like, kind: ImpactKind, count = 7): void {
@@ -198,27 +266,30 @@ export class Vfx {
     this.decals.instanceMatrix.needsUpdate = true;
   }
 
-  /** Casquillo: sale despedido hacia la derecha del arma y cae. */
-  casing(pos: Vec3Like, dir: Vec3Like): void {
-    const i = this.pNext;
-    this.pNext = (this.pNext + 1) % this.maxParticles;
+  /** Casquillo de latón: sale despedido hacia la derecha del arma girando, rebota en el suelo (`floorY`) y se queda. */
+  casing(pos: Vec3Like, dir: Vec3Like, floorY = pos.y - 1.4): void {
+    const i = this.casingNext;
+    this.casingNext = (this.casingNext + 1) % MAX_CASINGS;
     const j = i * 3;
     // Derecha = dir × arriba (en el plano horizontal).
     const l = Math.hypot(dir.x, dir.z) || 1;
     const rx = -dir.z / l;
     const rz = dir.x / l;
-    const jitter = 0.8 + ((this.pNext * 7) % 5) * 0.1;
-    this.pPos[j] = pos.x - dir.x * 0.12;
-    this.pPos[j + 1] = pos.y + 0.02;
-    this.pPos[j + 2] = pos.z - dir.z * 0.12;
-    this.pVel[j] = rx * 2.2 * jitter - dir.x * 0.4;
-    this.pVel[j + 1] = 2.6 * jitter;
-    this.pVel[j + 2] = rz * 2.2 * jitter - dir.z * 0.4;
-    _c.set(0xe2b04a);
-    this.pCol[j] = _c.r;
-    this.pCol[j + 1] = _c.g;
-    this.pCol[j + 2] = _c.b;
-    this.pLife[i] = 0.6;
+    const jitter = 0.8 + ((this.casingNext * 7) % 5) * 0.1;
+    this.cPos[j] = pos.x - dir.x * 0.12;
+    this.cPos[j + 1] = pos.y + 0.02;
+    this.cPos[j + 2] = pos.z - dir.z * 0.12;
+    this.cVel[j] = rx * 2.2 * jitter - dir.x * 0.4;
+    this.cVel[j + 1] = 2.6 * jitter;
+    this.cVel[j + 2] = rz * 2.2 * jitter - dir.z * 0.4;
+    this.cRot[j] = 0;
+    this.cRot[j + 1] = Math.atan2(dir.x, dir.z);
+    this.cRot[j + 2] = 0;
+    this.cSpin[j] = 14 * jitter;
+    this.cSpin[j + 1] = 3;
+    this.cSpin[j + 2] = 9;
+    this.cFloor[i] = floorY;
+    this.cLife[i] = CASING_LIFE;
   }
 
   /** Fogonazo en `pos` mirando a `dir`. `player` enciende también la luz compartida. */
@@ -250,20 +321,53 @@ export class Vfx {
   }
 
   update(dt: number): void {
-    // Trazadoras: se apagan al terminar su vida.
+    // Trazadoras: avanzan hasta el impacto y se apagan al llegar.
     let tDirty = false;
     for (let i = 0; i < MAX_TRACERS; i++) {
       if (this.tracerLife[i]! <= 0) continue;
-      this.tracerLife[i]! -= dt;
       tDirty = true;
-      if (this.tracerLife[i]! <= 0) {
-        this.tracers.setMatrixAt(i, HIDE);
-      } else {
-        const k = this.tracerLife[i]! / 0.07;
-        _c.copy(this.tracerColor[i]!).multiplyScalar(k * 1.6);
-        this.tracers.setColorAt(i, _c);
-      }
+      this.tracerAge[i]! += dt;
+      if (!this.placeTracer(i)) this.tracerLife[i] = 0;
     }
+    // Casquillos: caen girando, rebotan una vez y se quedan tumbados hasta desaparecer.
+    let cDirty = false;
+    for (let i = 0; i < MAX_CASINGS; i++) {
+      if (this.cLife[i]! <= 0) continue;
+      cDirty = true;
+      this.cLife[i]! -= dt;
+      if (this.cLife[i]! <= 0) {
+        this.casings.setMatrixAt(i, HIDE);
+        continue;
+      }
+      const j = i * 3;
+      const floor = this.cFloor[i]! + 0.006;
+      this.cVel[j + 1]! -= 9.8 * dt;
+      for (let k = 0; k < 3; k++) {
+        this.cPos[j + k]! += this.cVel[j + k]! * dt;
+        this.cRot[j + k]! += this.cSpin[j + k]! * dt;
+      }
+      if (this.cPos[j + 1]! < floor) {
+        this.cPos[j + 1] = floor;
+        const vy = this.cVel[j + 1]!;
+        const bounce = vy < -0.8;
+        const keep = bounce ? 0.45 : 0;
+        this.cVel[j + 1] = bounce ? -vy * 0.3 : 0;
+        this.cVel[j]! *= keep;
+        this.cVel[j + 2]! *= keep;
+        for (let k = 0; k < 3; k++) this.cSpin[j + k]! *= bounce ? 0.4 : 0;
+        if (!bounce) {
+          this.cRot[j] = 0;
+          this.cRot[j + 2] = 0;
+        }
+      }
+      _e.set(this.cRot[j]!, this.cRot[j + 1]!, this.cRot[j + 2]!);
+      _q.setFromEuler(_e);
+      _s.setScalar(Math.min(1, this.cLife[i]! / 0.25));
+      _p.set(this.cPos[j]!, this.cPos[j + 1]!, this.cPos[j + 2]!);
+      _m.compose(_p, _q, _s);
+      this.casings.setMatrixAt(i, _m);
+    }
+    if (cDirty) this.casings.instanceMatrix.needsUpdate = true;
     if (tDirty) {
       this.tracers.instanceMatrix.needsUpdate = true;
       if (this.tracers.instanceColor) this.tracers.instanceColor.needsUpdate = true;
@@ -326,6 +430,10 @@ export class Vfx {
     this.tracers.geometry.dispose();
     this.points.geometry.dispose();
     this.decals.geometry.dispose();
+    this.scene.remove(this.casings);
+    this.casings.geometry.dispose();
+    (this.casings.material as MeshStandardMaterial).dispose();
+    for (const t of this.flashTex) t.dispose();
   }
 }
 
@@ -343,6 +451,41 @@ function smokeTexture(): CanvasTexture {
   g.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 64, 64);
+  return new CanvasTexture(c);
+}
+
+/** Fogonazo: estrella de cinco puntas (de frente) o llamarada que se abre hacia delante (de lado), con núcleo brillante. */
+function flashTexture(kind: 'star' | 'flame'): CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 64;
+  c.height = 64;
+  const ctx = c.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D no disponible');
+  ctx.translate(32, 32);
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  ctx.beginPath();
+  if (kind === 'star') {
+    for (let k = 0; k < 10; k++) {
+      const r = k % 2 === 0 ? 31 : 8;
+      const a = (k / 10) * Math.PI * 2 - Math.PI / 2;
+      ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+    }
+  } else {
+    // Nace en la boca del arma (borde izquierdo) y se abre hacia delante en dos lenguas.
+    ctx.moveTo(-31, 0);
+    ctx.quadraticCurveTo(0, -18, 31, -5);
+    ctx.lineTo(22, 0);
+    ctx.lineTo(31, 5);
+    ctx.quadraticCurveTo(0, 18, -31, 0);
+  }
+  ctx.closePath();
+  ctx.fill();
+  const cx = kind === 'star' ? 0 : -14;
+  const g = ctx.createRadialGradient(cx, 0, 0, cx, 0, 16);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(-32, -32, 64, 64);
   return new CanvasTexture(c);
 }
 
