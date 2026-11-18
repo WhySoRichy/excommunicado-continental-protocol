@@ -65,12 +65,12 @@ Cada contrato sigue el flujo **briefing** (3 líneas: objetivo, regla especial, 
 | Trotar (por defecto) | 4,6 m/s |
 | Sprint | 7,0 m/s, FOV +6° |
 | Caminar apuntando | 2,6 m/s |
-| Agachado | 2,2 m/s, cápsula de 1,14 m |
+| Agachado | 2,2 m/s, cápsula de 1,14 m. El cuerpo se encoge (cadera baja, torso inclinado) para caber en ella: lo que se ve es lo que puede recibir un disparo |
 | Deslizar (C corriendo) | 0,7 s con impulso que decae; termina agachado; enfriamiento 0,5 s |
 | Esquiva / voltereta | 0,5 s a 7,6 m/s con **i-frames de 0,05 a 0,36 s**; enfriamiento 0,35 s; en el aire es un "dive" (una vez por salto) |
 | Salto | 0,95 m de altura |
 | Vault | Con Espacio frente a obstáculos de 0,42 a 1,28 m de alto (a menos de 1 m) y hasta 1,6 m de fondo; si no hay espacio detrás, se sube encima |
-| Cobertura | C junto a una pared o caja. Te mueves pegado al borde y no te caes del final; al apuntar sales a disparar. Las balas del frente hacen −50 % de daño |
+| Cobertura | C junto a una pared o caja. Te mueves pegado al borde y no te caes del final; al apuntar sales a disparar. Las balas del frente hacen −50 % de daño. Las coberturas bajas miden al menos 1,2 m: tapan a alguien agachado |
 | Levantarse | Solo si hay espacio sobre la cabeza (si no, sigues agachado: nunca quedas trabado en el techo) |
 
 **Cámara:**
@@ -96,6 +96,7 @@ Cada contrato sigue el flujo **briefing** (3 líneas: objetivo, regla especial, 
 - **Cada tecla recorre su grupo** entre las armas que tengas: 1 carabina, escopeta y rifle de tirador; 2 pistola y revólver; 3 cuchillo. La munición que sueltan los enemigos sirve para todas las armas de reserva limitada.
 - **Hitscan:** rayo desde la cámara por la mira para encontrar el punto apuntado y después rayo desde la boca del arma hasta ese punto. Si una pared tapa el arma, la mira se pone gris con una X ("bloqueado").
 - **Spread:** sube al moverte y al disparar seguido, y baja al apuntar o agacharte. La mira muestra el spread real.
+- **Postura con armas largas** (carabina, escopeta, rifle y subfusil): de perfil, con el hombro izquierdo hacia el objetivo. Al apuntar, el arma va al hombro y a la altura de la cara; al esprintar, cruzada y con el cuerpo de frente. Los enemigos usan la misma postura.
 - **Recarga perfecta:** durante la recarga aparece una barra con una ventana dorada. Si pulsas R dentro, recargas al instante y ganas un bonus de estilo. Si fallas, la recarga tarda +0,35 s.
 - **Takedown (F)** a ≤ 1,8 m mirando al enemigo: agarre → proyección → **doble tap automático** y kill garantizado. Tienes i-frames durante la animación. Funciona incluso contra blindados.
 - **Foco (Q):** se llena con estilo. Desde el 30 % activa cámara lenta (×0,35) mientras dura la barra. La mirada sigue a velocidad real, así que tienes más tiempo para apuntar.

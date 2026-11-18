@@ -32,7 +32,7 @@ export const hub: LevelData = {
     // Bajo las lámparas de araña y no pegadas al techo (a 7 m): un foco a 1 m del techo lo quemaba y el bloom lo convertía en halo.
     { pos: [0, 5.4, -6], color: 0xffd9a0, intensity: 52, distance: 22 },
     { pos: [0, 5.4, 4], color: 0xffd9a0, intensity: 52, distance: 22 },
-    { pos: [-2.5, 1.6, -11], color: 0x7dffb0, intensity: 10, distance: 5 },
+    { pos: [-2.5, 1.7, -11], color: 0x7dffb0, intensity: 10, distance: 5 },
     { pos: [-14, 4, -2], color: 0x19e3ff, intensity: 30, distance: 12 },
     { pos: [14, 4, -2], color: 0xffc47a, intensity: 35, distance: 12 },
     { pos: [0, 3, 15], color: 0xffe0b0, intensity: 25, distance: 10 },
@@ -72,8 +72,8 @@ export const hub: LevelData = {
     pillar(9, 4, 1.0, H, 'marbleDark'),
 
     // --- Recepción de Charon (norte) ---
-    block(0, -11, 8, 1.1, 1.4, 'woodDark', { cover: 'low', noWalk: true, tag: 'desk' }),
-    aabb(-4.1, 1.1, -11.75, 4.1, 1.18, -10.25, 'marbleDark', { collide: false }),
+    block(0, -11, 8, 1.2, 1.4, 'woodDark', { cover: 'low', noWalk: true, tag: 'desk' }),
+    aabb(-4.1, 1.2, -11.75, 4.1, 1.26, -10.25, 'marbleDark', { collide: false }),
     block(0, -12.6, 0.6, 1.8, 0.6, 'metal', { invisible: true, noWalk: true, tag: 'npc:charon' }),
     // Casillero de llaves tras el mostrador.
     aabb(-3, 1.4, -14, 3, 3.4, -13.6, 'woodDark', { collide: false }),
@@ -81,8 +81,8 @@ export const hub: LevelData = {
     aabb(5.2, 1.3, -13.98, 6.8, 2.7, -13.9, 'brass', { collide: false }),
 
     // --- Sommelier / Armería (oeste) ---
-    block(-13.6, -2, 1.2, 1.1, 8, 'woodDark', { cover: 'low', noWalk: true, tag: 'bar' }),
-    aabb(-14.3, 1.1, -6.1, -12.9, 1.18, 2.1, 'marbleDark', { collide: false }),
+    block(-13.6, -2, 1.2, 1.2, 8, 'woodDark', { cover: 'low', noWalk: true, tag: 'bar' }),
+    aabb(-14.3, 1.2, -6.1, -12.9, 1.26, 2.1, 'marbleDark', { collide: false }),
     block(-15, -2, 0.6, 1.8, 0.6, 'metal', { invisible: true, noWalk: true, tag: 'npc:sommelier' }),
     aabb(-16, 1.0, -6, -15.6, 3.4, 2, 'woodDark', { collide: false }),
     aabb(-15.6, 1.9, -5.2, -15.5, 2.0, -3.6, 'metalDark', { collide: false }),
@@ -90,15 +90,15 @@ export const hub: LevelData = {
     aabb(-15.6, 1.9, 0.2, -15.5, 2.0, 1.6, 'metalDark', { collide: false }),
 
     // --- Despacho de Winston (este) ---
-    block(13.6, -2, 1.6, 0.8, 2.6, 'woodDark', { cover: 'low', noWalk: true, tag: 'office' }),
+    block(13.6, -2, 1.6, 1.2, 2.6, 'woodDark', { cover: 'low', noWalk: true, tag: 'office' }),
     block(15, -2, 0.6, 1.8, 0.6, 'metal', { invisible: true, noWalk: true, tag: 'npc:winston' }),
     aabb(15.6, 0, -6, 16, 3.6, 2, 'woodDark', { tag: 'bookshelf' }),
-    block(13, 3, 2.2, 0.8, 1.0, 'leather', { cover: 'low', noWalk: true }),
-    block(13, -7, 2.2, 0.8, 1.0, 'leather', { cover: 'low', noWalk: true }),
+    block(13, 3, 2.2, 0.8, 1.0, 'leather', { noWalk: true }),
+    block(13, -7, 2.2, 0.8, 1.0, 'leather', { noWalk: true }),
 
     // --- Salón (sofás a los lados de la alfombra) ---
-    block(-6, 6, 2.4, 0.75, 1.0, 'leather', { cover: 'low', noWalk: true }),
-    block(6, 6, 2.4, 0.75, 1.0, 'leather', { cover: 'low', noWalk: true }),
+    block(-6, 6, 2.4, 0.75, 1.0, 'leather', { noWalk: true }),
+    block(6, 6, 2.4, 0.75, 1.0, 'leather', { noWalk: true }),
     block(-4, 6, 0.8, 0.5, 0.8, 'woodDark', { noWalk: true }),
     block(4, 6, 0.8, 0.5, 0.8, 'woodDark', { noWalk: true }),
 
@@ -128,8 +128,8 @@ export const hub: LevelData = {
     { kind: 'neon', c: [15.9, 6.7, -1], s: [0.06, 0.06, 25.8], color: GOLD, intensity: 1.3 },
     { kind: 'prop', prop: 'chandelier', c: [0, 6.0, -6] },
     { kind: 'prop', prop: 'chandelier', c: [0, 6.0, 4] },
-    { kind: 'prop', prop: 'lampDesk', c: [-2.5, 1.18, -11] },
-    { kind: 'prop', prop: 'lampDesk', c: [2.5, 1.18, -11] },
+    { kind: 'prop', prop: 'lampDesk', c: [-2.5, 1.26, -11] },
+    { kind: 'prop', prop: 'lampDesk', c: [2.5, 1.26, -11] },
     { kind: 'prop', prop: 'plant', c: [-14.5, 0, 10.5] },
     { kind: 'prop', prop: 'plant', c: [-14.5, 0, -12.5] },
     { kind: 'prop', prop: 'plant', c: [14.5, 0, -12.5] },

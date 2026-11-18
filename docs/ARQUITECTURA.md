@@ -161,7 +161,7 @@ Medidas con el controlador de personaje real:
 | Rampas | Hasta 45° se suben; por encima de 50° se resbala. No usar 46–50° |
 | Huecos | El jugador cabe por ≥ 0,7 m. Puertas ≥ 1,2 m (hay cámara y combate cerca). Pasillos ≥ 2,4 m |
 | Techos | ≥ 2,6 m. A 1,3 m o menos solo se pasa agachado (recurso intencional) |
-| Cobertura baja | ≥ 0,85 m de alto; por debajo no cuenta como cobertura |
+| Cobertura baja | Al menos 1,2 m (`COVER_LOW_MIN` en `levels/validate.ts`): tapa a un personaje agachado (1,14 m) y aún se salta con vault. El jugador solo se cubre tras lo que pasa de 0,85 m; un mueble más bajo, como un sofá, no lleva `cover`. Lo comprueban los tests de niveles (la arena de pruebas queda fuera) |
 | Vault | Obstáculos de 0,42 a 1,28 m de alto y hasta 1,6 m de fondo; si son más profundos, el personaje se sube encima |
 | Colliders | Toda caja con colisión debe estar en `boxes` o `ramps`; nada de colliders a mano |
 

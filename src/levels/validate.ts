@@ -9,6 +9,11 @@ import type { BoxDef, LevelData, Vec3 } from './types';
 export const LIGHT_FLOOR = { hemi: 0.6, ambient: 0.1, ibl: 0.15, exposure: 0.8 } as const;
 /** Máximo de point lights por nivel (R7: coste por fragmento en forward rendering). */
 export const MAX_POINT_LIGHTS = 10;
+/**
+ * Altura mínima de una cobertura baja: tapa a un personaje agachado (cápsula de 1,14 m) y sigue
+ * dentro del vault (hasta 1,28 m). `tests/unit/levels.test.ts` comprueba esa relación.
+ */
+export const COVER_LOW_MIN = 1.2;
 
 function finite(v: Vec3): boolean {
   return v.every((n) => Number.isFinite(n));
@@ -64,6 +69,13 @@ export function validateLevel(d: LevelData): string[] {
     errs.push(`[${d.id}] ${m}`);
   };
   if (!d.name) e('sin nombre');
+
+  // Coberturas bajas que de verdad tapan a alguien agachado. La arena de pruebas mide alturas de obstáculo a propósito.
+  if (d.id !== 'arena') {
+    for (const b of d.boxes) {
+      if (b.cover === 'low' && b.s[1] < COVER_LOW_MIN) e(`cobertura baja de ${b.s[1]} m (${b.tag ?? b.c.join(', ')}): mínimo ${COVER_LOW_MIN} m`);
+    }
+  }
 
   // R1: piso de luz ambiental.
   const a = d.ambient;

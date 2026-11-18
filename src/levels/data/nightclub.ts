@@ -60,14 +60,14 @@ export const nightclub: LevelData = {
     }),
     aabb(-6, 0, -2, 6, 0.03, 8, 'danceFloor', { collide: false, shadow: false }),
     // Barra (oeste, al sur de la rampa de servicio) con estantería.
-    block(-12.6, 8.5, 1.2, 1.1, 9, 'woodDark', { cover: 'low', noWalk: true, tag: 'bar' }),
+    block(-12.6, 8.5, 1.2, 1.2, 9, 'woodDark', { cover: 'low', noWalk: true, tag: 'bar' }),
     aabb(-13.3, 1.1, 3.9, -11.9, 1.18, 13.1, 'marbleDark', { collide: false }),
     aabb(-14, 1.0, 3.5, -13.6, 3.2, 13.5, 'woodDark', { collide: false }),
     // Cabina del DJ (bajo el VIP).
-    block(0, -7, 4, 1.0, 1.5, 'metalDark', { cover: 'low', noWalk: true, tag: 'dj' }),
+    block(0, -7, 4, 1.2, 1.5, 'metalDark', { cover: 'low', noWalk: true, tag: 'dj' }),
     // Reservados (este).
-    block(12.5, 4, 1.0, 0.75, 2.2, 'leather', { cover: 'low', noWalk: true }),
-    block(12.5, 9, 1.0, 0.75, 2.2, 'leather', { cover: 'low', noWalk: true }),
+    block(12.5, 4, 1.0, 0.75, 2.2, 'leather', { noWalk: true }),
+    block(12.5, 9, 1.0, 0.75, 2.2, 'leather', { noWalk: true }),
     block(11.2, 4, 0.7, 0.5, 0.7, 'woodDark', { noWalk: true }),
     block(11.2, 9, 0.7, 0.5, 0.7, 'woodDark', { noWalk: true }),
     // Columnas.
@@ -80,20 +80,20 @@ export const nightclub: LevelData = {
     railing(-12, -4.1, 12, -3.9, MEZ, 'metalDark'),
     ...stairs({ start: [13, 0, -0.5], dir: 'z-', steps: 10, rise: 0.32, run: 0.35, width: 2, mat: 'metal' }),
     railing(11.9, -4, 12.1, -0.5, 0, 'metalDark', MEZ + 1.0),
-    block(-8, -8, 2.4, 0.75, 1.0, 'leather', { y0: MEZ, cover: 'low', noWalk: true }),
-    block(8, -8, 2.4, 0.75, 1.0, 'leather', { y0: MEZ, cover: 'low', noWalk: true }),
+    block(-8, -8, 2.4, 0.75, 1.0, 'leather', { y0: MEZ, noWalk: true }),
+    block(8, -8, 2.4, 0.75, 1.0, 'leather', { y0: MEZ, noWalk: true }),
     block(0, -6, 1.6, 0.5, 0.8, 'woodDark', { y0: MEZ, noWalk: true }),
     // --- Vestíbulo de entrada ---
     ...roomShell({ minX: -5, minZ: 14.5, maxX: 5, maxZ: 20, height: 4, thickness: 0.5, wallMat: 'plasterDark', floorMat: 'tilesBlack', ceilingMat: 'plasterDark', doors: [{ side: 'south', at: 0, width: 2, height: 2.8 }], open: ['north'] }),
-    block(-3.6, 17.5, 1.4, 1.1, 2.4, 'woodDark', { cover: 'low', noWalk: true, tag: 'coatCheck' }),
+    block(-3.6, 17.5, 1.4, 1.2, 2.4, 'woodDark', { cover: 'low', noWalk: true, tag: 'coatCheck' }),
     aabb(4.9, 1.1, 15.6, 4.98, 1.7, 16.4, 'metalDark', { collide: false, tag: 'alarmBox' }),
     // --- Callejón trasero (inicio) ---
     ...roomShell({ minX: -5, minZ: 20.5, maxX: 5, maxZ: 28, height: 4.5, thickness: 0.5, wallMat: 'brick', floorMat: 'asphalt', open: ['north'] }),
     block(-3.5, 24, 1.4, 1.2, 1.4, 'crate', { cover: 'low' }),
-    block(3.6, 26, 1.0, 1.0, 1.0, 'metalDark', { cover: 'low' }),
+    block(3.6, 26, 1.0, 1.2, 1.0, 'metalDark', { cover: 'low' }),
     // --- Pasillo de servicio y salida trasera ---
     ...roomShell({ minX: 8, minZ: -18, maxX: 12, maxZ: -10.5, height: 3.2, thickness: 0.5, wallMat: 'plasterDark', floorMat: 'concrete', ceilingMat: 'plasterDark', open: ['south'] }),
-    block(8.6, -13, 0.9, 1.0, 0.9, 'crate', { cover: 'low' }),
+    block(8.6, -13, 0.9, 1.2, 0.9, 'crate', { cover: 'low' }),
   ],
   ramps: [ramp([-13, 0, 2], [-13, MEZ, -4], 2, 'metal')],
   decor: [

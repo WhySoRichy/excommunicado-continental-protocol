@@ -48,10 +48,10 @@ export const rooftop: LevelData = {
     block(-8, 10, 2, 1.2, 2, 'metalDark', { cover: 'low', noWalk: true, tag: 'ac-1' }),
     block(6, 4, 2, 1.2, 2, 'metalDark', { cover: 'low', noWalk: true, tag: 'ac-2' }),
     block(14, 12, 2, 1.2, 2, 'metalDark', { cover: 'low', noWalk: true, tag: 'ac-3' }),
-    block(-2, -2, 3, 1.0, 1, 'concrete', { cover: 'low' }),
+    block(-2, -2, 3, 1.2, 1, 'concrete', { cover: 'low' }),
     block(20, 2, 1, 2.2, 3, 'brick', { cover: 'high', tag: 'chimney' }),
     block(-16, 6, 1.2, 1.2, 1.2, 'crate', { cover: 'low' }),
-    block(24, 14, 1.8, 1.0, 1.2, 'metal', { cover: 'low', noWalk: true, tag: 'zipline' }),
+    block(24, 14, 1.8, 1.2, 1.2, 'metal', { cover: 'low', noWalk: true, tag: 'zipline' }),
     // --- Bloque B (3,84 m) con escalera desde A ---
     aabb(-28, 0, -22, -4, B, -4, 'concreteDark', { tag: 'roofB' }),
     ...stairs({ start: [-20, 0, 0.2], dir: 'z-', steps: 12, rise: 0.32, run: 0.35, width: 2.4, mat: 'metal' }),
@@ -61,7 +61,7 @@ export const rooftop: LevelData = {
     railing(-28.3, -22.3, -4, -22, B, 'concreteDark'),
     block(-22, -16, 2, 1.2, 2, 'metalDark', { y0: B, cover: 'low', noWalk: true }),
     block(-12, -8, 1.2, 1.2, 1.2, 'crate', { y0: B, cover: 'low' }),
-    block(-8, -18, 2.4, 1.0, 1.0, 'concrete', { y0: B, cover: 'low' }),
+    block(-8, -18, 2.4, 1.2, 1.0, 'concrete', { y0: B, cover: 'low' }),
     // --- Bloque C (7,68 m) con rampa desde B ---
     aabb(-4, 0, -40, 28, C, -6, 'concreteDark', { tag: 'roofC' }),
     railing(-4, -40.3, 28.3, -40, C, 'concreteDark'),
@@ -72,8 +72,8 @@ export const rooftop: LevelData = {
     aabb(4, C, -30, 20, C + 0.03, -22, 'hazard', { collide: false, shadow: false, tag: 'helipad' }),
     block(0, -12, 2, 1.2, 2, 'metalDark', { y0: C, cover: 'low', noWalk: true }),
     block(22, -14, 2, 1.2, 2, 'metalDark', { y0: C, cover: 'low', noWalk: true }),
-    block(2, -32, 2.4, 1.0, 1.0, 'concrete', { y0: C, cover: 'low' }),
-    block(22, -34, 2.4, 1.0, 1.0, 'concrete', { y0: C, cover: 'low' }),
+    block(2, -32, 2.4, 1.2, 1.0, 'concrete', { y0: C, cover: 'low' }),
+    block(22, -34, 2.4, 1.2, 1.0, 'concrete', { y0: C, cover: 'low' }),
     block(12, -36, 1.2, 1.2, 1.2, 'crate', { y0: C, cover: 'low' }),
     block(8, -14, 1.2, 1.2, 1.2, 'crate', { y0: C, cover: 'low' }),
     // Edificios lejanos (decorado sin collider).

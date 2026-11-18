@@ -348,4 +348,32 @@ test.describe('Fase 1 · movimiento', () => {
     await frames(page, 0.3);
     await page.screenshot({ path: shotPath('fase1-personaje-escaleras') });
   });
+
+  test('la silueta cabe en la cápsula que recibe los disparos, de pie y agachado', async ({ page }) => {
+    await enterArena(page);
+    for (const weapon of ['weapon2', 'weapon1'] as const) {
+      for (const crouch of [false, true]) {
+        const m = await page.evaluate(
+          ({ weapon, crouch }) => {
+            const q = window.__EXCOM__!;
+            q.setManual(true);
+            q.releaseAll();
+            q.teleport(0, 0, 8, 0);
+            q.press(weapon);
+            q.step(40, {});
+            if (crouch) q.step(1, { crouch: true });
+            q.step(60, {});
+            const p = q.player()!;
+            return { posture: p.posture, capsule: p.height, silhouette: q.rigHeight() };
+          },
+          { weapon, crouch },
+        );
+        expect(m.posture).toBe(crouch ? 'crouch' : 'stand');
+        // Solo el pelo puede sobresalir: lo que se ve del cuerpo es lo que puede recibir un disparo.
+        expect(m.silhouette, `${weapon}, ${m.posture}: silueta ${m.silhouette.toFixed(2)} m, cápsula ${m.capsule.toFixed(2)} m`).toBeLessThanOrEqual(
+          m.capsule + 0.12,
+        );
+      }
+    }
+  });
 });

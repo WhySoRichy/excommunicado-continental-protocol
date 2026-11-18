@@ -38,16 +38,16 @@ export const practice: LevelData = {
     ...roomShell({ minX: -18, minZ: -36, maxX: 18, maxZ: 14, height: H, thickness: 0.5, wallMat: 'plaster', floorMat: 'concrete', ceilingMat: 'concreteDark' }),
 
     // --- Recibidor ---
-    block(5.5, 10, 3, 1.0, 1.2, 'woodDark', { cover: 'low', tag: 'weaponTable' }),
+    block(5.5, 10, 3, 1.2, 1.2, 'woodDark', { cover: 'low', tag: 'weaponTable' }),
     block(-6, 12.6, 4, 2.4, 1.4, 'brick', { tag: 'lockers' }),
 
     // --- Circuito del tutorial ---
-    block(0, -1, 1.6, 0.9, 0.8, 'crate', { cover: 'low', tag: 'vaultBox' }),
-    block(-4, -5, 3, 1.1, 0.5, 'concrete', { cover: 'low', tag: 'barricade' }),
+    block(0, -1, 1.6, 0.9, 0.8, 'crate', { tag: 'vaultBox' }),
+    block(-4, -5, 3, 1.2, 0.5, 'concrete', { cover: 'low', tag: 'barricade' }),
     block(4, -5, 3, 2.2, 0.5, 'plaster', { cover: 'high', tag: 'tallWall' }),
 
     // --- Carriles de tiro (oeste) ---
-    aabb(-18, 0, -8.3, -10, 1.0, -7.7, 'woodDark', { cover: 'low', tag: 'shootingBench' }),
+    aabb(-18, 0, -8.3, -10, 1.2, -7.7, 'woodDark', { cover: 'low', tag: 'shootingBench' }),
     aabb(-15.45, 0, -36, -15.15, 1.0, -8.3, 'concreteDark', { noWalk: true }),
     aabb(-12.75, 0, -36, -12.45, 1.0, -8.3, 'concreteDark', { noWalk: true }),
     aabb(-10.15, 0, -36, -9.85, 1.4, -8.3, 'concreteDark', { noWalk: true }),
@@ -61,8 +61,8 @@ export const practice: LevelData = {
     block(-2, -14, 1.4, 1.2, 1.4, 'crate', { cover: 'low' }),
     block(6, -15, 1.4, 1.2, 1.4, 'crate', { cover: 'low' }),
     block(12, -13, 1.4, 1.2, 1.4, 'crate', { cover: 'low' }),
-    block(2, -21, 2.4, 1.1, 0.6, 'concrete', { cover: 'low' }),
-    block(10, -22, 0.6, 1.1, 2.4, 'concrete', { cover: 'low' }),
+    block(2, -21, 2.4, 1.2, 0.6, 'concrete', { cover: 'low' }),
+    block(10, -22, 0.6, 1.2, 2.4, 'concrete', { cover: 'low' }),
     block(-4, -24, 1.4, 1.2, 1.4, 'crate', { cover: 'low' }),
     block(15, -26, 1.4, 1.2, 1.4, 'crate', { cover: 'low' }),
     pillar(4, -18, 1, H, 'concreteDark'),
@@ -103,7 +103,7 @@ export const practice: LevelData = {
   ],
   civilians: [],
   pickups: [
-    { id: 'p-ammo-1', kind: 'ammo', pos: [5.5, 1.0, 10] },
+    { id: 'p-ammo-1', kind: 'ammo', pos: [5.5, 1.2, 10] },
     { id: 'p-med-1', kind: 'medkit', pos: [-8, 0, -12] },
     { id: 'p-arm-1', kind: 'armor', pos: [16, 0, -12] },
   ],

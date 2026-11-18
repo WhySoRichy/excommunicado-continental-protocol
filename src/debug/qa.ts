@@ -35,6 +35,8 @@ export interface PlayerSnapshot {
   yaw: number;
   invulnerable: boolean;
   aiming: boolean;
+  /** Altura de la cápsula de colisión (cambia al agacharse). */
+  height: number;
   cover: string | null;
   edge: number;
   stats: Record<string, number>;
@@ -117,6 +119,8 @@ export interface QaApi {
   setManual(on: boolean): void;
   step(n: number, intent?: Partial<QaStepIntent>): void;
   player(): PlayerSnapshot | null;
+  /** Altura real de la silueta del jugador con su pose actual (lenta: recorre la malla). */
+  rigHeight(): number;
   teleport(x: number, y: number, z: number, yaw: number): void;
   checkpoint(id: string): boolean;
   /** Ids de los checkpoints del nivel cargado. */
@@ -302,6 +306,7 @@ export function installQa(game: Game): void {
       if (intent.dodge) inp.virtualPress('dodge');
       game.stepManual(Math.max(0, Math.floor(n)));
     },
+    rigHeight: () => game.session?.playerRig.silhouetteHeight() ?? 0,
     player: () => {
       const p = game.session?.player;
       if (!p) return null;
@@ -316,6 +321,7 @@ export function installQa(game: Game): void {
         yaw: p.yaw,
         invulnerable: p.invulnerable,
         aiming: p.aiming,
+        height: p.height,
         cover: p.cover?.height ?? null,
         edge: p.cover?.edge ?? 0,
         stats: { ...p.stats },

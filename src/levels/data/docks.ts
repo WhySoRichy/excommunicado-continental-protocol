@@ -75,8 +75,8 @@ export const docks: LevelData = {
     block(0, -5, 1.2, 1.2, 1.2, 'crate', { cover: 'low' }),
     block(-24, 24, 1.2, 1.2, 1.2, 'crate', { cover: 'low' }),
     // Cargamentos del patio (palés con franja de peligro).
-    block(-22, 20, 1.6, 1.0, 1.6, 'hazard', { cover: 'low', noWalk: true, tag: 'cargo-1' }),
-    block(14, -4, 1.6, 1.0, 1.6, 'hazard', { cover: 'low', noWalk: true, tag: 'cargo-2' }),
+    block(-22, 20, 1.6, 1.2, 1.6, 'hazard', { cover: 'low', noWalk: true, tag: 'cargo-1' }),
+    block(14, -4, 1.6, 1.2, 1.6, 'hazard', { cover: 'low', noWalk: true, tag: 'cargo-2' }),
 
     // --- Bodega ---
     ...roomShell({
@@ -98,7 +98,7 @@ export const docks: LevelData = {
     block(-8, -18, 1.2, 1.2, 1.2, 'crate', { cover: 'low' }),
     block(-8, -26, 1.2, 1.2, 1.2, 'crate', { cover: 'low' }),
     block(4, -22, 1.2, 1.2, 1.2, 'crate', { cover: 'low' }),
-    block(-20, -24, 1.6, 1.0, 1.6, 'hazard', { cover: 'low', noWalk: true, tag: 'cargo-3' }),
+    block(-20, -24, 1.6, 1.2, 1.6, 'hazard', { cover: 'low', noWalk: true, tag: 'cargo-3' }),
     // Pasarela norte con escalera al este.
     aabb(-28, CATWALK - 0.2, -38, 10, CATWALK, -34, 'metal', { tag: 'catwalk' }),
     aabb(-28, CATWALK, -34.1, 6.2, CATWALK + 1.05, -33.9, 'metalDark', { noWalk: true }),
@@ -109,7 +109,7 @@ export const docks: LevelData = {
     aabb(10.5, 0, -38.5, 28, 1.05, -38, 'metalDark', { noWalk: true, tag: 'pierRail' }),
     block(14, -16, 1.2, 1.2, 1.2, 'crate', { cover: 'low' }),
     block(24, -24, 1.2, 1.2, 1.2, 'crate', { cover: 'low' }),
-    block(18, -30, 2.4, 1.0, 1.2, 'crate', { cover: 'low' }),
+    block(18, -30, 2.4, 1.2, 1.2, 'crate', { cover: 'low' }),
     // Agua y bote (decorativos, sin collider).
     aabb(10.5, -0.6, -60, 28, -0.1, -38.5, 'water', { collide: false, shadow: false }),
     aabb(17, -0.2, -42.5, 23, 1.0, -39.5, 'metalDark', { collide: false, tag: 'boat' }),

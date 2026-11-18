@@ -1,5 +1,6 @@
 import {
   Bone,
+  Box3,
   BoxGeometry,
   type BufferGeometry,
   Color,
@@ -142,6 +143,7 @@ const _local = new Matrix4();
 const _grip = new Vector3();
 const _hand = new Vector3();
 const _ikQ = new Quaternion();
+const _bounds = new Box3();
 /** Dónde agarra la mano izquierda cada arma, en el espacio del arma (cañón a −Z, arriba +Y). */
 const GRIP: Record<WeaponModel, readonly [number, number, number] | null> = {
   pistol: [-0.045, -0.035, -0.005],
@@ -163,9 +165,15 @@ const CULL_RADIUS = 1.6;
 const SPIN_Y = 0.9;
 /** Altura de la articulación de la cadera de pie (piernas casi estiradas). */
 const HIP_STAND = 0.935;
-const HIP_CROUCH = 0.58;
+const HIP_CROUCH = 0.44;
 const HIP_SLIDE = 0.3;
 const HIP_KNEEL = 0.5;
+/**
+ * Postura de perfil con armas largas (rad): el torso gira a la derecha para llevar el hombro izquierdo
+ * hacia el objetivo y la culata al hombro derecho. La cadera gira algo más, pero solo en parado.
+ */
+const BLADE_TORSO = 0.45;
+const BLADE_HIPS = 0.6;
 const SHOULDER_Y = 0.56;
 const NECK_Y = 0.7;
 const ELBOW_Y = -0.32;
@@ -575,6 +583,7 @@ export class CharacterRig {
   private phase = 0;
   private time = 0;
   private crouchK = 0;
+  private bladeK = 0;
   private aimK = 0;
   private sprintK = 0;
   private kneelK = 0;
@@ -835,6 +844,8 @@ export class CharacterRig {
       return merge(headParts);
     });
     this.head.position.set(0, NECK_Y, 0);
+    // Primero gira sobre la columna (compensa el giro del torso) y después cabecea.
+    this.head.rotation.order = 'YXZ';
     this.torso.add(this.head);
 
     // --- Brazos: hombrera, brazo y antebrazo que se afinan, puño de camisa y mano con pulgar ---
@@ -852,6 +863,8 @@ export class CharacterRig {
       ]);
     this.armL.position.set(-0.285 * b, SHOULDER_Y, 0);
     this.armR.position.set(0.285 * b, SHOULDER_Y, 0);
+    // El giro vertical del hombro (perfil con arma larga) va antes que la elevación y la apertura.
+    this.armR.rotation.order = 'YXZ';
     this.foreL.position.set(0, ELBOW_Y, 0);
     this.foreR.position.set(0, ELBOW_Y, 0);
     this.addMesh(this.armL, upperGeo);
@@ -1010,10 +1023,13 @@ export class CharacterRig {
     this.aimK = damp(this.aimK, knife ? 0 : p.aim, 18, dt);
     this.sprintK = damp(this.sprintK, onFeet && p.grounded && p.speed > SPRINT_SPEED ? 1 : 0, 9, dt);
     this.kneelK = damp(this.kneelK, p.kneel, 9, dt);
+    this.bladeK = damp(this.bladeK, long && onFeet ? 1 : 0, 8, dt);
     const ck = this.crouchK;
     const ak = this.aimK;
     const sk = this.sprintK;
     const kk = this.kneelK;
+    // Al esprintar el arma larga va cruzada y el cuerpo de frente.
+    const bk = this.bladeK * (1 - sk);
     // Giro en el sitio: se mide cuánto rota la raíz por segundo.
     let dYaw = this.root.rotation.y - this.lastYaw;
     this.lastYaw = this.root.rotation.y;
@@ -1049,10 +1065,13 @@ export class CharacterRig {
     let rDown = hipY - sR.lift;
     let hipLocal = hipY - SPIN_Y;
 
-    let torsoX = lerp(-0.04 - 0.08 * speedN - 0.24 * sk, -0.42, ck);
+    let torsoX = lerp(-0.04 - 0.08 * speedN - 0.24 * sk, -0.7, ck);
     let torsoZ = -cr * 0.07 * amp;
     let torsoY = lead * cf * 0.16 * (armed ? 0.35 + 0.65 * sk : 1);
     let hipsYaw = -lead * cf * 0.12;
+    // Arma larga: de perfil. En marcha la cadera sigue el paso y solo gira el torso.
+    torsoY -= BLADE_TORSO * bk;
+    hipsYaw -= BLADE_HIPS * bk * (1 - amp);
     let headX = p.aimPitch * 0.55;
     let headLevel = 0.85;
     let spinX = 0;
@@ -1219,6 +1238,7 @@ export class CharacterRig {
     let lsz = -0.07;
     let rsz = 0.07;
     let wrist = 0;
+    let rsy = 0;
 
     if (armed && armsFree < 1) {
       // Guardia (ángulos de mundo; se resta la inclinación del torso).
@@ -1228,13 +1248,15 @@ export class CharacterRig {
       if (long) {
         gRsx = 0.3;
         gRel = 0.9;
-        gRsz = -0.2;
+        gRsz = -0.32;
         gLsx = 0.78;
         gLel = 0.42;
         gLsz = 0.52;
-        aRsx = 0.95 + 0.5 * p.aimPitch;
-        aRel = 0.62 + 0.5 * p.aimPitch;
-        aRsz = -0.2;
+        // Al hombro: codo abajo y abierto, el antebrazo sube hacia la empuñadura (la muñeca nivela el arma).
+        aRsx = 0.45 + 0.4 * p.aimPitch;
+        aRel = 2.15 + 0.6 * p.aimPitch;
+        // Apuntando, el codo derecho se abre: la culata queda en el hueco del hombro.
+        aRsz = -0.5;
         aLsx = 1.3 + 0.95 * p.aimPitch;
         aLel = 0.24;
         aLsz = 0.5;
@@ -1276,6 +1298,12 @@ export class CharacterRig {
       lel = lerp(lel, lerp(gLel, aLel, ak), hold);
       lsz = lerp(lsz, lerp(gLsz, aLsz, ak), hold);
       grip = hold;
+      // Con el torso de perfil, el brazo derecho gira de vuelta para que el cañón siga la línea de mira.
+      if (long) {
+        rsy = BLADE_TORSO * bk * hold;
+        // La muñeca compensa lo que el antebrazo sube: el arma queda en la línea de mira.
+        wrist -= ak * hold * (aRsx + aRel - aimW);
+      }
 
       // Retroceso: el arma salta y vuelve.
       rel += p.recoil * (long ? 0.1 : 0.26);
@@ -1289,7 +1317,7 @@ export class CharacterRig {
         rsx = lerp(rsx, 0.5 - torsoX, up * 0.85);
         rel = lerp(rel, 1.5, up * 0.85);
         rsz = lerp(rsz, -0.25, up);
-        wrist = -0.35 * up;
+        wrist = lerp(wrist, -0.35, up);
         lsx = lerp(lerp(lsx, 0.62 - torsoX, up), 0.05 - torsoX, belt);
         lel = lerp(lerp(lel, 1.25, up), 1.05, belt);
         lsz = lerp(lerp(lsz, 0.5, up), 0.08, belt);
@@ -1390,6 +1418,8 @@ export class CharacterRig {
     this.torso.rotation.y = s(this.torso.rotation.y, torsoY - hipsYaw);
     this.torso.rotation.z = s(this.torso.rotation.z, torsoZ);
     this.head.rotation.x = s(this.head.rotation.x, clamp(headX - torsoX * headLevel, -0.9, 0.9));
+    // La cabeza compensa el giro del torso y sigue mirando al frente.
+    this.head.rotation.y = s(this.head.rotation.y, clamp(-torsoY * headLevel, -0.8, 0.8));
     this.lsxS = s(this.lsxS, lsx);
     this.lszS = s(this.lszS, lsz);
     this.lelS = s(this.lelS, lel);
@@ -1402,6 +1432,7 @@ export class CharacterRig {
     // Mano de apoyo: con el brazo derecho ya colocado, la izquierda va por IK al arma.
     const gripAt = GRIP[model];
     const free = st === 'roll' || st === 'dead' || p.takedown >= 0 ? 0 : (1 - p.swap) * (1 - p.melee) * (1 - plantL) * (1 - kk);
+    this.armR.rotation.y = s(this.armR.rotation.y, rsy * free);
     this.gripK = damp(this.gripK, gripAt ? grip * free : 0, 14, dt);
     if (gripAt && this.gripK > 0.01) {
       this.torso.updateWorldMatrix(true, true);
@@ -1425,6 +1456,21 @@ export class CharacterRig {
       this.spin.rotation.x = s(this.spin.rotation.x, 0);
       this.spin.position.y = s(this.spin.position.y, spinY);
     }
+  }
+
+  /**
+   * Altura de la silueta sobre los pies con la pose actual: la malla deformada por el esqueleto.
+   * Es cara (recorre todos los vértices); la usan las pruebas para comprobar que el cuerpo cabe en su cápsula.
+   */
+  silhouetteHeight(): number {
+    const body = this.meshes.find((m): m is SkinnedMesh => m instanceof SkinnedMesh);
+    if (!body) return 0;
+    this.root.updateWorldMatrix(true, true);
+    body.skeleton.update();
+    body.computeBoundingBox();
+    if (!body.boundingBox) return 0;
+    _bounds.copy(body.boundingBox).applyMatrix4(body.matrixWorld);
+    return _bounds.max.y - this.root.getWorldPosition(_grip).y;
   }
 
   dispose(): void {
