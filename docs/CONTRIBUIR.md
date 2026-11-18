@@ -71,6 +71,7 @@ La primera vez que se ejecuten las e2e: `npx playwright install chromium firefox
 - **Estado de misión que no acompaña a la reaparición.** Al reaparecer, los enemigos vivos recuperan la salud; lo que dependa de esa salud (las fases del jefe) debe reiniciarse a la vez (`MissionDirector.onPlayerRespawned`).
 - **Efectos que no terminan.** La cola de la trazadora se calculaba desde la cabeza ya detenida en el impacto y nunca llegaba al final: los destellos se quedaban flotando hasta reciclarse. El tramo se calcula en `render/tracerPath.ts` (lógica pura con test) y la e2e del arsenal comprueba con `vfx()` que no queda ningún efecto vivo.
 - **Un `await` sin camino de error.** Una carga que fallaba dejaba el juego en `loading` para siempre. Todo flujo asíncrono que cambie de estado necesita su salida (`Game.tryLoadSession`).
+- **Empujar al personaje contra el suelo.** En el suelo se le daba una velocidad vertical de −1 m/s "para que no flotara". Con los pies dentro del margen de separación de la KCC, Rapier daba por bloqueados pasos sueltos en llano y al correr se perdía uno de cada 20 o 30: tirones del cuerpo y de la cámara que no se veían en ninguna captura. Lo pega `snapToGround`; las pruebas "sin tirones en llano" de `playerMovement.test.ts` lo vigilan.
 - **Niveles:** escalones de más de 0,32 m o muebles sin `noWalk` rompen la navegación de los enemigos. Los tests de navegación lo detectan.
 
 ## Despliegue

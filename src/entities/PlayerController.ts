@@ -423,7 +423,10 @@ export class PlayerController {
 
     const maxSpeed = this.posture === 'crouch' ? MOVE.crouch : this.aiming ? MOVE.aimWalk : this.sprinting ? MOVE.sprint : MOVE.run;
     this.accelerate(dt, maxSpeed * wishLen * this.speedMultiplier, MOVE.accelGround, MOVE.decelGround);
-    this.velocity.y = -1;
+    // En el suelo no se empuja hacia abajo: lo mantiene pegado `snapToGround`. Con un empuje de −1 m/s, Rapier daba
+    // por bloqueados pasos sueltos en llano (los pies quedaban dentro de su margen de separación) y el personaje
+    // perdía uno de cada 20 o 30 pasos al correr: un tirón del cuerpo y de la cámara. Igual al rodar, deslizarse y en cobertura.
+    this.velocity.y = 0;
     this.move(dt, true);
     if (this.sprinting) this.stats.sprintTime += dt;
     if (!this.grounded) {
@@ -516,7 +519,7 @@ export class PlayerController {
         : lerp(MOVE.rollSpeed, MOVE.rollEndSpeed, clamp((t - MOVE.rollFastPhase) / (MOVE.rollTime - MOVE.rollFastPhase), 0, 1));
     this.velocity.x = this.rollDir.x * speed * this.speedMultiplier;
     this.velocity.z = this.rollDir.z * speed * this.speedMultiplier;
-    if (this.grounded && this.velocity.y <= 0) this.velocity.y = -1;
+    if (this.grounded && this.velocity.y <= 0) this.velocity.y = 0;
     else this.applyGravity(dt);
     this.move(dt, this.grounded && this.velocity.y <= 0);
     if (t >= MOVE.rollTime) {
@@ -562,7 +565,7 @@ export class PlayerController {
     }
     this.velocity.x = this.slideDir.x * speed * this.speedMultiplier;
     this.velocity.z = this.slideDir.z * speed * this.speedMultiplier;
-    this.velocity.y = -1;
+    this.velocity.y = 0;
     this.move(dt, true);
     // Bloqueado = el desplazamiento REAL de este paso es pequeño (la velocidad no se recorta contra paredes).
     const blocked = this.stateTime > 0.12 && this.stepSpeed(dt) < 1.5;
@@ -850,7 +853,7 @@ export class PlayerController {
     const vn = clamp(gap * 12, -2, 3);
     this.velocity.x = tx * vt - n.x * vn;
     this.velocity.z = tz * vt - n.z * vn;
-    this.velocity.y = -1;
+    this.velocity.y = 0;
 
     // Postura: cobertura baja = agachado, salvo al apuntar (asoma por encima).
     if (c.height === 'low') this.setPosture(this.aiming ? 'stand' : 'crouch');

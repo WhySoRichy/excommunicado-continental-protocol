@@ -287,6 +287,35 @@ describe('Movimiento · vault, mantle y cobertura', () => {
   });
 });
 
+describe('Movimiento · sin tirones en llano', () => {
+  // Con un empuje hacia el suelo de −1 m/s, Rapier daba por bloqueados pasos sueltos en llano: al correr se perdía
+  // uno de cada 20 o 30 y el personaje (y la cámara, que lo sigue) daban un tirón.
+  const cases: Array<[string, (i: number) => Partial<PlayerIntent>]> = [
+    ['recién teletransportado', () => ({})],
+    ['tras saltar', (i) => ({ jumpPressed: i === 20 })],
+    ['tras una voltereta', (i) => ({ dodgePressed: i === 20 })],
+    ['tras agacharse y levantarse', (i) => ({ crouchPressed: i === 20 || i === 50 })],
+    ['tras deslizarse', (i) => ({ sprint: i < 40, crouchPressed: i === 30 })],
+  ];
+  it.each(cases)('corriendo %s no se pierde ningún paso', (_n, script) => {
+    const ctx = setup(0, 0, 12, NORTH);
+    // Como al aparecer o teletransportarse en el juego: los pies justo a la altura del suelo.
+    ctx.p.teleport(new Vector3(0, 0, 12), NORTH);
+    const lost: string[] = [];
+    let wasGround = false;
+    for (let i = 0; i < 150; i++) {
+      ctx.p.fixedUpdate(FIXED_DT, { ...emptyIntent(), moveY: 1, camYaw: NORTH, ...script(i) });
+      ctx.physics.step();
+      const p = ctx.p;
+      const onGround = p.state === 'ground' && p.grounded;
+      // Hasta z = 1,5: más allá hay un obstáculo de verdad.
+      if (onGround && wasGround && p.feet.z > 1.5 && p.horizontalSpeed > 2 && p.stepSpeed(FIXED_DT) < 0.5) lost.push(`paso ${i} en z=${p.feet.z.toFixed(2)}`);
+      wasGround = onGround;
+    }
+    expect(lost).toEqual([]);
+  });
+});
+
 describe('Movimiento · acciones encadenadas (fuzz)', () => {
   it('60 s de sprint/slide/roll/salto/doble salto/vault/cobertura aleatorios: física intacta', () => {
     const rng = new Rng(4242);
