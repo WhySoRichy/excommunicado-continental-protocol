@@ -69,6 +69,7 @@ La lógica que no necesita three.js ni el DOM vive en archivos propios y tiene t
 | `levels/nav/*` | Rejilla navegable y A* |
 | `core/Save.ts`, `core/Settings.ts` | Partida y ajustes versionados y validados; reasignación de teclas |
 | `missions/tutorial.ts`, `missions/gauntlet.ts` | Pasos del tutorial y composición de oleadas |
+| `missions/objectives.ts` | Cuándo se completa o falla cada objetivo (alcanzar, escapar, eliminar, interactuar, sobrevivir, jefe) y su contador en el HUD |
 | `audio/music.ts` | Patrones musicales por ambiente e intensidad |
 | `render/dynamicResolution.ts` | Cuándo bajar o subir la resolución |
 

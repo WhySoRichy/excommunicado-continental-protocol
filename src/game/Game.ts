@@ -9,7 +9,6 @@ import type { Action } from '../core/actions';
 import { GameStateMachine, type GameStateId } from '../core/GameStateMachine';
 import { Input, type InputEvent, type Vec2 } from '../core/Input';
 import { AnimationLoop, FIXED_DT, FixedStepAccumulator } from '../core/Loop';
-import { wrapAngle } from '../core/math';
 import { Rng } from '../core/rng';
 import {
   addPlaytime,
@@ -33,7 +32,7 @@ import { DIALOGUE, HUB_TEXT, rulesPlaque } from '../hub/dialogue';
 import { buy } from '../hub/economy';
 import { HubDirector } from '../hub/HubDirector';
 import { loadLevelData } from '../levels/registry';
-import type { EnemyType, InteractableDef, LevelId, MusicMood } from '../levels/types';
+import type { InteractableDef, LevelId, MusicMood } from '../levels/types';
 import { GAUNTLET_BLOCK } from '../missions/gauntlet';
 import { formatObjective } from '../missions/tutorial';
 import { MissionDirector, type MissionOutcome } from '../missions/MissionDirector';
@@ -42,10 +41,10 @@ import { loadRapier, type Rapier } from '../physics/Physics';
 import { GameRenderer, type QualityPreset } from '../render/Renderer';
 import { type FatalText, hideBoot, setBootProgress, showFatal } from '../ui/boot';
 import { button, h } from '../ui/dom';
-import { Hud, type HudData, type PromptSpec } from '../ui/Hud';
-import type { IntelView } from '../ui/Intel';
+import { Hud, type HudData } from '../ui/Hud';
 import { type ResultsView, Screens } from '../ui/Screens';
 import { CameraRig, DEFAULT_CAMERA } from './CameraRig';
+import { buildIntelView, contextPrompt, fillHudData, type HudView, type PromptInput } from './hudModel';
 import { checkCameraInvariants, checkCombatInvariants, checkPlayerInvariants, type QaInvariants } from './invariants';
 import { LevelSession } from './LevelSession';
 
@@ -75,23 +74,6 @@ const MISSION_LEVEL: Record<MissionId, LevelId> = { practice: 'practice', nightc
 const SUB_LABELS = { time: 'Tiempo', accuracy: 'Precisión', damage: 'Daño recibido', variety: 'Variedad', civilians: 'Civiles ilesos' } as const;
 /** Margen (fracción de media pantalla) donde se pega la flecha de la baliza fuera de pantalla. */
 const BEACON_EDGE = 0.88;
-const SLOT_ACTIONS: Record<WeaponId, Action> = {
-  carbine: 'weapon1',
-  shotgun: 'weapon1',
-  dmr: 'weapon1',
-  pistol: 'weapon2',
-  revolver: 'weapon2',
-  knife: 'weapon3',
-};
-/** Nombre corto de cada arma en el HUD. */
-const SLOT_NAMES: Record<WeaponId, string> = {
-  carbine: 'Carabina',
-  shotgun: 'Escopeta',
-  dmr: 'Rifle',
-  pistol: 'Pistola',
-  revolver: 'Revólver',
-  knife: 'Cuchillo',
-};
 /** Tiempo mínimo en la pantalla de muerte antes de poder reaparecer. */
 const DEATH_MIN = 1.2;
 /** Autoguardado del tiempo de juego. */
@@ -163,6 +145,10 @@ export class Game {
   private readonly gpuOverlay: HTMLDivElement;
   /** Proveedor del texto del F3, creado una vez (pasar una flecha nueva en cada frame asignaba memoria). */
   private readonly debugTextFn = (): string => this.debugText();
+  /** Etiqueta de tecla y entradas del HUD y del aviso contextual, creadas una vez (sin asignar por frame). */
+  private readonly labelFn = (a: Action): string => this.input.label(a);
+  private readonly hudView: HudView = { yaw: 0, fovDeg: 60, viewportHeight: 1, label: this.labelFn };
+  private readonly promptIn: PromptInput = { near: null, holdT: 0, yaw: 0, moveX: 0, moveY: 0, label: this.labelFn };
   private readonly hudData: HudData;
   private peekTimer = 0;
   private orbit = 0;
@@ -909,38 +895,7 @@ export class Game {
     const want = this.fsm.controlling && this.input.isDown('intel');
     if (want === this.intelShown) return;
     this.intelShown = want;
-    this.hud.setIntel(want ? this.intelView() : null);
-  }
-
-  private intelView(): IntelView {
-    const s = this.session;
-    const m = this.mission;
-    const data = s?.data;
-    const types = new Set<EnemyType>();
-    if (m?.id === 'gauntlet') for (const t of ['thug', 'escort', 'marksman', 'heavy'] as const) types.add(t);
-    else if (m) for (const e of data?.enemies ?? []) types.add(e.type);
-    else if (this.director?.hostile) for (const e of data?.enemies ?? []) if (e.spawnOn?.startsWith('excom-')) types.add(e.type);
-    const notes: string[] = [];
-    if (m) {
-      const def = MISSIONS[m.id];
-      notes.push(def.briefing[1] ?? '');
-      notes.push(def.briefing[2] ?? '');
-      if (data?.mission?.alarm && !m.alarmDisabled)
-        notes.push(m.alarmSounded ? 'La alarma ya ha sonado.' : 'Si alguien da la voz de alarma llegan refuerzos. Busca el panel para desactivarla.');
-    } else if (this.currentLevel === 'hub') {
-      notes.push(this.director?.hostile ? HUB_TEXT.intelHostile : HUB_TEXT.intelNeutral);
-      notes.push(HUB_TEXT.intelContracts);
-    }
-    return {
-      title: m ? MISSIONS[m.id].name : (data?.name ?? ''),
-      place: m ? MISSIONS[m.id].place : (data?.subtitle ?? ''),
-      objective: m ? m.currentText : '',
-      markers: m ? { used: m.markersUsed, total: m.markersTotal } : null,
-      notes: notes.filter((n) => n.length > 0),
-      enemies: [...types],
-      civilians: (data?.civilians.length ?? 0) > 0,
-      alive: s && (m || this.director?.hostile) ? s.enemies.aliveCount : null,
-    };
+    this.hud.setIntel(want ? buildIntelView(this.session, this.mission, !!this.director?.hostile, this.currentLevel) : null);
   }
 
   /** Acciones de nivel de frame (pausa, ayuda, hombro, reaparecer). Se consumen para no repetirse. */
@@ -1239,51 +1194,12 @@ export class Game {
     const s = this.session;
     if (!s) return;
     const c = s.combat;
-    const w = c.weapon;
-    const d = this.hudData;
-    d.health = c.vitals.health;
-    d.maxHealth = c.vitals.maxHealth;
-    d.armor = c.vitals.armor;
-    d.maxArmor = c.vitals.maxArmor;
-    d.weaponName = w.def.name;
-    d.isGun = w.isGun;
-    d.mag = w.mag;
-    d.magMax = w.def.mag;
-    d.reserve = w.reserve;
-    if (d.slots.length !== c.loadout.length) d.slots = c.loadout.map(() => ({ key: '', name: '', active: false }));
-    for (let i = 0; i < c.loadout.length; i++) {
-      const id = c.loadout[i]!;
-      const slot = d.slots[i]!;
-      slot.key = this.input.label(SLOT_ACTIONS[id]);
-      slot.name = SLOT_NAMES[id];
-      slot.active = id === c.current;
-    }
-    d.reload = w.reloadProgress;
-    d.perfect = w.perfectAvailable ? w.perfectWindow : null;
-    const fov = (this.renderer.camera.fov * Math.PI) / 180;
-    const pxPerRad = window.innerHeight / 2 / Math.tan(fov / 2);
-    d.spreadPx = Math.max(4, Math.min(60, Math.tan((c.spreadDeg * Math.PI) / 180) * pxPerRad));
-    d.blocked = c.blocked;
-    d.aimOverEnemy = c.aimOver === 'enemy';
-    d.aimOverCivilian = c.aimOver === 'civilian';
-    d.hitKind = c.hitMarker.kind;
-    d.hitT = c.hitMarker.t;
-    for (let i = 0; i < d.damage.length; i++) {
-      const src = c.damageDirs[i]!;
-      const slot = d.damage[i]!;
-      slot.k = src.t > 0 ? Math.min(1, src.t / 0.6) : 0;
-      if (slot.k > 0) slot.angle = wrapAngle(Math.atan2(-(src.from.x - s.player.feet.x), -(src.from.z - s.player.feet.z)) - this.camera.yaw);
-    }
-    d.multiplier = c.style.multiplier;
-    d.rankName = c.style.rankName;
-    d.gauge = c.style.gauge;
-    d.score = c.style.score;
-    d.feed = c.feed;
-    d.focus = c.focus;
-    d.focusActive = c.focusActive;
-    d.focusReady = c.focus >= 30;
-    d.focusKey = this.input.label('focus');
-    this.hud.update(d, dt);
+    const v = this.hudView;
+    v.yaw = this.camera.yaw;
+    v.fovDeg = this.renderer.camera.fov;
+    v.viewportHeight = window.innerHeight;
+    fillHudData(this.hudData, s, v);
+    this.hud.update(this.hudData, dt);
     this.hud.setCrosshairVisible(!c.holstered);
     this.peekTimer -= dt;
     if (this.peekTimer <= 0) {
@@ -1291,35 +1207,14 @@ export class Game {
       const prev = this.nearInteractable;
       this.nearInteractable = this.fsm.controlling && this.interactionsAllowed ? s.nearestInteractable(this.camera.yaw, this.usedInteractables) : null;
       if (this.nearInteractable !== prev) this.holdT = 0;
-      this.hud.setPrompt(this.contextPrompt());
+      const pi = this.promptIn;
+      pi.near = this.nearInteractable;
+      pi.holdT = this.holdT;
+      pi.yaw = this.camera.yaw;
+      pi.moveX = this.move.x;
+      pi.moveY = this.move.y;
+      this.hud.setPrompt(this.fsm.controlling ? contextPrompt(s, pi) : null);
     }
-  }
-
-  private contextPrompt(): PromptSpec | null {
-    const s = this.session;
-    if (!s || !this.fsm.controlling) return null;
-    const p = s.player;
-    const lab = (a: Action): string => this.input.label(a);
-    const near = this.nearInteractable;
-    if (near) {
-      const hold = near.hold ?? 0;
-      if (hold > 0)
-        return {
-          key: `Mantén ${lab('interact')}`,
-          text: this.holdT > 0 ? `${near.prompt} · ${Math.min(99, Math.round((this.holdT / hold) * 100))} %` : near.prompt,
-        };
-      return { key: lab('interact'), text: near.prompt };
-    }
-    if (s.combat.takedownCandidate(s.ctx)) return { key: lab('takedown'), text: 'Takedown' };
-    if (p.state === 'cover' && p.cover) {
-      return p.cover.height === 'low'
-        ? { key: `${lab('aim')} / ${lab('jump')}`, text: 'Asomarse · saltar por encima  ·  C: salir' }
-        : { key: lab('aim'), text: 'Asomarse  ·  C: salir de cobertura' };
-    }
-    const ctx = p.peekContext(this.camera.yaw, this.move.x, this.move.y);
-    if (ctx.vault) return { key: lab('jump'), text: ctx.vault === 'vault' ? 'Saltar por encima' : 'Subir' };
-    if (ctx.cover) return { key: lab('crouch'), text: ctx.cover === 'low' ? 'Cubrirse (cobertura baja)' : 'Cubrirse' };
-    return null;
   }
 
   /** QA: avanza `n` pasos fijos de forma determinista (actualiza la cámara en cada paso). */
