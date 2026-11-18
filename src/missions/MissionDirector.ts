@@ -13,6 +13,7 @@ import type { Hud } from '../ui/Hud';
 import { evaluateAchievements, type MissionRunSummary, type UnlockedAchievement } from './achievements';
 import { GAUNTLET_BREAK, GAUNTLET_HEAL, GAUNTLET_SPAWN_CLEARANCE, GAUNTLET_SPAWN_INTERVAL, gauntletSpawnPoints, gauntletWave, waveQueue } from './gauntlet';
 import { copyCounters, emptyCounters, formatObjective, SKILL_GOAL, type SkillCounters, skillProgress, skillTally } from './tutorial';
+import { emptyFacts, emptyVerdict, evaluateObjective, objectiveTimeLeft, type ObjectiveVerdict } from './objectives';
 import { MISSIONS, type MissionId } from './types';
 
 export interface MissionOutcome {
@@ -103,6 +104,8 @@ export class MissionDirector {
   private readonly scoreBase = { shotsFired: 0, shotsHit: 0, takedowns: 0, knifeKills: 0, damageTaken: 0 };
   /** Último número mostrado en el HUD del objetivo (evita reescribir el texto cada paso). */
   private hudNum = Number.NaN;
+  private readonly facts = emptyFacts();
+  private readonly verdict = emptyVerdict();
 
   constructor(private readonly d: MissionDirectorDeps) {
     const s = d.session;
@@ -257,7 +260,7 @@ export class MissionDirector {
       const n = this.d.session.enemies.spawnEvent(o.onStart);
       if (n > 0) this.d.session.enemies.alertAll(this.d.session.player.feet);
     }
-    if (o.kind === 'escape') this.escapeLeft = o.seconds ?? 45;
+    if (o.kind === 'escape') this.escapeLeft = objectiveTimeLeft(o, 0);
     this.d.hud.setObjective(this.text(o));
     if (o.kind === 'waves') {
       this.spawnPoints = gauntletSpawnPoints(this.d.session.data);
@@ -421,53 +424,67 @@ export class MissionDirector {
         if (tally !== null) this.hudCount(o, tally, (n) => `${n}/${SKILL_GOAL[skill]}`);
         break;
       }
-      case 'reach':
-      case 'escape': {
-        if (o.kind === 'escape') {
-          this.escapeLeft = Math.max(0, (o.seconds ?? 45) - this.objectiveTime);
-          this.hudCount(o, Math.ceil(this.escapeLeft), (n) => `${n} s`);
-          if (this.escapeLeft <= 0) {
-            this.finish(false, 'Se acabó el tiempo de escape.');
-            return;
-          }
-        }
-        if (o.at && this.playerInZone(o.at, o.radius ?? 2.5)) this.completeObjective();
-        break;
-      }
-      case 'eliminate': {
-        let alive = 0;
-        let seen = 0;
-        for (const e of s.enemies.enemies) {
-          if (!this.matchesGroup(e, o)) continue;
-          seen++;
-          if (e.alive) alive++;
-        }
-        if (seen > 0 && alive === 0) this.completeObjective();
-        else if (alive > 0 && this.objectiveTime > 0.5) this.hudCount(o, alive, (n) => `${n} restante${n === 1 ? '' : 's'}`);
-        break;
-      }
-      case 'interact': {
-        const targets = o.targets ?? [];
-        const left = targets.filter((t) => !this.doneTargets.has(t)).length;
-        if (left === 0) this.completeObjective();
-        else if (targets.length > 1) this.hudCount(o, targets.length - left, (n) => `${n}/${targets.length}`);
-        break;
-      }
-      case 'survive': {
-        const left = Math.max(0, (o.seconds ?? 30) - this.objectiveTime);
-        this.hudCount(o, Math.ceil(left), (n) => `${n} s`);
-        if (left <= 0) this.completeObjective();
-        break;
-      }
       case 'waves':
         this.tickWaves(dt);
         break;
-      case 'boss': {
-        const boss = s.enemies.enemies.find((e) => this.matchesGroup(e, o));
-        if (boss && !boss.alive) this.completeObjective();
-        else if (boss) this.hudCount(o, Math.ceil((boss.vitals.health / boss.vitals.maxHealth) * 100), (n) => `${n} %`);
+      default: {
+        // Alcanzar, escapar, eliminar, interactuar, sobrevivir y jefe: las reglas viven en objectives.ts.
+        this.observe(o);
+        const v = evaluateObjective(o, this.facts, this.verdict);
+        if (o.kind === 'escape') this.escapeLeft = objectiveTimeLeft(o, this.objectiveTime);
+        this.showCounter(o, v);
+        if (v.status === 'failed') {
+          this.finish(false, 'Se acabó el tiempo de escape.');
+          return;
+        }
+        if (v.status === 'complete') this.completeObjective();
         break;
       }
+    }
+  }
+
+  /** Rellena los hechos que necesita `evaluateObjective` sin asignar memoria. */
+  private observe(o: ObjectiveDef): void {
+    const f = this.facts;
+    f.elapsed = this.objectiveTime;
+    f.seen = 0;
+    f.alive = 0;
+    f.bossHealth = 1;
+    if (o.kind === 'eliminate' || o.kind === 'boss') {
+      for (const e of this.d.session.enemies.enemies) {
+        if (!this.matchesGroup(e, o)) continue;
+        f.seen++;
+        if (e.alive) f.alive++;
+        if (o.kind === 'boss') {
+          // El jefe es el primer enemigo que coincide.
+          f.bossHealth = e.vitals.health / e.vitals.maxHealth;
+          break;
+        }
+      }
+    }
+    f.inZone = o.at !== undefined && this.playerInZone(o.at, o.radius ?? 2.5);
+    f.targetsDone = 0;
+    if (o.targets) for (const t of o.targets) if (this.doneTargets.has(t)) f.targetsDone++;
+  }
+
+  private showCounter(o: ObjectiveDef, v: ObjectiveVerdict): void {
+    switch (v.counter) {
+      case 'seconds':
+        this.hudCount(o, v.count, (n) => `${n} s`);
+        break;
+      case 'remaining':
+        this.hudCount(o, v.count, (n) => `${n} restante${n === 1 ? '' : 's'}`);
+        break;
+      case 'fraction': {
+        const total = v.total;
+        this.hudCount(o, v.count, (n) => `${n}/${total}`);
+        break;
+      }
+      case 'percent':
+        this.hudCount(o, v.count, (n) => `${n} %`);
+        break;
+      case null:
+        break;
     }
   }
 

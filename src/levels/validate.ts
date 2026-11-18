@@ -122,5 +122,19 @@ export function validateLevel(d: LevelData): string[] {
   d.civilians.forEach((x) => uniq('civ', x.id));
   d.pickups.forEach((x) => uniq('pickup', x.id));
   d.interactables.forEach((x) => uniq('int', x.id));
+
+  // Guion de la misión: cada referencia apunta a algo que existe; si no, el objetivo nunca se completaría.
+  const groups = new Set<string>();
+  for (const x of d.enemies) if (x.group) groups.add(x.group);
+  const enemyIds = new Set(d.enemies.map((x) => x.id));
+  const checkpointIds = new Set(d.checkpoints.map((c) => c.id));
+  const interactableIds = new Set(d.interactables.map((i) => i.id));
+  for (const o of d.mission?.objectives ?? []) {
+    if (o.kind === 'eliminate' && o.group && o.group !== 'all' && !groups.has(o.group)) e(`objetivo ${o.id}: no hay enemigos del grupo ${o.group}`);
+    if (o.kind === 'boss' && !(o.enemyId && enemyIds.has(o.enemyId))) e(`objetivo ${o.id}: no existe el jefe ${o.enemyId ?? '(sin enemyId)'}`);
+    if (o.stunGroup && !groups.has(o.stunGroup)) e(`objetivo ${o.id}: no hay enemigos del grupo ${o.stunGroup}`);
+    if (o.checkpoint && !checkpointIds.has(o.checkpoint)) e(`objetivo ${o.id}: no existe el checkpoint ${o.checkpoint}`);
+    for (const t of o.targets ?? []) if (!interactableIds.has(t)) e(`objetivo ${o.id}: no existe el interactivo ${t}`);
+  }
   return errs;
 }
