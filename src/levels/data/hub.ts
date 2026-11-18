@@ -29,8 +29,9 @@ export const hub: LevelData = {
   },
   key: { color: 0xffe2bc, intensity: 0.8, dir: [0.3, 1, 0.2], shadow: true, shadowArea: 24 },
   lights: [
-    { pos: [0, 6.0, -6], color: 0xffd9a0, intensity: 65, distance: 22 },
-    { pos: [0, 6.0, 4], color: 0xffd9a0, intensity: 65, distance: 22 },
+    // Bajo las lámparas de araña y no pegadas al techo (a 7 m): un foco a 1 m del techo lo quemaba y el bloom lo convertía en halo.
+    { pos: [0, 5.4, -6], color: 0xffd9a0, intensity: 52, distance: 22 },
+    { pos: [0, 5.4, 4], color: 0xffd9a0, intensity: 52, distance: 22 },
     { pos: [-2.5, 1.6, -11], color: 0x7dffb0, intensity: 10, distance: 5 },
     { pos: [-14, 4, -2], color: 0x19e3ff, intensity: 30, distance: 12 },
     { pos: [14, 4, -2], color: 0xffc47a, intensity: 35, distance: 12 },

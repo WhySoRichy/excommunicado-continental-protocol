@@ -373,7 +373,8 @@ function buildProp(d: DecorProp, ctx: PropContext): Group {
       add(new TorusGeometry(1.1, 0.05, 8, 32), getLevelMaterial('gold'), 0, 0, 0).rotation.x = Math.PI / 2;
       for (let i = 0; i < 10; i++) {
         const ang = (i / 10) * Math.PI * 2;
-        add(new SphereGeometry(0.07, 8, 6), getNeonMaterial(0xffe2a8, 2), Math.cos(ang) * 1.1, -0.12, Math.sin(ang) * 1.1);
+        // Bombillas apenas por encima del umbral del bloom: brillan sin halo.
+        add(new SphereGeometry(0.07, 8, 6), getNeonMaterial(0xffe2a8, 0.75), Math.cos(ang) * 1.1, -0.12, Math.sin(ang) * 1.1);
       }
       add(new CylinderGeometry(0.02, 0.02, 1.4, 6), getLevelMaterial('gold'), 0, 0.7, 0);
       break;
