@@ -17,7 +17,8 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: 0,
-  reporter: [['list']],
+  // En CI cada fallo también sale como anotación del job (se lee sin credenciales en la pestaña de la ejecución).
+  reporter: isCI ? [['list'], ['github']] : [['list']],
   outputDir: 'test-results',
   use: {
     baseURL: 'http://localhost:4173',
