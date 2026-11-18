@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { collectErrors, LUMINANCE_MIN, openGame } from './helpers';
+import { collectErrors, isCI, LUMINANCE_MIN, openGame } from './helpers';
 
 /**
  * Prueba de humo en Firefox (el resto de la suite corre en Chromium): ya hubo un fallo solo de Firefox,
@@ -7,6 +7,9 @@ import { collectErrors, LUMINANCE_MIN, openGame } from './helpers';
  */
 test.describe('Firefox · humo', () => {
   test('arranca, se ve, se mueve y dispara sin errores ni bloqueos de la CSP', async ({ page }) => {
+    // En los runners de GitHub (Linux sin GPU) Firefox sin pantalla no llega a arrancar el juego: la prueba
+    // corre en local, donde sí hay GPU, como parte de las comprobaciones de antes de cada commit.
+    test.skip(isCI, 'Firefox sin GPU no arranca el juego en los runners de GitHub');
     const errors = collectErrors(page);
     await page.addInitScript(() => {
       const w = window as Window & { cspViolations?: string[] };

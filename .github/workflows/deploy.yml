@@ -48,8 +48,9 @@ jobs:
       - name: Build de producción (typecheck + Vite)
         run: npm run build
 
-      - name: Instalar Chromium y Firefox para Playwright
-        run: npx playwright install --with-deps chromium firefox
+      # Firefox no hace falta: su prueba de humo solo corre en local (en el runner no hay GPU).
+      - name: Instalar Chromium para Playwright
+        run: npx playwright install --with-deps chromium
 
       - name: Tests e2e (Playwright sobre el build de pruebas)
         run: npm run test:e2e
