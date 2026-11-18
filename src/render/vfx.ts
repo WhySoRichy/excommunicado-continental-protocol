@@ -240,7 +240,7 @@ export class Vfx {
       this.tracers.setMatrixAt(i, HIDE);
       return false;
     }
-    _d.set(this.tracerDir[j]!, this.tracerDir[j + 1]!, this.tracerDir[j + 2]!);
+    _d.fromArray(this.tracerDir, j);
     _q.setFromUnitVectors(_z, _d);
     const mid = (head + tail) / 2;
     _p.set(this.tracerFrom[j]! + _d.x * mid, this.tracerFrom[j + 1]! + _d.y * mid, this.tracerFrom[j + 2]! + _d.z * mid);
@@ -387,7 +387,7 @@ export class Vfx {
       _e.set(this.cRot[j]!, this.cRot[j + 1]!, this.cRot[j + 2]!);
       _q.setFromEuler(_e);
       _s.setScalar(Math.min(1, this.cLife[i]! / 0.25));
-      _p.set(this.cPos[j]!, this.cPos[j + 1]!, this.cPos[j + 2]!);
+      _p.fromArray(this.cPos, j);
       _m.compose(_p, _q, _s);
       this.casings.setMatrixAt(i, _m);
     }

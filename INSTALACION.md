@@ -181,6 +181,8 @@ Para quien quiera revisar o modificar el código:
 | `npm test` | Pruebas unitarias (Vitest), unos segundos |
 | `npm run test:e2e` | Genera el build de pruebas y ejecuta sobre él las pruebas del juego completo en Chromium (Playwright), entre 3 y 5 minutos |
 | `npm run qa` | Build + pruebas unitarias + pruebas e2e |
+| `npm run lint` | Linter (oxlint, con información de tipos) y comprobación del formato |
+| `npm run format` | Aplica el formato del proyecto (Prettier) |
 | `npm run media` | Regenera las capturas y el GIF del README (necesita ffmpeg instalado) |
 
 Antes de la primera ejecución de `npm run test:e2e` hay que descargar el navegador de pruebas:

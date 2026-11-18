@@ -510,7 +510,10 @@ export class NavGrid {
 
   /** Posición de un nodo. */
   pos(n: number, out: Vector3): Vector3 {
-    return out.set(this.nodeX[n]!, this.nodeY[n]!, this.nodeZ[n]!);
+    out.x = this.nodeX[n]!;
+    out.y = this.nodeY[n]!;
+    out.z = this.nodeZ[n]!;
+    return out;
   }
 
   /** Tamaño de cada componente conexa (diagnóstico). */

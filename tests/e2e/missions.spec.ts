@@ -569,7 +569,8 @@ test.describe('Fase 4 · Gauntlet', () => {
       const q = window.__EXCOM__!;
       for (let i = 0; i < 40 && q.mission()!.wave < 6; i++) q.step(15, {});
       q.step(120, {});
-      q.measureFps(0.2);
+      // Deja correr el bucle real antes de la captura.
+      return q.measureFps(0.2);
     });
     await page.screenshot({ path: shotPath('fase4-gauntlet-oleada') });
     const lum = await page.evaluate(() => window.__EXCOM__!.luminance());

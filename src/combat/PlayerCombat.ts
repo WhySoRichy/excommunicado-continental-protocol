@@ -357,7 +357,7 @@ export class PlayerCombat {
     this.muzzleOf(ctx.player, true, _muzzle);
     const depth = Math.max(0, _tmp.subVectors(_muzzle, _cam).dot(_fwd));
     _origin.copy(_cam).addScaledVector(_fwd, depth);
-    if (ctx.physics.raycast(_origin, _fwd, range, QueryGroups.PLAYER_SHOT, this.hit, ctx.player.collider)) out.copy(this.hit.point as Vector3);
+    if (ctx.physics.raycast(_origin, _fwd, range, QueryGroups.PLAYER_SHOT, this.hit, ctx.player.collider)) out.copy(this.hit.point);
     else out.copy(_origin).addScaledVector(_fwd, range);
     return out;
   }
@@ -402,7 +402,7 @@ export class PlayerCombat {
         .normalize();
       const hit = ph.raycast(_muzzle, _dir, d.range, QueryGroups.PLAYER_SHOT, this.hit, p.collider);
       if (hit) {
-        _end.copy(this.hit.point as Vector3);
+        _end.copy(this.hit.point);
         const enemy = ctx.enemies.enemyFromCollider(this.hit.collider);
         const civ = enemy ? null : ctx.civilians?.fromCollider(this.hit.collider);
         if (enemy && enemy.alive) {

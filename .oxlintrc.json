@@ -1,0 +1,43 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  // Todo lo que es casi seguro un error (incluidas las reglas con información de tipos),
+  // más una selección de reglas estrictas que encuentran bugs reales en este código.
+  "plugins": ["typescript", "unicorn", "oxc", "import"],
+  "categories": { "correctness": "error" },
+  "env": { "browser": true, "es2024": true },
+  "options": { "typeAware": true, "denyWarnings": true },
+  "rules": {
+    // `${valor}` con un `never` es el patrón de los switch exhaustivos.
+    "typescript/restrict-template-expressions": ["error", { "allowNever": true }],
+    // Un `default` explícito cuenta como cubrir el resto de casos; sin él hay que listarlos todos.
+    "typescript/switch-exhaustiveness-check": ["error", { "considerDefaultExhaustiveForUnions": true }],
+    "typescript/no-misused-promises": "error",
+    "typescript/only-throw-error": "error",
+    "typescript/prefer-promise-reject-errors": "error",
+    "typescript/no-deprecated": "error",
+    "typescript/no-unnecessary-type-assertion": "error",
+    "typescript/no-unnecessary-template-expression": "error",
+    "typescript/no-unnecessary-boolean-literal-compare": "error",
+    "import/no-cycle": "error"
+  },
+  "overrides": [
+    {
+      "files": ["tests/unit/**"],
+      "plugins": ["vitest"],
+      "rules": {
+        // Vitest admite un mensaje como segundo argumento de expect().
+        "vitest/valid-expect": ["error", { "maxArgs": 2 }],
+        // checkLevel() concentra las comprobaciones de navegación de cada nivel.
+        "vitest/expect-expect": ["error", { "assertFunctionNames": ["expect", "checkLevel"] }],
+        // Las pruebas guiadas por datos comprueban lo que declara cada nivel (if o.at, etc.).
+        "vitest/no-conditional-expect": "off",
+        "vitest/require-to-throw-message": "off"
+      }
+    },
+    {
+      "files": ["scripts/**", "tests/**", "*.config.ts"],
+      "env": { "node": true }
+    }
+  ],
+  "ignorePatterns": ["dist/**", "dist-qa/**", "test-results/**", "playwright-report/**", "qa-screenshots/**"]
+}

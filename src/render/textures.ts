@@ -235,7 +235,7 @@ function woodTex(seed: number): CanvasTexture {
   ctx.fillRect(0, 0, size, size);
   for (let y = 0; y < size; y += 2) {
     const tone = Math.sin(y * 0.09 + rng.range(0, 0.6)) * 14;
-    ctx.fillStyle = `rgba(${40 + tone},${22 + tone * 0.5},${10},0.18)`;
+    ctx.fillStyle = `rgba(${40 + tone},${22 + tone * 0.5},10,0.18)`;
     ctx.fillRect(0, y, size, 2);
   }
   // Paneles.

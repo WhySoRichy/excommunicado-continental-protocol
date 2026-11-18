@@ -26,7 +26,7 @@ export interface EnemyManagerDeps {
   scene: Scene;
   accuracyMult: number;
   damageMult: number;
-  onShotAtPlayer(enemy: Enemy, hit: boolean, damage: number): void;
+  onShotAtPlayer: (enemy: Enemy, hit: boolean, damage: number) => void;
   onEnemyAlert?(enemy: Enemy): void;
 }
 

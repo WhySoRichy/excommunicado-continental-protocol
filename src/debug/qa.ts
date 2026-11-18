@@ -1,4 +1,4 @@
-import { Vector3 } from 'three';
+import { type Material, Vector3 } from 'three';
 import type { UpgradeId } from '../combat/weapons';
 import type { Action } from '../core/actions';
 import { FIXED_DT } from '../core/Loop';
@@ -239,14 +239,14 @@ export function installQa(game: Game): void {
   registerDebugCommands(game);
   const holds: Action[] = ['sprint', 'aim'];
   const readHud = (): ReturnType<QaApi['hud']> => ({
-    deathVisible: !(document.querySelector('#hud .death') as HTMLElement | null)?.hidden,
-    reloadVisible: !(document.querySelector('#hud .reload') as HTMLElement | null)?.hidden,
-    hitmark: (document.querySelector('#hud .hitmark') as HTMLElement | null)?.className ?? '',
+    deathVisible: !document.querySelector<HTMLElement>('#hud .death')?.hidden,
+    reloadVisible: !document.querySelector<HTMLElement>('#hud .reload')?.hidden,
+    hitmark: document.querySelector<HTMLElement>('#hud .hitmark')?.className ?? '',
     style: document.querySelector('#hud .style-mult')?.textContent ?? '',
     ammo: `${document.querySelector('#hud .ammo-mag')?.textContent ?? ''}${document.querySelector('#hud .ammo-res')?.textContent ?? ''}`,
     objective: document.querySelector('#hud .objective')?.textContent ?? '',
     zone: document.querySelector('#hud .zone-label')?.textContent ?? '',
-    toast: (document.querySelector('#hud .toast') as HTMLElement | null)?.hidden ? '' : (document.querySelector('#hud .toast')?.textContent ?? ''),
+    toast: document.querySelector<HTMLElement>('#hud .toast')?.hidden ? '' : (document.querySelector('#hud .toast')?.textContent ?? ''),
   });
   const api: QaApi = {
     get ready() {
@@ -550,10 +550,10 @@ export function installQa(game: Game): void {
       game.renderer.scene.traverseVisible((o) => {
         objects++;
         if (o.matrixAutoUpdate) autoUpdate++;
-        const m = (o as { material?: { name?: string; type?: string } | Array<{ name?: string }> }).material;
+        const m = (o as { material?: Material | Material[] }).material;
         if (!m) return;
         const mat = Array.isArray(m) ? m[0] : m;
-        const key = `${o.type}:${(mat && 'name' in mat && mat.name) || (mat && 'type' in mat ? mat.type : '?')}`;
+        const key = `${o.type}:${mat?.name || mat?.type || '?'}`;
         renderables[key] = (renderables[key] ?? 0) + 1;
       });
       return { objects, autoUpdate, renderables };

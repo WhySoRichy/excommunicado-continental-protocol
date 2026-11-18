@@ -180,8 +180,10 @@ export class AudioEngine {
     } else {
       // Firefox no expone los AudioParam del oyente: sin esta vía se quedaba en el origen del nivel y los
       // disparos, alertas y pitidos no se orientaban ni se atenuaban según la cámara.
+      /* oxlint-disable typescript/no-deprecated -- API antigua, pero la única que Firefox implementa */
       l.setPosition(pos.x, pos.y, pos.z);
       l.setOrientation(fwd.x, fwd.y, fwd.z, 0, 1, 0);
+      /* oxlint-enable typescript/no-deprecated */
     }
   }
 

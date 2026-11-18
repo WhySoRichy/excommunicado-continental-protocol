@@ -1,22 +1,6 @@
 {
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
-    "types": ["vite/client"],
-    "strict": true,
-    "noEmit": true,
-    "isolatedModules": true,
-    "verbatimModuleSyntax": true,
-    "skipLibCheck": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true,
-    "noImplicitOverride": true,
-    "noImplicitReturns": true,
-    "useDefineForClassFields": true,
-    "resolveJsonModule": true
-  },
-  "include": ["src", "tests/unit"]
+  // Raíz de la solución: cada archivo pertenece a uno de los dos proyectos. Las herramientas
+  // (editor, oxlint, Vite) siguen estas referencias para usar las opciones correctas.
+  "files": [],
+  "references": [{ "path": "./tsconfig.app.json" }, { "path": "./tsconfig.node.json" }]
 }
