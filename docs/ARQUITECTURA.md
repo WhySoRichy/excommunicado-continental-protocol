@@ -63,6 +63,7 @@ La lógica que no necesita three.js ni el DOM vive en archivos propios y tiene t
 | `combat/damage.ts` | Daño por zona, armadura, caída con la distancia |
 | `combat/StyleMeter.ts` | Puntos de estilo, variedad, decaimiento, multiplicador ×1–×8 |
 | `combat/rank.ts` | Nota del contrato y rango D–S |
+| `combat/weapons.ts` | Armas, mejoras de la tienda y qué armas recorre cada tecla (`SLOT_GROUPS`) |
 | `hub/economy.ts` | Tienda, recompensas, multa del Excomunicado |
 | `hub/ExcommunicadoRules.ts` | Zona neutral → aviso → Excomunicado → oleadas → readmisión |
 | `entities/ai/EnemyBrain.ts` | Patrulla, sospecha, combate, cobertura, flanqueo, búsqueda |
@@ -72,6 +73,7 @@ La lógica que no necesita three.js ni el DOM vive en archivos propios y tiene t
 | `missions/objectives.ts` | Cuándo se completa o falla cada objetivo (alcanzar, escapar, eliminar, interactuar, sobrevivir, jefe) y su contador en el HUD |
 | `audio/music.ts` | Patrones musicales por ambiente e intensidad |
 | `render/dynamicResolution.ts` | Cuándo bajar o subir la resolución |
+| `render/tracerPath.ts` | Tramo visible de una trazadora en vuelo, hasta que su cola alcanza el impacto |
 
 ## 3. Un frame por dentro
 
@@ -108,7 +110,7 @@ Las transiciones válidas están declaradas y cualquier otra lanza un error: no 
 | Estado | Una sola FSM de juego | Transiciones explícitas y comprobadas |
 | Niveles | Módulos TS de datos (cajas, rampas, luces, spawns, objetivos) cargados con `import()` dinámico | Un chunk por nivel y una sola fuente de verdad para mallas y colliders |
 | Navegación | Rejilla 2.5D de celdas de 0,5 m generada a partir de los datos del nivel, con A*, suavizado y replanificación si un enemigo se atasca | Se genera sola y su conectividad se comprueba en los tests |
-| Personajes | Un `SkinnedMesh` por personaje (14 huesos, incluidos los tobillos) + el arma aparte; geometría de prismas con sombreado plano, compartida con recuento de usos entre personajes de igual aspecto (la libera `CharacterRig.dispose`, nunca a mano) | Una draw call por cuerpo en lugar de siete y ninguna geometría nueva al aparecer un enemigo repetido; el facetado es una decisión de diseño, no una limitación |
+| Personajes | Un `SkinnedMesh` por personaje (14 huesos, incluidos los tobillos) + el arma aparte; geometría de prismas con sombreado plano, compartida con recuento de usos entre personajes de igual aspecto (la libera `CharacterRig.dispose`, nunca a mano); el aspecto se declara en `RigOptions`: colores, peinado, prendas opcionales (`Outfit`) y rostro (`FaceStyle`), y la geometría vive en `entities/rig/` | Una draw call por cuerpo en lugar de siete y ninguna geometría nueva al aparecer un enemigo repetido; el facetado es una decisión de diseño, no una limitación |
 | Render | `NeutralToneMapping`, IBL tenue, luz hemisférica, una direccional con sombra, neón emisivo en HDR y rim light Fresnel; bloom y viñeta en los presets Medio y Alto, sobre un destino multimuestreado; cielo nocturno procedural en los niveles a cielo abierto (`render/sky.ts`) | Legibilidad antes que efectos |
 | UI | DOM y CSS encima del canvas | Accesible con teclado y fácil de iterar |
 | Audio | Web Audio procedural, iniciado tras el primer gesto del usuario | Sin archivos ni licencias; cumple la política de autoplay |
@@ -196,7 +198,7 @@ Qué cubren los e2e, a grandes rasgos:
 - **Contenido:** los cuatro contratos y el Gauntlet se completan de principio a fin; fallar por marcadores o por tiempo; el tutorial paso a paso.
 - **Claridad:** luminancia en cada checkpoint de cada nivel; objetivo y baliza siempre visibles; los avisos muestran la tecla real asignada; consola sin errores.
 - **Audio:** la mezcla se mide en la salida real (la música queda de fondo, los disparos destacan, sin saturación).
-- **Firefox:** una prueba de humo (arranque, escena visible, moverse y disparar, consola limpia y sin bloqueos de la CSP); el resto de la suite corre en Chromium.
+- **Firefox:** una prueba de humo (arranque, escena visible, moverse y disparar, consola limpia y sin bloqueos de la CSP); el resto de la suite corre en Chromium. Solo se ejecuta en local: en los runners de GitHub, sin GPU, Firefox sin pantalla no llega a arrancar el juego.
 
 ## 10. Rendimiento
 
