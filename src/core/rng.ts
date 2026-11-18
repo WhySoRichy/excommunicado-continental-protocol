@@ -10,10 +10,6 @@ export class Rng {
     this.s = seed >>> 0;
   }
 
-  setSeed(seed: number): void {
-    this.s = seed >>> 0;
-  }
-
   /** Flotante uniforme en [0, 1). */
   next(): number {
     let t = (this.s = (this.s + 0x6d2b79f5) >>> 0);

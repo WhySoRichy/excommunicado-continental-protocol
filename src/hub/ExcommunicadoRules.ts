@@ -26,10 +26,6 @@ export class ExcommunicadoRules {
   /** Oleada lista para aparecer (el director la consume). */
   private pendingWave = 0;
 
-  get armed(): boolean {
-    return this.state === 'armed' || this.state === 'excommunicado';
-  }
-
   get hostile(): boolean {
     return this.state === 'excommunicado';
   }

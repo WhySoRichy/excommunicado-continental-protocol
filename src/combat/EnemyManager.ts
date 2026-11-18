@@ -245,10 +245,6 @@ export class EnemyManager implements Tactics {
     }
   }
 
-  get coverPointCount(): number {
-    return this.cover.length;
-  }
-
   private releaseCover(id: string): void {
     for (const c of this.cover) if (c.claimedBy === id) c.claimedBy = null;
   }

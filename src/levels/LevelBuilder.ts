@@ -122,8 +122,11 @@ export interface LevelRuntime {
   dispose(): void;
 }
 
+/**
+ * Las sombras se encienden y apagan con el preset (`renderer.shadowMap.enabled`): el nivel marca siempre qué
+ * proyecta y recibe sombra, así que cambiar de calidad en caliente no espera a otro nivel.
+ */
 export interface BuildOptions {
-  shadows: boolean;
   shadowMapSize: number;
 }
 
@@ -166,8 +169,8 @@ export function buildLevel(data: LevelData, scene: Scene, physics: PhysicsWorld,
     const geo = g.acc.build();
     disposables.push(geo);
     const mesh = new Mesh(geo, getLevelMaterial(g.mat));
-    mesh.castShadow = opts.shadows && g.cast;
-    mesh.receiveShadow = opts.shadows;
+    mesh.castShadow = g.cast;
+    mesh.receiveShadow = true;
     mesh.matrixAutoUpdate = false;
     mesh.updateMatrix();
     mesh.name = `static:${g.mat}`;
@@ -187,7 +190,7 @@ export function buildLevel(data: LevelData, scene: Scene, physics: PhysicsWorld,
   const cz = (data.bounds.min[2] + data.bounds.max[2]) / 2;
   key.target.position.set(cx, 0, cz);
   key.position.set(cx + kd.x * 60, kd.y * 60, cz + kd.z * 60);
-  key.castShadow = opts.shadows && k.shadow;
+  key.castShadow = k.shadow;
   if (key.castShadow) {
     key.shadow.mapSize.set(opts.shadowMapSize, opts.shadowMapSize);
     const cam = key.shadow.camera;
@@ -220,7 +223,7 @@ export function buildLevel(data: LevelData, scene: Scene, physics: PhysicsWorld,
   const props: Group[] = [];
   const propCtx: PropContext = { leaves: null, disposables };
   for (const d of data.decor) buildDecor(d, root, neonAcc, props, propCtx);
-  mergeProps(props, root, opts.shadows, disposables);
+  mergeProps(props, root, disposables);
   for (const [k2, acc] of neonAcc) {
     const [color, intensity] = k2.split(':').map(Number) as [number, number];
     const geo = acc.build();
@@ -309,7 +312,7 @@ interface PropContext {
  * Todos los props del nivel se fusionan en UNA malla por material (eran decenas de mallas
  * sueltas: un taburete doble son 8, una lámpara de araña 12). Son estáticos y sin sombra.
  */
-function mergeProps(props: Group[], root: Group, shadows: boolean, disposables: Array<{ dispose(): void }>): void {
+function mergeProps(props: Group[], root: Group, disposables: Array<{ dispose(): void }>): void {
   const byMat = new Map<Material, BufferGeometry[]>();
   for (const g of props) {
     g.updateMatrixWorld(true);
@@ -332,7 +335,7 @@ function mergeProps(props: Group[], root: Group, shadows: boolean, disposables: 
     const mesh = new Mesh(merged, mat);
     mesh.name = 'props';
     mesh.castShadow = false;
-    mesh.receiveShadow = shadows;
+    mesh.receiveShadow = true;
     root.add(mesh);
   }
 }

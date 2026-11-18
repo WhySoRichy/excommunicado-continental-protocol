@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  addPlaytime,
   loadProfile,
   MemoryStore,
   newProfile,
@@ -98,5 +99,16 @@ describe('guardado', () => {
     expect(p.gauntlet[0]?.waves).toBe(12);
     expect(recordGauntlet(p, { waves: 1, score: 1, date: 99 })).toBe(0);
     expect(recordGauntlet(p, { waves: 20, score: 1, date: 99 })).toBe(1);
+  });
+
+  it('el tiempo jugado no pierde las fracciones de segundo entre guardados', () => {
+    const p = newProfile(0);
+    // Diez guardados seguidos cada 0,6 s: antes cada uno descartaba su fracción y sumaban 0 s.
+    let pending = 0;
+    for (let i = 0; i < 10; i++) pending = addPlaytime(p, pending + 0.6);
+    expect(p.playtimeSec).toBe(5);
+    expect(pending).toBeCloseTo(1, 6);
+    expect(addPlaytime(p, -3)).toBe(0);
+    expect(p.playtimeSec).toBe(5);
   });
 });

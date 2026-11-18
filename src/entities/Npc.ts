@@ -77,7 +77,6 @@ export class Npc {
 
   dispose(): void {
     this.rig.dispose();
-    this.rig.material.dispose();
     disposeSprite(this.label);
     void this.scene;
   }

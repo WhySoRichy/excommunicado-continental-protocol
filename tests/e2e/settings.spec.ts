@@ -102,6 +102,11 @@ test.describe('Fase 5 · ajustes', () => {
     await page.keyboard.press('r');
     await page.evaluate(() => window.__EXCOM__!.step(2, {}));
     await expect.poll(() => page.evaluate(() => window.__EXCOM__!.menu())).toBe('dialog');
+    // La pista del diálogo muestra la tecla reasignada, y esa tecla es la que lo hace avanzar.
+    await expect(page.locator('.dialog-hint .keycap').first()).toHaveText('R');
+    const first = await page.locator('.dialog-count').textContent();
+    await page.keyboard.press('r');
+    await expect(page.locator('.dialog-count')).not.toHaveText(first ?? '');
     expect(errors).toEqual([]);
   });
 

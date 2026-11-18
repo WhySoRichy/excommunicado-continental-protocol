@@ -248,6 +248,31 @@ test.describe('Fase 6 · rendimiento', () => {
     expect(rapier).toBeLessThanOrEqual(BUDGET.rapierGzKb);
   });
 
+  test('cambiar de calidad en caliente libera el bloom y rehace el mapa de sombras', async ({ page }) => {
+    await openGame(page, 'preset=high');
+    await page
+      .getByRole('button', { name: /Nueva partida|Continuar/ })
+      .first()
+      .click();
+    await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('hub');
+    // Unos frames reales para que cada cambio se dibuje (el mapa de sombras se crea al renderizar).
+    const read = () =>
+      page.evaluate(async () => {
+        await window.__EXCOM__!.measureFps(0.4);
+        return window.__EXCOM__!.info();
+      });
+    const high = await read();
+    expect(high.shadowMap).toBe(2048);
+    await page.evaluate(() => window.__EXCOM__!.setSettings({ preset: 'low' }));
+    const low = await read();
+    expect(low.shadowMap, 'sin sombras no queda mapa').toBe(0);
+    // Antes, el compositor del bloom (una docena de destinos del tamaño de la pantalla) seguía en la GPU.
+    expect(low.textures, 'texturas en Bajo frente a Alto').toBeLessThanOrEqual(high.textures - 10);
+    await page.evaluate(() => window.__EXCOM__!.setSettings({ preset: 'medium' }));
+    const medium = await read();
+    expect(medium.shadowMap, 'las sombras vuelven sin esperar a otro nivel').toBe(1024);
+  });
+
   test('build público: sin la API de QA ni los comandos de depuración', async () => {
     // `dist` es lo que se publica en Pages; las e2e corren sobre `dist-qa` (npm run build:qa).
     const dir = join(process.cwd(), 'dist', 'assets');

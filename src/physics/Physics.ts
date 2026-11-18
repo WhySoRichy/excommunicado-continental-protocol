@@ -114,7 +114,6 @@ export class PhysicsWorld {
   private readonly ray: RapierNS.Ray;
   private readonly ball: RapierNS.Ball;
   private readonly capsule: RapierNS.Capsule;
-  private staticCount = 0;
 
   constructor(R: Rapier) {
     this.R = R;
@@ -124,10 +123,6 @@ export class PhysicsWorld {
     this.ray = new R.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 1 });
     this.ball = new R.Ball(0.2);
     this.capsule = new R.Capsule(0.5, 0.3);
-  }
-
-  get staticColliderCount(): number {
-    return this.staticCount;
   }
 
   get colliderCount(): number {
@@ -141,7 +136,6 @@ export class PhysicsWorld {
       .setRotation(rot)
       .setCollisionGroups(Groups.STATIC)
       .setSolverGroups(Groups.STATIC);
-    this.staticCount++;
     return this.world.createCollider(desc);
   }
 

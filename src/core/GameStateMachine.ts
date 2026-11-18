@@ -35,10 +35,6 @@ export class GameStateMachine {
     return this.current;
   }
 
-  get prev(): GameStateId {
-    return this.previous;
-  }
-
   can(to: GameStateId): boolean {
     return TRANSITIONS[this.current].includes(to);
   }

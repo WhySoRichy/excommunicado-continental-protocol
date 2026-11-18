@@ -145,6 +145,16 @@ export function recordGauntlet(p: Profile, entry: GauntletEntry): number {
   return pos <= GAUNTLET_TOP ? pos : 0;
 }
 
+/**
+ * Suma al perfil los segundos enteros de `elapsed` y devuelve la fracción que queda pendiente, para
+ * acumularla hasta el siguiente guardado: si se descartara, cada guardado perdería hasta un segundo.
+ */
+export function addPlaytime(p: Profile, elapsed: number): number {
+  const whole = Math.floor(Math.max(0, elapsed));
+  p.playtimeSec += whole;
+  return Math.max(0, elapsed) - whole;
+}
+
 /** Actualiza el mejor resultado de una misión si mejora el rango o, a igual rango, el puntaje. */
 export function recordBest(p: Profile, id: MissionId, r: BestResult): boolean {
   const prev = p.best[id];

@@ -62,14 +62,14 @@ export class LevelSession {
   ) {
     const scene = deps.scene;
     this.physics = new PhysicsWorld(deps.R);
-    this.level = buildLevel(data, scene, this.physics, { shadows: deps.quality.shadows, shadowMapSize: deps.quality.shadowMapSize });
+    this.level = buildLevel(data, scene, this.physics, { shadowMapSize: deps.quality.shadowMapSize });
     this.physics.step();
     this.nav = NavGrid.build(data);
     const s = data.spawn.pos;
     this.player = new PlayerController(this.physics, new Vector3(s[0], s[1] + 0.02, s[2]), data.spawn.yaw);
     this.player.killY = data.killY;
     this.playerRig = new CharacterRig('player', PLAYER_LOOK);
-    this.playerRig.setShadows(deps.quality.shadows);
+
     scene.add(this.playerRig.root);
     this.vfx = new Vfx(scene, deps.quality.particles);
     this.pickups = new Pickups(scene);

@@ -1,4 +1,5 @@
 import {
+  DirectionalLight,
   HalfFloatType,
   NeutralToneMapping,
   PCFShadowMap,
@@ -85,10 +86,14 @@ export class GameRenderer {
   /** Controlador de la resolución dinámica (lógica pura en `dynamicResolution.ts`). */
   readonly dyn = new DynamicResolution();
   private composer: EffectComposer | null = null;
-  private bloomPass: UnrealBloomPass | null = null;
+
   private bloomEnabled = false;
   private readonly container: HTMLElement;
   private brightness = 1;
+  private envTarget: WebGLRenderTarget | null = null;
+  /** Avisos de pérdida y recuperación del contexto WebGL (Game pausa y muestra un aviso). */
+  onContextLost: (() => void) | null = null;
+  onContextRestored: (() => void) | null = null;
   private frameNo = 0;
 
   constructor(container: HTMLElement, preset: QualityPreset) {
@@ -115,12 +120,14 @@ export class GameRenderer {
     this.canvas.setAttribute('aria-label', 'Vista del juego');
     container.appendChild(this.canvas);
 
-    // IBL tenue (R1): ningún metal ni superficie queda negra por falta de entorno.
-    const pmrem = new PMREMGenerator(r);
-    const env = new RoomEnvironment();
-    this.scene.environment = pmrem.fromScene(env, 0.04).texture;
-    env.dispose();
-    pmrem.dispose();
+    this.buildEnvironment();
+    // three recupera su propio estado tras perder el contexto (controlador reiniciado, cambio de GPU...),
+    // pero lo que solo existía en la GPU, como el entorno PMREM, hay que volver a generarlo.
+    this.canvas.addEventListener('webglcontextlost', () => this.onContextLost?.());
+    this.canvas.addEventListener('webglcontextrestored', () => {
+      this.buildEnvironment();
+      this.onContextRestored?.();
+    });
 
     this.setBloom(q.bloom);
     this.resize();
@@ -137,13 +144,30 @@ export class GameRenderer {
     this.preset = preset;
     const q = QUALITY[preset];
     this.renderer.shadowMap.enabled = q.shadows;
+    this.updateShadowMaps(q);
     this.setBloom(q.bloom);
     this.dyn.reset();
     this.resize();
   }
 
+  /**
+   * El nivel marca siempre qué luz proyecta sombra; el preset decide si hay pase de sombras y de qué tamaño.
+   * El mapa se libera al cambiar de tamaño o al apagar las sombras, y three lo vuelve a crear en el siguiente render.
+   */
+  private updateShadowMaps(q: QualitySettings): void {
+    this.scene.traverse((o) => {
+      if (!(o instanceof DirectionalLight) || !o.castShadow) return;
+      if (q.shadows && o.shadow.mapSize.x === q.shadowMapSize) return;
+      o.shadow.mapSize.set(q.shadowMapSize, q.shadowMapSize);
+      o.shadow.map?.dispose();
+      o.shadow.map = null;
+    });
+  }
+
   setBloom(on: boolean): void {
     this.bloomEnabled = on;
+    // Sin bloom, el compositor y sus destinos (varios del tamaño de la pantalla) no se quedan en la GPU.
+    if (!on) this.disposeComposer();
     if (on && !this.composer) {
       const size = this.renderer.getSize(new Vector2());
       // Destino multimuestreado: sin él, el compositor pierde el antialias del canvas.
@@ -152,10 +176,10 @@ export class GameRenderer {
       this.composer.addPass(new RenderPass(this.scene, this.camera));
       // Bloom moderado: el umbral queda por encima de cualquier superficie iluminada, así que solo
       // brillan los emisores en HDR (neones, carteles, fogonazos).
-      this.bloomPass = new UnrealBloomPass(size, 0.36, 0.45, BLOOM_THRESHOLD);
-      const highPass = tuneHighPass(this.bloomPass.materialHighPassFilter.fragmentShader);
-      if (highPass) this.bloomPass.materialHighPassFilter.fragmentShader = highPass;
-      this.composer.addPass(this.bloomPass);
+      const bloomPass = new UnrealBloomPass(size, 0.36, 0.45, BLOOM_THRESHOLD);
+      const highPass = tuneHighPass(bloomPass.materialHighPassFilter.fragmentShader);
+      if (highPass) bloomPass.materialHighPassFilter.fragmentShader = highPass;
+      this.composer.addPass(bloomPass);
       const out = new OutputPass();
       const fragment = withVignette(out.material.fragmentShader);
       if (fragment) {
@@ -167,8 +191,22 @@ export class GameRenderer {
     }
   }
 
-  get bloomActive(): boolean {
-    return this.bloomEnabled;
+  private disposeComposer(): void {
+    if (!this.composer) return;
+    for (const pass of this.composer.passes) pass.dispose();
+    this.composer.dispose();
+    this.composer = null;
+  }
+
+  /** IBL tenue (R1): ningún metal ni superficie queda negra por falta de entorno. */
+  private buildEnvironment(): void {
+    const pmrem = new PMREMGenerator(this.renderer);
+    const env = new RoomEnvironment();
+    this.envTarget?.dispose();
+    this.envTarget = pmrem.fromScene(env, 0.04);
+    this.scene.environment = this.envTarget.texture;
+    env.dispose();
+    pmrem.dispose();
   }
 
   setExposure(v: number): void {
@@ -298,7 +336,7 @@ export class GameRenderer {
 
   dispose(): void {
     window.removeEventListener('resize', this.resize);
-    this.composer?.dispose();
+    this.disposeComposer();
     this.renderer.dispose();
   }
 }

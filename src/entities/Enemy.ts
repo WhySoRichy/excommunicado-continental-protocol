@@ -585,7 +585,6 @@ export class Enemy {
     this.w.scene.remove(this.icon);
     if (this.laser) this.w.scene.remove(this.laser);
     this.laserMat?.dispose();
-    this.rig.material.dispose();
     this.w.physics.removeCharacter(this.mover.char);
   }
 }

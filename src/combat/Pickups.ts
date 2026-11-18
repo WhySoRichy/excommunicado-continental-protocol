@@ -84,10 +84,6 @@ export class Pickups {
     }
   }
 
-  get activeCount(): number {
-    return this.list.filter((p) => !p.taken).length;
-  }
-
   /** Posiciones activas (QA). */
   active(): Array<{ kind: PickupKind; x: number; y: number; z: number }> {
     return this.list.filter((p) => !p.taken).map((p) => ({ kind: p.kind, x: p.pos.x, y: p.pos.y, z: p.pos.z }));

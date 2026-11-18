@@ -556,6 +556,8 @@ export class CharacterRig {
   readonly root = new Group();
   readonly material: MeshStandardMaterial;
   readonly rim: RimUniforms;
+  /** Material propio (enemigos, por su rim individual) frente a uno compartido de la caché. */
+  private readonly ownsMaterial: boolean;
   private readonly spin = new Bone();
   private readonly hips = new Bone();
   private readonly torso = new Bone();
@@ -607,6 +609,7 @@ export class CharacterRig {
   constructor(key: string, o: RigOptions) {
     const { mat, rim } = rigMaterial(key, o.rimColor, o.rimStrength, !!o.uniqueMaterial);
     this.material = mat;
+    this.ownsMaterial = !!o.uniqueMaterial;
     this.rim = rim;
     const c = o.colors;
     const b = o.bulk ?? 1;
@@ -992,11 +995,6 @@ export class CharacterRig {
     );
     this.weaponMesh.castShadow = true;
     this.weaponMount.add(this.weaponMesh);
-  }
-
-  setShadows(on: boolean): void {
-    for (const m of this.meshes) m.castShadow = on;
-    if (this.weaponMesh) this.weaponMesh.castShadow = on;
   }
 
   /** Visibilidad (la cámara muy cerca transparenta al personaje en vez de meterse dentro). */
@@ -1479,6 +1477,8 @@ export class CharacterRig {
     this.bodyKey = '';
     this.setWeapon('none');
     this.skeleton?.dispose();
+    // Un material compartido sigue en la caché para los demás personajes y el próximo nivel: solo se libera el propio.
+    if (this.ownsMaterial) this.material.dispose();
     this.root.removeFromParent();
   }
 }

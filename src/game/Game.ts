@@ -11,7 +11,18 @@ import { Input, type InputEvent, type Vec2 } from '../core/Input';
 import { AnimationLoop, FIXED_DT, FixedStepAccumulator } from '../core/Loop';
 import { wrapAngle } from '../core/math';
 import { Rng } from '../core/rng';
-import { BrowserStore, deleteProfile, type KeyValueStore, loadProfile, newProfile, type Profile, PROFILE_KEY, saveProfile, SETTINGS_KEY } from '../core/Save';
+import {
+  addPlaytime,
+  BrowserStore,
+  deleteProfile,
+  type KeyValueStore,
+  loadProfile,
+  newProfile,
+  type Profile,
+  PROFILE_KEY,
+  saveProfile,
+  SETTINGS_KEY,
+} from '../core/Save';
 import { loadSettings, saveSettings, type Settings, suggestPreset } from '../core/Settings';
 import { probeGpu } from '../render/gpu';
 import { CollisionDebugView, DebugOverlay } from '../debug/DebugOverlay';
@@ -30,7 +41,7 @@ import { type MissionId, MISSIONS } from '../missions/types';
 import { loadRapier, QueryGroups, type Rapier } from '../physics/Physics';
 import { GameRenderer, type QualityPreset } from '../render/Renderer';
 import { type FatalText, hideBoot, setBootProgress, showFatal } from '../ui/boot';
-import { h } from '../ui/dom';
+import { button, h } from '../ui/dom';
 import { Hud, type HudData, type PromptSpec } from '../ui/Hud';
 import type { IntelView } from '../ui/Intel';
 import { type ResultsView, Screens } from '../ui/Screens';
@@ -157,6 +168,9 @@ export class Game {
   private readonly pad: Vec2 = { x: 0, y: 0 };
   private readonly pose: RigPose = idlePose();
   private readonly captureOverlay: HTMLDivElement;
+  private readonly gpuOverlay: HTMLDivElement;
+  /** Proveedor del texto del F3, creado una vez (pasar una flecha nueva en cada frame asignaba memoria). */
+  private readonly debugTextFn = (): string => this.debugText();
   private readonly hudData: HudData;
   private peekTimer = 0;
   private orbit = 0;
@@ -229,6 +243,25 @@ export class Game {
     this.captureOverlay.hidden = true;
     this.captureOverlay.addEventListener('click', () => this.requestLock());
     uiRoot.appendChild(this.captureOverlay);
+    // Si la tarjeta gráfica pierde el contexto, la pantalla quedaba en negro sin explicación.
+    this.gpuOverlay = h('div', { class: 'gpu-overlay', role: 'alert' }, [
+      h('div', { class: 'capture-box' }, [
+        h('strong', { text: 'Se perdió la imagen' }),
+        h('span', { text: 'La tarjeta gráfica se ha reiniciado. El juego está en pausa y la imagen debería volver en unos segundos.' }),
+        h('span', { text: 'Si no vuelve, recarga: tu partida está guardada.' }),
+        button('Recargar', () => window.location.reload(), 'btn'),
+      ]),
+    ]);
+    this.gpuOverlay.hidden = true;
+    uiRoot.appendChild(this.gpuOverlay);
+    this.renderer.onContextLost = () => {
+      this.saveOnExit();
+      this.pause();
+      this.gpuOverlay.hidden = false;
+    };
+    this.renderer.onContextRestored = () => {
+      this.gpuOverlay.hidden = true;
+    };
     this.debug = new DebugOverlay(uiRoot);
     this.collisionView = new CollisionDebugView(this.renderer.scene);
     this.loop = new AnimationLoop({ frame: (dt, now) => this.frame(dt, now) });
@@ -354,8 +387,7 @@ export class Game {
 
   // =========================================================== guardado
   saveNow(): void {
-    this.profile.playtimeSec += Math.floor(this.autosaveT);
-    this.autosaveT = 0;
+    this.autosaveT = addPlaytime(this.profile, this.autosaveT);
     saveProfile(this.store, this.profile);
   }
 
@@ -832,7 +864,7 @@ export class Game {
     if (s && (controlling || this.fsm.state === 'dead')) this.updateHud(realDt);
     this.audio.setListener(this.renderer.camera.position, this.camera.forward);
 
-    this.debug.update(realDt, () => this.debugText());
+    this.debug.update(realDt, this.debugTextFn);
     if (this.collisionView.enabled && s) this.collisionView.refresh(s.physics);
     if (!this.fsm.simulating) this.input.endStep();
     const tRender = this.profiling ? performance.now() : 0;
@@ -1227,12 +1259,13 @@ export class Game {
     d.magMax = w.def.mag;
     d.reserve = w.reserve;
     if (d.slots.length !== c.loadout.length) d.slots = c.loadout.map(() => ({ key: '', name: '', active: false }));
-    c.loadout.forEach((id, i) => {
+    for (let i = 0; i < c.loadout.length; i++) {
+      const id = c.loadout[i]!;
       const slot = d.slots[i]!;
       slot.key = this.input.label(SLOT_ACTIONS[id]);
       slot.name = SLOT_NAMES[id];
       slot.active = id === c.current;
-    });
+    }
     d.reload = w.reloadProgress;
     d.perfect = w.perfectAvailable ? w.perfectWindow : null;
     const fov = (this.renderer.camera.fov * Math.PI) / 180;

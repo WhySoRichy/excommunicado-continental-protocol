@@ -515,13 +515,6 @@ export class NavGrid {
     out.z = this.nodeZ[n]!;
     return out;
   }
-
-  /** Tamaño de cada componente conexa (diagnóstico). */
-  componentSizes(): Map<number, number> {
-    const m = new Map<number, number>();
-    for (let i = 0; i < this.nodeCount; i++) m.set(this.comp[i]!, (m.get(this.comp[i]!) ?? 0) + 1);
-    return m;
-  }
 }
 
 function makeSolid(ob: OrientedBox): Solid {

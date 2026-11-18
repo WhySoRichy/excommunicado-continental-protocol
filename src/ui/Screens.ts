@@ -86,11 +86,10 @@ const CONTROL_ROWS: Array<{ label: string; actions: Action[] }> = [
   { label: 'Debug', actions: ['debug'] },
 ];
 
-const MENU_SCREENS: ReadonlySet<ScreenId> = new Set(['dialog', 'shop', 'contracts']);
-
 /**
  * Pantallas modales (título, pausa, controles, diálogos, tienda, contratos).
- * Navegables con teclado: el primer botón recibe el foco; en diálogos E/Enter/Espacio avanzan.
+ * Navegables con teclado: el primer botón recibe el foco; en diálogos avanzan la tecla de
+ * interactuar (la que tenga asignada el jugador), Enter y Espacio.
  */
 export class Screens {
   readonly root: HTMLDivElement;
@@ -115,7 +114,7 @@ export class Screens {
     uiRoot.appendChild(this.root);
     window.addEventListener('keydown', (e) => {
       if (e.repeat) return;
-      if (this.current === 'dialog' && (e.code === 'KeyE' || e.code === 'Enter' || e.code === 'Space')) {
+      if (this.current === 'dialog' && (this.input.isBound('interact', e.code) || e.code === 'Enter' || e.code === 'Space')) {
         e.preventDefault();
         this.advanceDialog();
       } else if (this.current === 'briefing' && e.code === 'Enter' && this.briefing) {
@@ -123,10 +122,6 @@ export class Screens {
         this.briefing.onStart();
       }
     });
-  }
-
-  get isMenu(): boolean {
-    return this.current !== null && MENU_SCREENS.has(this.current);
   }
 
   show(id: ScreenId): void {

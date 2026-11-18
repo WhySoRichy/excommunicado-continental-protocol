@@ -38,7 +38,6 @@ export class Input {
   private readonly padDown = new Set<string>();
   private readonly virtualDown = new Set<string>();
   private readonly pressedLatch = new Set<string>();
-  private readonly releasedLatch = new Set<string>();
   private readonly consumed = new Set<string>();
   private mouseDX = 0;
   private mouseDY = 0;
@@ -74,23 +73,6 @@ export class Input {
     window.addEventListener('gamepaddisconnected', this.onPadDisconnected);
   }
 
-  detach(): void {
-    if (!this.attached) return;
-    this.attached = false;
-    window.removeEventListener('keydown', this.onKeyDown, { capture: true });
-    window.removeEventListener('keyup', this.onKeyUp, { capture: true });
-    window.removeEventListener('mousedown', this.onMouseDown);
-    window.removeEventListener('mouseup', this.onMouseUp);
-    window.removeEventListener('mousemove', this.onMouseMove);
-    this.target.removeEventListener('wheel', this.onWheel);
-    this.target.removeEventListener('contextmenu', this.onContextMenu);
-    window.removeEventListener('blur', this.onBlur);
-    document.removeEventListener('visibilitychange', this.onVisibility);
-    document.removeEventListener('pointerlockchange', this.onPointerLockChange);
-    window.removeEventListener('gamepadconnected', this.onPadConnected);
-    window.removeEventListener('gamepaddisconnected', this.onPadDisconnected);
-  }
-
   on(fn: (e: InputEvent) => void): () => void {
     this.listeners.add(fn);
     return () => this.listeners.delete(fn);
@@ -101,10 +83,6 @@ export class Input {
   }
 
   // ---------- Bindings ----------
-
-  getBindings(): Bindings {
-    return cloneBindings(this.bindings);
-  }
 
   setBindings(b: Bindings): void {
     this.bindings = cloneBindings(b);
@@ -120,6 +98,11 @@ export class Input {
         else this.codeToActions.set(code, [a]);
       }
     }
+  }
+
+  /** ¿La tecla `code` está asignada a la acción `a`? */
+  isBound(a: Action, code: string): boolean {
+    return this.codeToActions.get(code)?.includes(a) ?? false;
   }
 
   /** Etiqueta de la tecla de una acción para el dispositivo activo ("E", "Clic izq.", "RT"). */
@@ -148,11 +131,6 @@ export class Input {
   /** ¿Se pulsó desde el último paso fijo (y nadie la consumió)? */
   pressed(a: Action): boolean {
     for (const c of this.bindings[a]) if (this.pressedLatch.has(c) && !this.consumed.has(c)) return true;
-    return false;
-  }
-
-  released(a: Action): boolean {
-    for (const c of this.bindings[a]) if (this.releasedLatch.has(c)) return true;
     return false;
   }
 
@@ -200,7 +178,6 @@ export class Input {
   /** Fin de paso fijo: se limpian los latches. */
   endStep(): void {
     this.pressedLatch.clear();
-    this.releasedLatch.clear();
     this.consumed.clear();
   }
 
@@ -210,7 +187,6 @@ export class Input {
     this.padDown.clear();
     this.virtualDown.clear();
     this.pressedLatch.clear();
-    this.releasedLatch.clear();
     this.consumed.clear();
     this.mouseDX = 0;
     this.mouseDY = 0;
@@ -232,8 +208,8 @@ export class Input {
     if (on) {
       if (!this.virtualDown.has(code)) this.pressedLatch.add(code);
       this.virtualDown.add(code);
-    } else if (this.virtualDown.delete(code)) {
-      this.releasedLatch.add(code);
+    } else {
+      this.virtualDown.delete(code);
     }
   }
 
@@ -264,10 +240,7 @@ export class Input {
       }
     }
     if (!pad || !pad.connected) {
-      if (this.padDown.size > 0) {
-        for (const c of this.padDown) this.releasedLatch.add(c);
-        this.padDown.clear();
-      }
+      this.padDown.clear();
       this.padMove.x = this.padMove.y = 0;
       this.padLook.x = this.padLook.y = 0;
       return;
@@ -285,8 +258,8 @@ export class Input {
           this.padDown.add(code);
           this.pressedLatch.add(code);
         }
-      } else if (this.padDown.delete(code)) {
-        this.releasedLatch.add(code);
+      } else {
+        this.padDown.delete(code);
       }
     }
     radial(pad.axes[0] ?? 0, -(pad.axes[1] ?? 0), this.padMove, 1);
@@ -316,7 +289,7 @@ export class Input {
   private readonly onKeyUp = (e: KeyboardEvent): void => {
     // Alt suelto: evitar que el navegador enfoque su menú.
     if (this.capturing && (BLOCKED_DEFAULTS.has(e.code) || this.codeToActions.has(e.code))) e.preventDefault();
-    if (this.down.delete(e.code)) this.releasedLatch.add(e.code);
+    this.down.delete(e.code);
   };
 
   private readonly onMouseDown = (e: MouseEvent): void => {
@@ -337,7 +310,7 @@ export class Input {
 
   private readonly onMouseUp = (e: MouseEvent): void => {
     const code = `Mouse${e.button}`;
-    if (this.down.delete(code)) this.releasedLatch.add(code);
+    this.down.delete(code);
   };
 
   private gameTarget(e: MouseEvent): boolean {

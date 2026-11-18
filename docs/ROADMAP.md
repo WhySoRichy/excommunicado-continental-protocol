@@ -8,10 +8,11 @@ Qué se puede mejorar y en qué orden. Cada bloque está pensado para una sesió
 - Personajes procedurales de diseño facetado (sombreado plano, torso en V, rasgos mínimos) y animación procedural con IK de piernas y de la mano de apoyo, pies articulados, reacciones de impacto, caídas variadas, vault en tres tiempos y takedown coreografiado (`src/entities/CharacterRig.ts`).
 - Rediseño con más detalle dentro del estilo de bloques: el Huésped con los rasgos de Keanu Reeves (traje de tres piezas, media melena con raya al medio y barba), el Sommelier (camisa, chaleco, pajarita, delantal y catavinos), ocho modelos de arma y proyectiles más vistosos (trazadoras que viajan, fogonazo en estrella y casquillos de latón). Los personajes admiten prendas opcionales y rostros (`Outfit` y `FaceStyle` en `src/entities/CharacterRig.ts`).
 - Dirección de arte nocturna: cielo con silueta de ciudad en los exteriores, vestíbulo del Continental con papel pintado y damero de mármol, bloom y viñeta desde el preset Medio.
-- 158 pruebas unitarias y 49 e2e; CI y despliegue automático en GitHub Pages.
+- 160 pruebas unitarias y 51 e2e; CI y despliegue automático en GitHub Pages.
 - Arsenal ampliado: el revólver «Juez» y el rifle de tirador «Meridian» (con mira de aumento) se compran en la armería, y cada tecla de arma recorre su grupo.
 - El Gauntlet ya no se degrada con las oleadas: los caídos se retiran al empezar la siguiente y un cuerpo asentado deja de simularse y animarse. Tras doce oleadas, 81 draw calls (antes unas 400). Además, los personajes de igual aspecto comparten la geometría: un enemigo que aparece ya no construye ni sube a la GPU un cuerpo nuevo.
 - Primera pasada de robustez tras revisar el juego entero, jugándolo y midiendo: el mapa de sombras se libera al cambiar de nivel, el combate con el Juez se reinicia al reaparecer, un nivel que no se descarga se explica en pantalla, el audio posicional sigue a la cámara en Firefox, abrir el juego sin empezar no crea partida y la voltereta suena.
+- Segunda pasada de robustez: si la tarjeta gráfica pierde el contexto, el juego guarda, se pausa, lo avisa y al volver recupera la iluminación; cambiar de calidad en caliente libera el bloom y rehace las sombras sin esperar a otro nivel; los diálogos avanzan con la tecla de interactuar que tenga asignada el jugador; el tiempo jugado ya no pierde fracciones de segundo; el bucle de cada frame no asigna memoria en el HUD, el F3 ni los pickups.
 - Agachado y coberturas coherentes: el cuerpo agachado cabe en su cápsula (antes la cabeza asomaba 34 cm por encima y no recibía disparos), las coberturas bajas miden al menos 1,2 m y los sofás ya no cuentan como cobertura. Las armas largas se llevan de perfil y se encaran al hombro al apuntar. Las lámparas de araña del vestíbulo ya no saturan el bloom.
 - Herramientas de calidad: formato con Prettier, linter con información de tipos (oxlint), detección de código sin uso (knip) y TypeScript con `noUncheckedIndexedAccess`. La CI los ejecuta, audita las dependencias que se publican, fija sus acciones por SHA, da a cada trabajo solo los permisos que necesita y ya no interrumpe un despliegue en curso. La página publicada lleva una política de seguridad de contenido (CSP).
 - Build de pruebas separado del público: la API de QA y los comandos del F3 (monedas, modo dios) solo existen en desarrollo y en `npm run build:qa`. La versión publicada ya no los incluye, requisito previo de la tabla de récords en línea.
@@ -23,7 +24,7 @@ Lo que quedó pendiente de esa revisión. Conviene hacerlo antes del cuarto cont
 ### Red de seguridad
 - Prueba de humo en Firefox dentro de la suite.
 - Validar el guion de cada misión (un `enemyId` o un `group` mal escrito deja el objetivo sin completarse) y que `tests/unit/hubNav.test.ts` recorra todos los niveles del registro.
-- Avisar cuando el navegador pierde el contexto gráfico y recuperar la iluminación de entorno al volver.
+
 
 ### Lo que ya existe y no se ve
 - Pantalla de logros (hay 17 y solo aparecen al conseguirlos) y de estadísticas (el tiempo jugado se guarda y no se muestra).

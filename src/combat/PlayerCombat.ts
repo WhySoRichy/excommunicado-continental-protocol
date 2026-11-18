@@ -667,12 +667,15 @@ export class PlayerCombat {
     return false;
   }
 
+  /** ¿Le sirve este pickup al jugador ahora? Se crea una vez: el paso de simulación no asigna closures. */
+  private readonly canTake = (k: PickupKind): boolean => {
+    if (k === 'ammo') return this.ammoBelow(false);
+    if (k === 'medkit') return this.vitals.health < this.vitals.maxHealth;
+    return this.vitals.armor < this.vitals.maxArmor;
+  };
+
   private collectPickups(ctx: CombatCtx): void {
-    const kind = ctx.pickups.collect(ctx.player.feet, (k: PickupKind) => {
-      if (k === 'ammo') return this.ammoBelow(false);
-      if (k === 'medkit') return this.vitals.health < this.vitals.maxHealth;
-      return this.vitals.armor < this.vitals.maxArmor;
-    });
+    const kind = ctx.pickups.collect(ctx.player.feet, this.canTake);
     if (!kind) return;
     ctx.audio.ui('confirm');
     if (kind === 'ammo') {

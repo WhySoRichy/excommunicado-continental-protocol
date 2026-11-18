@@ -42,6 +42,26 @@ export interface HudData {
 /**
  * HUD de juego (DOM). Siempre legible (texto grande, contraste, sin tapar el centro).
  */
+function sameSlots(a: readonly HudData['slots'][number][], b: readonly HudData['slots'][number][]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i]!;
+    const y = b[i]!;
+    if (x.key !== y.key || x.name !== y.name || x.active !== y.active) return false;
+  }
+  return true;
+}
+
+function sameFeed(a: ReadonlyArray<{ text: string; points: number }>, b: ReadonlyArray<{ text: string; points: number }>): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i]!;
+    const y = b[i]!;
+    if (x.text !== y.text || x.points !== y.points) return false;
+  }
+  return true;
+}
+
 export class Hud {
   readonly root: HTMLDivElement;
   private readonly crosshair: HTMLDivElement;
@@ -80,6 +100,9 @@ export class Hud {
   private readonly styleGauge: HTMLDivElement;
   private readonly styleScore: HTMLDivElement;
   private readonly feed: HTMLDivElement;
+  /** Copia de lo último dibujado en los huecos de arma y en el registro: comparar cada frame no asigna nada. */
+  private readonly shownSlots: Array<{ key: string; name: string; active: boolean }> = [];
+  private readonly shownFeed: Array<{ text: string; points: number }> = [];
   private readonly focusBox: HTMLDivElement;
   private readonly focusFill: HTMLDivElement;
   private readonly focusLabel: HTMLDivElement;
@@ -93,7 +116,6 @@ export class Hud {
   private readonly toast: HTMLDivElement;
   private toastT = 0;
   private lastPrompt = '';
-  private cache = new Map<string, string>();
   private combatVisible = true;
 
   constructor(uiRoot: HTMLElement) {
@@ -287,10 +309,6 @@ export class Hud {
     this.intel.hidden = !v;
   }
 
-  get intelOpen(): boolean {
-    return !this.intel.hidden;
-  }
-
   /** Ajuste de accesibilidad: ocultar la columna de pistas de teclas. */
   setHintsEnabled(on: boolean): void {
     this.hintsEnabled = on;
@@ -365,9 +383,9 @@ export class Hud {
     setText(this.ammoMag, d.isGun ? String(d.mag) : '—');
     setText(this.ammoRes, d.isGun ? ` / ${Number.isFinite(d.reserve) ? d.reserve : '∞'}` : '');
     this.ammoMag.classList.toggle('low', d.isGun && d.mag <= Math.max(2, Math.floor(d.magMax * 0.25)));
-    const slotsKey = d.slots.map((s) => `${s.key}${s.name}${s.active ? 1 : 0}`).join('|');
-    if (this.cache.get('slots') !== slotsKey) {
-      this.cache.set('slots', slotsKey);
+    if (!sameSlots(this.shownSlots, d.slots)) {
+      this.shownSlots.length = 0;
+      for (const s of d.slots) this.shownSlots.push({ key: s.key, name: s.name, active: s.active });
       this.slots.replaceChildren(...d.slots.map((s) => h('span', { class: `slot${s.active ? ' active' : ''}` }, [keycap(s.key), h('span', { text: s.name })])));
     }
 
@@ -409,9 +427,9 @@ export class Hud {
     this.set(this.styleGauge, 'width', `${Math.round(Math.min(1, Math.max(0, d.gauge)) * 100)}%`);
     setText(this.styleScore, d.score.toLocaleString('es'));
     this.style.dataset.mult = String(d.multiplier);
-    const feedKey = d.feed.map((f) => `${f.text}${f.points}`).join('|');
-    if (this.cache.get('feed') !== feedKey) {
-      this.cache.set('feed', feedKey);
+    if (!sameFeed(this.shownFeed, d.feed)) {
+      this.shownFeed.length = 0;
+      for (const f of d.feed) this.shownFeed.push({ text: f.text, points: f.points });
       this.feed.replaceChildren(
         ...d.feed.map((f) => h('div', { class: 'feed-item' }, [h('span', { text: f.text }), f.points > 0 ? h('b', { text: `+${f.points}` }) : null])),
       );

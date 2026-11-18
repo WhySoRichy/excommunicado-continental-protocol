@@ -1,4 +1,4 @@
-import { type Material, Vector3 } from 'three';
+import { DirectionalLight, type Material, Vector3 } from 'three';
 import type { UpgradeId } from '../combat/weapons';
 import type { Action } from '../core/actions';
 import { FIXED_DT } from '../core/Loop';
@@ -107,6 +107,8 @@ export interface QaApi {
     pixelRatio: number;
     dynamicScale: number;
     preset: string;
+    /** Lado del mapa de sombras de la luz principal, o 0 si no hay mapa (sombras apagadas o aún sin crear). */
+    shadowMap: number;
     steps: number;
   };
   state(): string;
@@ -274,6 +276,10 @@ export function installQa(game: Game): void {
     runDebug: (id: string) => game.debug.run(id),
     info: () => {
       const i = game.renderer.renderer.info;
+      let shadowMap = 0;
+      game.renderer.scene.traverse((o) => {
+        if (o instanceof DirectionalLight && o.castShadow && o.shadow.map) shadowMap = o.shadow.mapSize.x;
+      });
       return {
         calls: i.render.calls,
         triangles: i.render.triangles,
@@ -283,6 +289,7 @@ export function installQa(game: Game): void {
         pixelRatio: game.renderer.pixelRatio,
         dynamicScale: game.renderer.dynamicScale,
         preset: game.renderer.preset,
+        shadowMap,
         steps: game.steps,
       };
     },
