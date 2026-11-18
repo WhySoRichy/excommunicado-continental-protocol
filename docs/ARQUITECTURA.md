@@ -37,6 +37,7 @@ src/
   core/       bucle de juego, entrada, máquina de estados, guardado, ajustes, matemáticas
   physics/    mundo de Rapier, grupos de colisión y consultas (rayos, barridos)
   entities/   jugador (controlador de movimiento), rig de personajes, enemigos, civiles, NPC
+    rig/      geometría de personajes y armas (cuerpo, prendas, modelos de arma) y medidas del esqueleto
     ai/       cerebro de los enemigos (FSM pura) y tipos de enemigo
   combat/     armas, daño, medidor de estilo, rango D–S, gestor de enemigos
   levels/     tipos de datos de nivel, helpers, constructor, validación

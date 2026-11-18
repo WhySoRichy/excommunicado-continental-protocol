@@ -17,7 +17,8 @@ La primera vez que se ejecuten las e2e: `npx playwright install chromium`. Requi
 | Quiero cambiar... | Está en... |
 |---|---|
 | Movimiento del jugador | `src/entities/PlayerController.ts` |
-| Animaciones | `src/entities/CharacterRig.ts` y `rigMath.ts` |
+| Animaciones | `src/entities/CharacterRig.ts` (huesos y poses) y `rigMath.ts` |
+| Aspecto de personajes y armas | `src/entities/rig/`: `body.ts` (torso, cabeza, pelo, prendas, miembros), `weapons.ts` (modelos y agarre), `geometry.ts` (primitivas), `skeleton.ts` (medidas) y `types.ts` |
 | Armas, daño, estilo, rango | `src/combat/` |
 | IA de los enemigos | `src/entities/ai/EnemyBrain.ts`, `src/entities/Enemy.ts`, `src/combat/EnemyManager.ts` |
 | Un nivel o uno nuevo | `src/levels/data/` (y registrarlo en `src/levels/registry.ts`) |

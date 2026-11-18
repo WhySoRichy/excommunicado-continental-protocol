@@ -1,10 +1,7 @@
 import {
   Bone,
   Box3,
-  BoxGeometry,
   type BufferGeometry,
-  Color,
-  CylinderGeometry,
   Float32BufferAttribute,
   Group,
   Matrix4,
@@ -17,269 +14,41 @@ import {
   Uint16BufferAttribute,
   Vector3,
 } from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { clamp, damp, lerp } from '../core/math';
 import { addRim, type RimUniforms } from '../render/materials';
-import type { MoveState, Posture } from './PlayerController';
+import { forearmGeometry, footGeometry, headGeometry, shinGeometry, thighGeometry, torsoGeometry, upperArmGeometry } from './rig/body';
+import { acquire, merge, release, type SharedGeometry } from './rig/geometry';
+import { ANKLE_Y, ELBOW_Y, HAND_Y, HIP_CROUCH, HIP_KNEEL, HIP_SLIDE, HIP_STAND, NECK_Y, SHOULDER_Y, SPIN_Y } from './rig/skeleton';
+import type { RigColors, RigOptions, RigPose, WeaponModel } from './rig/types';
+import { GRIP, weaponGeometry } from './rig/weapons';
+
+export { idlePose } from './rig/types';
+export type { HairStyle, Outfit, RigColors, RigOptions, RigPose, WeaponModel } from './rig/types';
 import { type ArmReach, bell, cadence, footPitch, solveArm, type FootStep, footStep, type LegAngles, smooth, solveLeg } from './rigMath';
 
-/** Colores del personaje (low-poly con colores por vértice: 1 material por tipo). */
-export interface RigColors {
-  jacket: number;
-  shirt: number;
-  tie: number;
-  pants: number;
-  shoes: number;
-  skin: number;
-  hair: number;
-  accent: number;
-}
-
-export type HairStyle = 'long' | 'short' | 'bald' | 'helmet' | 'cap' | 'parted' | 'slick';
-export type WeaponModel = 'pistol' | 'revolver' | 'rifle' | 'dmr' | 'smg' | 'shotgun' | 'shotgunTactical' | 'knife' | 'none';
-/** Rostro: `stern` es el común (cejas fruncidas); `wick`, el de Keanu Reeves como John Wick. */
-export type FaceStyle = 'stern' | 'wick';
-
-/** Prendas opcionales. Sin `outfit`, el personaje lleva traje de chaqueta con corbata y pañuelo. */
-export interface Outfit {
-  /** Chaqueta (por defecto sí). Sin ella se ven el chaleco y las mangas de la camisa. */
-  jacket?: boolean;
-  /** Chaleco de vestir: color. */
-  waistcoat?: number;
-  /** Pañuelo de bolsillo en el color de acento (por defecto sí). */
-  pocketSquare?: boolean;
-  /** Pajarita en lugar de corbata. */
-  bowTie?: boolean;
-  /** Delantal largo de sumiller: color. */
-  apron?: number;
-  /** Catavinos de plata colgado del cuello. */
-  tastevin?: boolean;
-  /** Bigote encerado (solo sin barba). */
-  mustache?: boolean;
-}
-
-export interface RigOptions {
-  colors: RigColors;
-  rimColor: number;
-  rimStrength: number;
-  hair: HairStyle;
-  /** Corpulencia (1 = normal, 1.25 = blindado). */
-  bulk?: number;
-  /** Chaleco/placas (blindado, escolta). */
-  vest?: boolean;
-  /** Barba cerrada (la mandíbula va del color del pelo). */
-  beard?: boolean;
-  /** Prendas que cambian la silueta además de los colores (traje de tres piezas, sumiller...). */
-  outfit?: Outfit;
-  /** Rostro (por defecto `stern`). */
-  face?: FaceStyle;
-  weapon: WeaponModel;
-  /** Material propio (no cacheado): permite efectos por instancia (destello de impacto). */
-  uniqueMaterial?: boolean;
-}
-
-export interface RigPose {
-  /** Velocidad horizontal REAL (m/s). */
-  speed: number;
-  /** Dirección local del movimiento respecto a la cara (rad, 0 = adelante). */
-  moveAngle: number;
-  state: MoveState;
-  posture: Posture;
-  grounded: boolean;
-  /** 0..1 apuntando. */
-  aim: number;
-  /** Pitch de la mirada (rad, + arriba). */
-  aimPitch: number;
-  /** Tiempo en el estado actual (s). */
-  stateTime: number;
-  /** Fase de recarga 0..1 (−1 = no recarga). */
-  reload: number;
-  /** Retroceso visual 0..1 (decae). */
-  recoil: number;
-  /** Golpe/forcejeo de melee 0..1. */
-  melee: number;
-  /** Cambio de arma 0..1 (0 = sin cambio; sube y baja durante el gesto). */
-  swap: number;
-  /** 0..1 arrodillado (enemigo aturdido o jefe entre fases). */
-  kneel: number;
-  /** Sacudida al recibir un impacto, 0..1 (decae). */
-  flinch: number;
-  /** Lado del que vino el impacto (−1 izquierda, +1 derecha): ladea el torso. */
-  flinchSide: number;
-  /** Forma de caer al morir: 0 de bruces, 1 de espaldas, 2 desplomado de lado. */
-  death: 0 | 1 | 2;
-  /** Tiempo dentro del takedown (s) de quien lo ejecuta; −1 si no hay. */
-  takedown: number;
-  /** Progreso del vault 0..1 (−1 = sin dato: pose intermedia). */
-  vault: number;
-}
-
-export function idlePose(): RigPose {
-  return {
-    speed: 0,
-    moveAngle: 0,
-    state: 'ground',
-    posture: 'stand',
-    grounded: true,
-    aim: 0,
-    aimPitch: 0,
-    stateTime: 0,
-    reload: -1,
-    recoil: 0,
-    melee: 0,
-    swap: 0,
-    kneel: 0,
-    flinch: 0,
-    flinchSide: 0,
-    death: 0,
-    takedown: -1,
-    vault: -1,
-  };
-}
-
-const tmpColor = new Color();
 const _rootInv = new Matrix4();
 const _local = new Matrix4();
 const _grip = new Vector3();
 const _hand = new Vector3();
 const _ikQ = new Quaternion();
 const _bounds = new Box3();
-/** Dónde agarra la mano izquierda cada arma, en el espacio del arma (cañón a −Z, arriba +Y). */
-const GRIP: Record<WeaponModel, readonly [number, number, number] | null> = {
-  pistol: [-0.045, -0.035, -0.005],
-  rifle: [0, -0.04, -0.4],
-  smg: [0, -0.045, -0.26],
-  shotgun: [0, -0.02, -0.44],
-  shotgunTactical: [0, -0.02, -0.32],
-  dmr: [0, -0.04, -0.4],
-  revolver: [-0.045, -0.035, 0],
-  knife: null,
-  none: null,
-};
 /** Esfera de recorte generosa (cubre volteretas, caídas y brazos extendidos). */
 const CULL_CENTER = new Vector3(0, 0.9, 0);
 const CULL_RADIUS = 1.6;
+const bodyGeometries = new Map<string, SharedGeometry>();
+const weaponGeometries = new Map<string, SharedGeometry>();
 
-// --- Medidas del esqueleto (m) ---
-/** Altura del centro de masa (hueso `spin`) sobre los pies. */
-const SPIN_Y = 0.9;
-/** Altura de la articulación de la cadera de pie (piernas casi estiradas). */
-const HIP_STAND = 0.935;
-const HIP_CROUCH = 0.44;
-const HIP_SLIDE = 0.3;
-const HIP_KNEEL = 0.5;
 /**
  * Postura de perfil con armas largas (rad): el torso gira a la derecha para llevar el hombro izquierdo
  * hacia el objetivo y la culata al hombro derecho. La cadera gira algo más, pero solo en parado.
  */
 const BLADE_TORSO = 0.45;
 const BLADE_HIPS = 0.6;
-const SHOULDER_Y = 0.56;
-const NECK_Y = 0.7;
-const ELBOW_Y = -0.32;
-const HAND_Y = -0.315;
-/** Tobillo respecto a la rodilla, y distancia del tobillo a la suela (suman la espinilla de la IK). */
-const ANKLE_Y = -0.405;
-const FOOT_DROP = 0.07;
 /** Velocidad a partir de la cual el personaje esprinta (braceo en vez de arma en guardia). */
 const SPRINT_SPEED = 5.6;
 /** Rigidez del suavizado de articulaciones (1/s). */
 const JOINT_K = 16;
 const HALF_PI = Math.PI / 2;
-
-/** Pinta toda la geometría de un color (atributo por vértice). */
-function paint(g: BufferGeometry, color: number): BufferGeometry {
-  tmpColor.set(color);
-  const n = g.getAttribute('position').count;
-  const cols = new Float32Array(n * 3);
-  for (let i = 0; i < n; i++) {
-    cols[i * 3] = tmpColor.r;
-    cols[i * 3 + 1] = tmpColor.g;
-    cols[i * 3 + 2] = tmpColor.b;
-  }
-  g.setAttribute('color', new Float32BufferAttribute(cols, 3));
-  return g;
-}
-
-/** Caja con color por vértice, desplazada. `rz` y `rx` la inclinan antes de colocarla. */
-function cbox(w: number, h: number, d: number, color: number, x = 0, y = 0, z = 0, rz = 0, rx = 0): BufferGeometry {
-  const g = new BoxGeometry(w, h, d);
-  if (rx !== 0) g.rotateX(rx);
-  if (rz !== 0) g.rotateZ(rz);
-  g.translate(x, y, z);
-  return paint(g, color);
-}
-
-/** Tronco de cono elíptico (miembros y torso): `taper` es el radio inferior respecto al superior. */
-function ccyl(rx: number, rz: number, h: number, color: number, x = 0, y = 0, z = 0, taper = 1, seg = 8): BufferGeometry {
-  const g = new CylinderGeometry(1, taper, h, seg);
-  g.scale(rx, 1, rz);
-  g.translate(x, y, z);
-  return paint(g, color);
-}
-
-/**
- * Prisma: caja cuya cara superior e inferior tienen medidas distintas. Es la pieza base del
- * diseño facetado (torso en V, mandíbula, miembros que se afinan).
- */
-function cprism(wTop: number, dTop: number, wBot: number, dBot: number, h: number, color: number, x = 0, y = 0, z = 0, rz = 0): BufferGeometry {
-  const g = new BoxGeometry(1, h, 1);
-  const pos = g.getAttribute('position');
-  for (let i = 0; i < pos.count; i++) {
-    const top = pos.getY(i) > 0;
-    pos.setX(i, pos.getX(i) * (top ? wTop : wBot));
-    pos.setZ(i, pos.getZ(i) * (top ? dTop : dBot));
-  }
-  g.computeVertexNormals();
-  if (rz !== 0) g.rotateZ(rz);
-  g.translate(x, y, z);
-  return paint(g, color);
-}
-
-/** Color de contraste para ribetes: aclara los tonos muy oscuros y oscurece el resto. */
-function trim(color: number): number {
-  tmpColor.set(color);
-  const lum = 0.2126 * tmpColor.r + 0.7152 * tmpColor.g + 0.0722 * tmpColor.b;
-  return lum < 0.05 ? tmpColor.multiplyScalar(1.9).addScalar(0.012).getHex() : tmpColor.multiplyScalar(0.68).getHex();
-}
-
-/** Mismo color, más oscuro o más claro. */
-function shade(color: number, k: number): number {
-  return tmpColor.set(color).multiplyScalar(k).getHex();
-}
-
-function merge(parts: BufferGeometry[]): BufferGeometry {
-  const g = mergeGeometries(parts, false);
-  if (!g) throw new Error('CharacterRig: no se pudo fusionar la geometría');
-  for (const p of parts) p.dispose();
-  g.computeBoundingSphere();
-  return g;
-}
-
-/** Geometría compartida entre personajes de igual aspecto, con recuento de usos: se libera con el último. */
-interface SharedGeometry {
-  geo: BufferGeometry;
-  users: number;
-}
-const bodyGeometries = new Map<string, SharedGeometry>();
-const weaponGeometries = new Map<string, SharedGeometry>();
-
-function acquire(cache: Map<string, SharedGeometry>, key: string, build: () => BufferGeometry): BufferGeometry {
-  let e = cache.get(key);
-  if (!e) {
-    e = { geo: build(), users: 0 };
-    cache.set(key, e);
-  }
-  e.users++;
-  return e.geo;
-}
-
-function release(cache: Map<string, SharedGeometry>, key: string): void {
-  const e = cache.get(key);
-  if (!e || --e.users > 0) return;
-  e.geo.dispose();
-  cache.delete(key);
-}
 
 /** Todo lo que cambia la geometría del cuerpo (el material y el rim van aparte). */
 function appearanceKey(o: RigOptions): string {
@@ -300,228 +69,6 @@ function appearanceKey(o: RigOptions): string {
     JSON.stringify(o.outfit ?? {}),
     o.face ?? 'stern',
   ].join('|');
-}
-
-/**
- * Geometría de cada arma, por bloques: el cañón apunta a −Z del soporte y la empuñadura queda en la
- * mano (el origen). El color de acento marca un detalle (raíl, base del cargador); en los enemigos es
- * el color de su tipo.
- */
-function weaponGeometry(model: Exclude<WeaponModel, 'none'>, accent: number): BufferGeometry {
-  const dark = 0x272a31; // acero pavonado
-  const black = 0x17181d; // polímero
-  const steel = 0x8b919a; // piezas pulidas
-  const slot = 0x0b0c0e; // ranuras y huecos
-  const wood = 0x5b3a22;
-  const brass = 0xc9a14a;
-  const shell = 0xa8282c; // cartuchos de escopeta
-  const lens = 0x4a9ac4;
-  switch (model) {
-    case 'pistol':
-      // Pistola de competición: corredera larga con estrías, compensador y cachas.
-      return merge([
-        cbox(0.032, 0.036, 0.2, dark, 0, 0.046, -0.09), // corredera
-        cbox(0.0335, 0.028, 0.026, black, 0, 0.046, -0.002), // estrías
-        cbox(0.016, 0.006, 0.042, steel, 0.005, 0.065, -0.06), // cañón en la ventana de expulsión
-        cbox(0.036, 0.042, 0.034, dark, 0, 0.043, -0.205), // compensador
-        cbox(0.02, 0.004, 0.022, black, 0, 0.0645, -0.205),
-        cbox(0.03, 0.022, 0.13, black, 0, 0.017, -0.08), // armazón con raíl
-        cbox(0.008, 0.008, 0.05, black, 0, -0.012, -0.05), // guardamonte
-        cbox(0.008, 0.028, 0.008, black, 0, 0, -0.075),
-        cbox(0.006, 0.018, 0.006, steel, 0, 0, -0.04), // gatillo
-        cbox(0.03, 0.105, 0.046, black, 0, -0.034, -0.008, 0, -0.26), // empuñadura
-        cbox(0.033, 0.07, 0.032, dark, 0, -0.038, -0.004, 0, -0.26), // cachas
-        cbox(0.034, 0.012, 0.05, steel, 0, -0.088, 0.006, 0, -0.26), // base del cargador
-        cbox(0.03, 0.01, 0.03, black, 0, 0.026, 0.018), // cola de castor
-        cbox(0.008, 0.01, 0.01, black, 0, 0.069, -0.178), // punto de mira
-        cbox(0.028, 0.012, 0.012, black, 0, 0.07, 0), // alza
-      ]);
-    case 'revolver':
-      // Revólver de seis tiros: cañón con costilla y protector del extractor, tambor estriado y cachas de madera.
-      return merge([
-        cbox(0.03, 0.05, 0.08, dark, 0, 0.032, -0.03), // armazón
-        cbox(0.04, 0.04, 0.05, steel, 0, 0.03, -0.045), // tambor
-        cbox(0.042, 0.01, 0.052, dark, 0, 0.03, -0.045), // estrías del tambor
-        cbox(0.022, 0.03, 0.17, dark, 0, 0.045, -0.15), // cañón
-        cbox(0.012, 0.012, 0.17, black, 0, 0.064, -0.15), // costilla
-        cbox(0.016, 0.018, 0.16, black, 0, 0.024, -0.145), // protector del extractor
-        cbox(0.008, 0.016, 0.01, black, 0, 0.078, -0.226), // punto de mira
-        cbox(0.01, 0.02, 0.018, black, 0, 0.066, 0.012, 0, 0.5), // martillo
-        cbox(0.008, 0.008, 0.04, dark, 0, -0.004, -0.03), // guardamonte
-        cbox(0.006, 0.018, 0.006, steel, 0, 0.006, -0.026), // gatillo
-        cbox(0.032, 0.095, 0.045, wood, 0, -0.035, 0.018, 0, -0.35), // cachas de madera
-        cbox(0.033, 0.011, 0.032, accent, 0, -0.084, 0.036, 0, -0.35), // remate de la culata
-      ]);
-    case 'rifle':
-      // Carabina de competición: visor de punto rojo con miras de respaldo, guardamanos largo con ranuras,
-      // empuñadura delantera inclinada, bocacha con puertos y culata con apoyo para la mejilla.
-      return merge([
-        cbox(0.046, 0.058, 0.25, dark, 0, 0.04, -0.07), // cajón superior
-        cbox(0.048, 0.008, 0.25, black, 0, 0.073, -0.07), // raíl del cajón
-        cbox(0.004, 0.022, 0.05, steel, 0.024, 0.045, -0.04), // ventana de expulsión
-        cbox(0.012, 0.016, 0.02, steel, 0.027, 0.052, 0.025), // asistente de cierre
-        cbox(0.05, 0.01, 0.014, black, 0, 0.07, 0.062), // palanca de carga
-        cbox(0.042, 0.042, 0.15, black, 0, -0.005, -0.045), // cajón inferior
-        cbox(0.008, 0.008, 0.055, black, 0, -0.029, -0.04), // guardamonte
-        cbox(0.006, 0.018, 0.006, steel, 0, -0.018, -0.032), // gatillo
-        cbox(0.034, 0.088, 0.044, black, 0, -0.055, 0.03, 0, -0.32), // empuñadura
-        cbox(0.036, 0.05, 0.03, dark, 0, -0.06, 0.034, 0, -0.32), // textura de la empuñadura
-        cbox(0.03, 0.12, 0.062, dark, 0, -0.08, -0.09, 0, 0.18), // cargador
-        cbox(0.0315, 0.006, 0.064, black, 0, -0.06, -0.086, 0, 0.18), // nervios del cargador
-        cbox(0.0315, 0.006, 0.064, black, 0, -0.09, -0.092, 0, 0.18),
-        cbox(0.032, 0.012, 0.066, black, 0, -0.145, -0.102, 0, 0.18), // base del cargador
-        cbox(0.054, 0.064, 0.28, black, 0, 0.03, -0.33), // guardamanos
-        cbox(0.02, 0.008, 0.26, accent, 0, 0.066, -0.33), // raíl superior
-        cbox(0.0565, 0.012, 0.035, slot, 0, 0.03, -0.24), // ranuras del guardamanos
-        cbox(0.0565, 0.012, 0.035, slot, 0, 0.03, -0.3),
-        cbox(0.0565, 0.012, 0.035, slot, 0, 0.03, -0.36),
-        cbox(0.0565, 0.012, 0.035, slot, 0, 0.03, -0.42),
-        cbox(0.032, 0.03, 0.075, black, 0, -0.016, -0.4, 0, 0.35), // empuñadura delantera inclinada
-        cbox(0.016, 0.032, 0.012, black, 0, 0.086, -0.455), // mira delantera abatible
-        cbox(0.02, 0.02, 0.11, dark, 0, 0.035, -0.52), // cañón
-        cbox(0.032, 0.034, 0.06, black, 0, 0.035, -0.605), // bocacha
-        cbox(0.02, 0.004, 0.009, slot, 0, 0.0525, -0.592), // puertos de la bocacha
-        cbox(0.02, 0.004, 0.009, slot, 0, 0.0525, -0.615),
-        cbox(0.028, 0.028, 0.12, dark, 0, 0.034, 0.1), // tubo de la culata
-        cbox(0.044, 0.09, 0.12, black, 0, 0.018, 0.2), // culata
-        cbox(0.04, 0.02, 0.1, dark, 0, 0.072, 0.19), // apoyo de la mejilla
-        cbox(0.046, 0.094, 0.016, slot, 0, 0.018, 0.268), // cantonera de goma
-        cbox(0.006, 0.014, 0.014, steel, 0.025, 0.004, 0.15), // anilla para la correa
-        cbox(0.03, 0.022, 0.07, dark, 0, 0.088, -0.07), // base del visor
-        cbox(0.038, 0.044, 0.07, black, 0, 0.12, -0.07), // visor
-        cbox(0.042, 0.048, 0.012, black, 0, 0.12, -0.104), // parasol del visor
-        cbox(0.026, 0.026, 0.004, lens, 0, 0.12, -0.111), // lente
-        cbox(0.03, 0.02, 0.014, black, 0, 0.087, 0.035), // mira trasera abatible
-      ]);
-    case 'dmr':
-      // Rifle de tirador: cañón largo con freno de boca, mira telescópica, bípode plegado y culata ajustable.
-      return merge([
-        cbox(0.048, 0.06, 0.28, dark, 0, 0.04, -0.07), // cajón
-        cbox(0.05, 0.008, 0.28, black, 0, 0.074, -0.07), // raíl
-        cbox(0.004, 0.022, 0.06, steel, 0.025, 0.045, -0.04), // ventana de expulsión
-        cbox(0.044, 0.044, 0.16, black, 0, -0.006, -0.045), // cajón inferior
-        cbox(0.008, 0.008, 0.055, black, 0, -0.031, -0.04), // guardamonte
-        cbox(0.006, 0.018, 0.006, steel, 0, -0.02, -0.032), // gatillo
-        cbox(0.034, 0.09, 0.044, black, 0, -0.056, 0.03, 0, -0.32), // empuñadura
-        cbox(0.032, 0.09, 0.07, dark, 0, -0.065, -0.1, 0, 0.08), // cargador corto
-        cbox(0.034, 0.012, 0.074, black, 0, -0.116, -0.104, 0, 0.08),
-        cbox(0.05, 0.06, 0.3, black, 0, 0.032, -0.36), // guardamanos
-        cbox(0.0515, 0.012, 0.04, slot, 0, 0.032, -0.28), // ranuras
-        cbox(0.0515, 0.012, 0.04, slot, 0, 0.032, -0.36),
-        cbox(0.0515, 0.012, 0.04, slot, 0, 0.032, -0.44),
-        cbox(0.02, 0.02, 0.26, dark, 0, 0.038, -0.64), // cañón largo
-        cbox(0.036, 0.036, 0.07, black, 0, 0.038, -0.8), // freno de boca
-        cbox(0.038, 0.006, 0.012, slot, 0, 0.056, -0.79), // puertos del freno
-        cbox(0.038, 0.006, 0.012, slot, 0, 0.056, -0.81),
-        cbox(0.014, 0.012, 0.2, dark, -0.012, -0.004, -0.42), // bípode plegado
-        cbox(0.014, 0.012, 0.2, dark, 0.012, -0.004, -0.42),
-        cbox(0.03, 0.03, 0.12, dark, 0, 0.034, 0.1), // tubo de la culata
-        cbox(0.044, 0.1, 0.14, black, 0, 0.012, 0.21), // culata
-        cbox(0.038, 0.022, 0.12, dark, 0, 0.074, 0.2), // apoyo de la mejilla ajustable
-        cbox(0.046, 0.104, 0.016, slot, 0, 0.012, 0.288), // cantonera
-        cbox(0.032, 0.03, 0.022, dark, 0, 0.094, -0.13), // anillas de la mira
-        cbox(0.032, 0.03, 0.022, dark, 0, 0.094, 0),
-        cbox(0.034, 0.034, 0.26, black, 0, 0.12, -0.06), // tubo de la mira
-        cbox(0.052, 0.052, 0.07, black, 0, 0.12, -0.215), // objetivo
-        cbox(0.054, 0.054, 0.01, accent, 0, 0.12, -0.18), // anillo de color
-        cbox(0.044, 0.044, 0.05, black, 0, 0.12, 0.08), // ocular
-        cbox(0.042, 0.042, 0.004, lens, 0, 0.12, -0.251), // lente
-        cbox(0.022, 0.02, 0.022, dark, 0, 0.146, -0.06), // torreta de elevación
-        cbox(0.02, 0.022, 0.022, dark, 0.026, 0.12, -0.06), // torreta lateral
-      ]);
-    case 'smg':
-      // Subfusil compacto: raíl superior, palanca de carga, culata plegable de alambre y cargador recto.
-      return merge([
-        cbox(0.046, 0.066, 0.24, dark, 0, 0.035, -0.075), // cajón
-        cbox(0.048, 0.008, 0.2, black, 0, 0.072, -0.08), // raíl superior
-        cbox(0.004, 0.02, 0.045, steel, 0.024, 0.042, -0.04), // ventana de expulsión
-        cbox(0.012, 0.012, 0.03, black, -0.029, 0.056, -0.17), // palanca de carga
-        cbox(0.05, 0.05, 0.1, black, 0, 0.02, -0.245), // guardamanos
-        cbox(0.0515, 0.01, 0.06, slot, 0, 0.02, -0.245), // ranura del guardamanos
-        cbox(0.03, 0.03, 0.06, black, 0, 0.035, -0.325), // cañón
-        cbox(0.034, 0.085, 0.044, black, 0, -0.036, 0.015, 0, -0.26), // empuñadura
-        cbox(0.008, 0.008, 0.045, black, 0, -0.008, -0.025), // guardamonte
-        cbox(0.028, 0.13, 0.036, dark, 0, -0.055, -0.13, 0, 0.12), // cargador
-        cbox(0.0295, 0.006, 0.038, black, 0, -0.07, -0.132, 0, 0.12), // nervio del cargador
-        cbox(0.032, 0.012, 0.042, accent, 0, -0.1255, -0.1385, 0, 0.12), // base del cargador
-        cbox(0.018, 0.016, 0.14, dark, 0, 0.05, 0.11), // culata plegable
-        cbox(0.018, 0.016, 0.12, dark, 0, -0.005, 0.1),
-        cbox(0.04, 0.08, 0.02, black, 0, 0.022, 0.18),
-        cbox(0.03, 0.02, 0.02, black, 0, 0.085, 0.02), // alza
-        cbox(0.02, 0.022, 0.012, black, 0, 0.083, -0.165), // punto de mira
-      ]);
-    case 'shotgun':
-      // Escopeta de corredera del Sommelier: madera con estrías, grabado dorado, costilla ventilada y cartuchos al costado.
-      return merge([
-        cbox(0.05, 0.068, 0.2, dark, 0, 0.03, -0.06), // cajón
-        cbox(0.051, 0.008, 0.12, brass, 0, 0.032, -0.06), // grabado dorado
-        cbox(0.03, 0.03, 0.5, dark, 0, 0.05, -0.41), // cañón
-        cbox(0.012, 0.006, 0.48, black, 0, 0.068, -0.41), // costilla ventilada
-        cbox(0.028, 0.026, 0.4, black, 0, 0.016, -0.36), // depósito tubular
-        cbox(0.032, 0.03, 0.02, dark, 0, 0.016, -0.565), // tapón del depósito
-        cbox(0.05, 0.048, 0.17, wood, 0, 0.02, -0.44), // corredera
-        cbox(0.052, 0.006, 0.17, 0x3d2616, 0, 0.032, -0.44), // estrías de la corredera
-        cbox(0.052, 0.006, 0.17, 0x3d2616, 0, 0.008, -0.44),
-        cbox(0.01, 0.012, 0.012, brass, 0, 0.077, -0.65), // punto de mira
-        cbox(0.008, 0.008, 0.05, black, 0, -0.012, -0.03), // guardamonte
-        cbox(0.006, 0.018, 0.006, steel, 0, -0.002, -0.025), // gatillo
-        cbox(0.006, 0.05, 0.1, black, 0.028, 0.03, -0.07), // portacartuchos
-        cbox(0.01, 0.034, 0.016, shell, 0.034, 0.038, -0.105), // cartuchos
-        cbox(0.01, 0.034, 0.016, shell, 0.034, 0.038, -0.083),
-        cbox(0.01, 0.034, 0.016, shell, 0.034, 0.038, -0.061),
-        cbox(0.01, 0.034, 0.016, shell, 0.034, 0.038, -0.039),
-        cbox(0.011, 0.01, 0.017, brass, 0.034, 0.016, -0.105), // culotes de latón
-        cbox(0.011, 0.01, 0.017, brass, 0.034, 0.016, -0.083),
-        cbox(0.011, 0.01, 0.017, brass, 0.034, 0.016, -0.061),
-        cbox(0.011, 0.01, 0.017, brass, 0.034, 0.016, -0.039),
-        cbox(0.034, 0.08, 0.05, wood, 0, -0.03, 0.055, 0, -0.35), // garganta de la culata
-        cbox(0.046, 0.09, 0.22, wood, 0, -0.016, 0.19, 0, 0.12), // culata
-        cbox(0.048, 0.094, 0.02, black, 0, -0.03, 0.3, 0, 0.12), // cantonera
-        cbox(0.006, 0.012, 0.012, steel, 0.024, -0.04, 0.24), // anilla para la correa
-      ]);
-    case 'shotgunTactical':
-      // Escopeta táctica semiautomática: negra, con raíl, cartuchos al costado y culata de pistolete.
-      return merge([
-        cbox(0.052, 0.07, 0.22, dark, 0, 0.03, -0.06), // cajón
-        cbox(0.054, 0.008, 0.2, black, 0, 0.069, -0.06), // raíl
-        cbox(0.004, 0.024, 0.06, steel, 0.027, 0.035, -0.05), // ventana de expulsión
-        cbox(0.032, 0.032, 0.46, dark, 0, 0.052, -0.4), // cañón
-        cbox(0.028, 0.026, 0.36, black, 0, 0.016, -0.34), // depósito tubular
-        cbox(0.052, 0.05, 0.18, black, 0, 0.022, -0.32), // guardamanos
-        cbox(0.0535, 0.01, 0.12, slot, 0, 0.022, -0.32), // ranura del guardamanos
-        cbox(0.04, 0.04, 0.03, black, 0, 0.036, -0.505), // abrazadera
-        cbox(0.014, 0.022, 0.012, black, 0, 0.08, -0.6), // punto de mira
-        cbox(0.03, 0.014, 0.014, black, 0, 0.08, 0.02), // alza
-        cbox(0.008, 0.008, 0.05, black, 0, -0.012, -0.03), // guardamonte
-        cbox(0.006, 0.018, 0.006, steel, 0, -0.002, -0.025), // gatillo
-        cbox(0.006, 0.05, 0.1, black, 0.029, 0.03, -0.07), // portacartuchos
-        cbox(0.01, 0.034, 0.016, shell, 0.035, 0.038, -0.105), // cartuchos
-        cbox(0.01, 0.034, 0.016, shell, 0.035, 0.038, -0.083),
-        cbox(0.01, 0.034, 0.016, shell, 0.035, 0.038, -0.061),
-        cbox(0.01, 0.034, 0.016, shell, 0.035, 0.038, -0.039),
-        cbox(0.011, 0.01, 0.017, brass, 0.035, 0.016, -0.105),
-        cbox(0.011, 0.01, 0.017, brass, 0.035, 0.016, -0.083),
-        cbox(0.011, 0.01, 0.017, brass, 0.035, 0.016, -0.061),
-        cbox(0.011, 0.01, 0.017, brass, 0.035, 0.016, -0.039),
-        cbox(0.034, 0.088, 0.046, black, 0, -0.05, 0.035, 0, -0.3), // empuñadura
-        cbox(0.028, 0.028, 0.12, dark, 0, 0.03, 0.1), // tubo de la culata
-        cbox(0.046, 0.09, 0.12, black, 0, 0.015, 0.2), // culata
-        cbox(0.048, 0.094, 0.016, slot, 0, 0.015, 0.268), // cantonera
-        cbox(0.02, 0.02, 0.02, accent, 0, 0.03, -0.155), // botón de carga (color del enemigo)
-      ]);
-    case 'knife':
-      // Cuchillo táctico: hoja con punta recortada, filo claro y mango con anillas.
-      return merge([
-        cbox(0.007, 0.032, 0.13, 0xb9bec6, 0, 0.004, -0.115), // hoja
-        cbox(0.006, 0.02, 0.045, 0xb9bec6, 0, 0.01, -0.2025), // punta
-        cbox(0.008, 0.007, 0.13, 0xe6e9ed, 0, -0.0115, -0.115), // filo
-        cbox(0.016, 0.05, 0.012, black, 0, 0.002, -0.045), // guarda
-        cbox(0.022, 0.03, 0.085, 0x26282d, 0, -0.002, 0.004), // mango
-        cbox(0.024, 0.032, 0.008, black, 0, -0.002, -0.016), // anillas
-        cbox(0.024, 0.032, 0.008, black, 0, -0.002, 0.02),
-        cbox(0.024, 0.026, 0.014, steel, 0, -0.002, 0.053), // pomo
-      ]);
-  }
 }
 
 const materialCache = new Map<string, { mat: MeshStandardMaterial; rim: RimUniforms }>();
@@ -615,255 +162,18 @@ export class CharacterRig {
     const b = o.bulk ?? 1;
 
     // --- Torso en V: pelvis, faldón, pecho, hombros rectos, cuello de camisa, solapas y corbata ---
-    this.addMesh(this.torso, () => {
-      const edge = trim(c.jacket);
-      const zf = -0.118 * b; // plano frontal del pecho
-      const fit: Outfit = o.outfit ?? {};
-      const jacket = fit.jacket !== false;
-      const torsoParts: BufferGeometry[] = [
-        cprism(0.33 * b, 0.19 * b, 0.3 * b, 0.17 * b, 0.16, c.pants, 0, 0, 0),
-        cprism(0.335 * b, 0.2 * b, 0.375 * b, 0.225 * b, 0.2, jacket ? c.jacket : c.pants, 0, 0.06, 0), // faldón (sin chaqueta, la cintura del pantalón)
-        cprism(0.48 * b, 0.235 * b, 0.335 * b, 0.2 * b, 0.42, c.jacket, 0, 0.37, 0), // pecho
-        cprism(0.4 * b, 0.19 * b, 0.5 * b, 0.245 * b, 0.07, c.jacket, 0, 0.615, 0), // hombros
-        cprism(0.12, 0.125, 0.14, 0.14, 0.04, c.shirt, 0, 0.68, -0.002), // cuello de la camisa
-        ccyl(0.047, 0.05, 0.1, c.skin, 0, 0.7, 0, 1, 6),
-        cprism(0.15, 0.02, 0.03, 0.02, 0.27, c.shirt, 0, 0.485, zf), // pechera en V
-      ];
-      if (jacket) {
-        torsoParts.push(
-          cprism(0.17, 0.15, 0.21, 0.18, 0.045, c.jacket, 0, 0.652, 0.005), // cuello de la chaqueta
-          // Solapas: paño de la chaqueta algo levantado, con el borde de la abertura marcado.
-          cbox(0.06, 0.3, 0.03, c.jacket, -0.078, 0.49, zf - 0.011, 0.27),
-          cbox(0.06, 0.3, 0.03, c.jacket, 0.078, 0.49, zf - 0.011, -0.27),
-          cbox(0.01, 0.3, 0.032, edge, -0.054, 0.497, zf - 0.011, 0.27),
-          cbox(0.01, 0.3, 0.032, edge, 0.054, 0.497, zf - 0.011, -0.27),
-          cbox(0.02, 0.02, 0.012, edge, 0, 0.3, -0.108 * b), // botón
-          cbox(0.012, 0.17, 0.012, edge, 0, 0.055, 0.108 * b), // abertura trasera
-          cbox(0.008, 0.4, 0.01, edge, 0, 0.37, 0.108 * b), // costura de la espalda
-        );
-        if (fit.pocketSquare !== false) torsoParts.push(cbox(0.055, 0.024, 0.02, c.accent, -0.15 * b, 0.5, zf + 0.002)); // pañuelo de bolsillo
-      }
-      if (fit.bowTie) {
-        torsoParts.push(
-          cbox(0.04, 0.03, 0.016, c.tie, -0.026, 0.645, zf + 0.013), // pajarita
-          cbox(0.04, 0.03, 0.016, c.tie, 0.026, 0.645, zf + 0.013),
-          cbox(0.018, 0.022, 0.02, c.tie, 0, 0.645, zf + 0.011),
-        );
-      } else {
-        torsoParts.push(
-          cprism(0.036, 0.02, 0.052, 0.02, 0.22, c.tie, 0, 0.47, zf - 0.008), // corbata
-          cbox(0.046, 0.034, 0.024, c.tie, 0, 0.595, zf - 0.008), // nudo
-        );
-      }
-      if (fit.waistcoat !== undefined) {
-        const wc = fit.waistcoat;
-        const btn = trim(wc);
-        if (jacket) {
-          // Traje de tres piezas: el chaleco asoma entre las solapas y la corbata se ve por encima.
-          torsoParts.push(
-            cbox(0.062, 0.22, 0.012, wc, -0.03, 0.42, zf - 0.016, 0.18),
-            cbox(0.062, 0.22, 0.012, wc, 0.03, 0.42, zf - 0.016, -0.18),
-            cbox(0.012, 0.012, 0.006, btn, 0, 0.37, zf - 0.024),
-            cbox(0.012, 0.012, 0.006, btn, 0, 0.42, zf - 0.024),
-          );
-        } else {
-          // Sin chaqueta el chaleco cubre el pecho y deja a la vista las mangas de la camisa.
-          torsoParts.push(
-            cprism(0.42 * b, 0.25 * b, 0.345 * b, 0.215 * b, 0.38, wc, 0, 0.35, 0),
-            cbox(0.012, 0.012, 0.008, btn, 0, 0.2, -0.116 * b),
-            cbox(0.012, 0.012, 0.008, btn, 0, 0.25, -0.118 * b),
-            cbox(0.012, 0.012, 0.008, btn, 0, 0.3, -0.12 * b),
-          );
-        }
-      }
-      if (fit.apron !== undefined) {
-        const ap = fit.apron;
-        torsoParts.push(
-          cbox(0.35 * b, 0.03, 0.214 * b, ap, 0, 0.13, 0), // cinta
-          cprism(0.34 * b, 0.016, 0.4 * b, 0.016, 0.68, ap, 0, -0.21, -0.118 * b), // delantal hasta debajo de la rodilla
-          cbox(0.13, 0.01, 0.006, trim(ap), 0.07, -0.12, -0.129 * b), // borde del bolsillo
-        );
-      }
-      if (fit.tastevin) {
-        // Catavinos de plata colgado de una cadena.
-        const silver = 0xc9cdd3;
-        const cup = new CylinderGeometry(0.03, 0.03, 0.012, 8);
-        cup.rotateX(HALF_PI);
-        cup.translate(0, 0.36, -0.135);
-        torsoParts.push(
-          cbox(0.006, 0.253, 0.006, silver, -0.02, 0.515, -0.132, 0.159),
-          cbox(0.006, 0.253, 0.006, silver, 0.02, 0.515, -0.132, -0.159),
-          paint(cup, silver),
-        );
-      }
-      if (o.vest) {
-        const plate = shade(c.accent, 0.62);
-        torsoParts.push(
-          cprism(0.45 * b, 0.3 * b, 0.37 * b, 0.27 * b, 0.33, c.accent, 0, 0.385, 0), // portaplacas
-          cbox(0.07, 0.1, 0.03, plate, -0.09, 0.3, -0.15 * b), // portacargadores
-          cbox(0.07, 0.1, 0.03, plate, 0, 0.3, -0.15 * b),
-          cbox(0.07, 0.1, 0.03, plate, 0.09, 0.3, -0.15 * b),
-          cbox(0.06, 0.1, 0.27 * b, plate, -0.14 * b, 0.6, 0), // tirantes
-          cbox(0.06, 0.1, 0.27 * b, plate, 0.14 * b, 0.6, 0),
-        );
-      }
-      return merge(torsoParts);
-    });
+    this.addMesh(this.torso, () => torsoGeometry(o));
 
     // --- Cabeza facetada (hueso propio): cráneo, pómulos, mandíbula marcada y rasgos mínimos ---
-    this.addMesh(this.head, () => {
-      const hy = -NECK_Y;
-      const dark = 0x0c0d10;
-      const jawColor = o.beard ? shade(c.hair, 1.1) : c.skin;
-      const wick = o.face === 'wick';
-      // Rostro de Keanu Reeves como John Wick, por bloques: cara alargada, pómulos altos, cejas rectas y
-      // gruesas que caen hacia fuera, ojos rasgados con el párpado caído y nariz larga y recta.
-      const wickFace = (): BufferGeometry[] => [
-        cprism(0.148, 0.17, 0.178, 0.198, 0.12, c.skin, 0, 0.875 + hy, 0), // cráneo
-        cprism(0.18, 0.196, 0.164, 0.184, 0.07, c.skin, 0, 0.78 + hy, 0), // pómulos altos
-        cprism(0.164, 0.184, 0.104, 0.12, 0.09, jawColor, 0, 0.7 + hy, -0.008), // mandíbula larga
-        cbox(0.06, 0.02, 0.024, c.hair, -0.044, 0.822 + hy, -0.093, -0.05), // cejas rectas y bajas: mirada seria
-        cbox(0.06, 0.02, 0.024, c.hair, 0.044, 0.822 + hy, -0.093, 0.05),
-        cbox(0.04, 0.009, 0.012, shade(c.skin, 0.72), -0.045, 0.811 + hy, -0.096, 0.06), // párpados
-        cbox(0.04, 0.009, 0.012, shade(c.skin, 0.72), 0.045, 0.811 + hy, -0.096, -0.06),
-        cbox(0.034, 0.011, 0.012, 0x1c1411, -0.045, 0.801 + hy, -0.096, 0.08), // ojos
-        cbox(0.034, 0.011, 0.012, 0x1c1411, 0.045, 0.801 + hy, -0.096, -0.08),
-        cprism(0.022, 0.018, 0.04, 0.044, 0.08, shade(c.skin, 0.92), 0, 0.775 + hy, -0.105), // nariz larga
-        cbox(0.02, 0.05, 0.035, shade(c.skin, 0.9), -0.092, 0.79 + hy, 0.005), // orejas
-        cbox(0.02, 0.05, 0.035, shade(c.skin, 0.9), 0.092, 0.79 + hy, 0.005),
-      ];
-      const headParts: BufferGeometry[] = wick
-        ? wickFace()
-        : [
-            cprism(0.15, 0.17, 0.186, 0.2, 0.12, c.skin, 0, 0.875 + hy, 0), // cráneo
-            cprism(0.186, 0.2, 0.172, 0.186, 0.07, c.skin, 0, 0.78 + hy, 0), // pómulos
-            cprism(0.172, 0.186, 0.105, 0.12, 0.08, jawColor, 0, 0.705 + hy, -0.008), // mandíbula
-            cbox(0.062, 0.016, 0.024, c.hair, -0.046, 0.824 + hy, -0.092, -0.16), // cejas fruncidas
-            cbox(0.062, 0.016, 0.024, c.hair, 0.046, 0.824 + hy, -0.092, 0.16),
-            cbox(0.036, 0.013, 0.012, dark, -0.046, 0.803 + hy, -0.096), // ojos
-            cbox(0.036, 0.013, 0.012, dark, 0.046, 0.803 + hy, -0.096),
-            cprism(0.026, 0.02, 0.042, 0.046, 0.062, shade(c.skin, 0.9), 0, 0.776 + hy, -0.106), // nariz
-            cbox(0.02, 0.05, 0.035, shade(c.skin, 0.9), -0.097, 0.79 + hy, 0.005), // orejas
-            cbox(0.02, 0.05, 0.035, shade(c.skin, 0.9), 0.097, 0.79 + hy, 0.005),
-          ];
-      if (o.beard && wick) {
-        // Barba corta y cerrada: bigote unido a la barba por las comisuras, mejillas, patillas y mentón.
-        headParts.push(
-          cbox(0.05, 0.008, 0.012, 0x2a1a14, 0, 0.716 + hy, -0.099), // boca
-          cbox(0.04, 0.01, 0.012, shade(c.skin, 0.8), 0, 0.707 + hy, -0.096), // labio inferior
-          cbox(0.068, 0.016, 0.016, jawColor, 0, 0.728 + hy, -0.1), // bigote
-          cbox(0.014, 0.032, 0.014, jawColor, -0.034, 0.712 + hy, -0.097), // comisuras
-          cbox(0.014, 0.032, 0.014, jawColor, 0.034, 0.712 + hy, -0.097),
-          cbox(0.03, 0.04, 0.012, jawColor, -0.058, 0.736 + hy, -0.093), // barba sobre las mejillas
-          cbox(0.03, 0.04, 0.012, jawColor, 0.058, 0.736 + hy, -0.093),
-          cbox(0.016, 0.085, 0.12, jawColor, -0.083, 0.73 + hy, -0.03), // patillas hasta la mandíbula
-          cbox(0.016, 0.085, 0.12, jawColor, 0.083, 0.73 + hy, -0.03),
-          cbox(0.066, 0.045, 0.03, jawColor, 0, 0.67 + hy, -0.068), // mentón
-        );
-      } else if (o.beard) {
-        headParts.push(
-          cbox(0.06, 0.012, 0.012, shade(c.skin, 0.6), 0, 0.726 + hy, -0.098), // boca
-          cbox(0.09, 0.02, 0.014, jawColor, 0, 0.745 + hy, -0.096), // bigote
-          cbox(0.018, 0.1, 0.12, jawColor, -0.088, 0.74 + hy, -0.025), // barba de las mejillas
-          cbox(0.018, 0.1, 0.12, jawColor, 0.088, 0.74 + hy, -0.025),
-          cbox(0.07, 0.04, 0.03, jawColor, 0, 0.68 + hy, -0.07), // mentón
-        );
-      } else {
-        headParts.push(cbox(0.056, 0.01, 0.012, shade(c.skin, 0.55), 0, 0.722 + hy, -0.092));
-        // Bigote encerado con las puntas hacia arriba.
-        if (o.outfit?.mustache)
-          headParts.push(cbox(0.042, 0.013, 0.016, c.hair, -0.022, 0.738 + hy, -0.1, -0.2), cbox(0.042, 0.013, 0.016, c.hair, 0.022, 0.738 + hy, -0.1, 0.2));
-      }
-      switch (o.hair) {
-        case 'parted':
-          // Media melena con raya al medio: cae a los lados de la cara y por detrás hasta el cuello.
-          headParts.push(
-            cprism(0.085, 0.19, 0.104, 0.214, 0.075, c.hair, -0.04, 0.91 + hy, 0.006, 0.14), // mitades de la raya
-            cprism(0.085, 0.19, 0.104, 0.214, 0.075, c.hair, 0.04, 0.91 + hy, 0.006, -0.14),
-            cbox(0.024, 0.11, 0.024, c.hair, -0.052, 0.885 + hy, -0.098, -0.6), // mechones sobre la frente
-            cbox(0.024, 0.11, 0.024, c.hair, 0.052, 0.885 + hy, -0.098, 0.6),
-            cbox(0.022, 0.2, 0.04, c.hair, -0.098, 0.785 + hy, -0.048, -0.04), // caída junto a las sienes, hasta la mandíbula
-            cbox(0.022, 0.2, 0.04, c.hair, 0.098, 0.785 + hy, -0.048, 0.04),
-            cbox(0.022, 0.21, 0.06, c.hair, -0.099, 0.795 + hy, -0.005, -0.05), // mechones sobre las orejas
-            cbox(0.022, 0.21, 0.06, c.hair, 0.099, 0.795 + hy, -0.005, 0.05),
-            cbox(0.022, 0.23, 0.065, c.hair, -0.104, 0.785 + hy, 0.052, -0.07), // mechones de detrás, algo más largos
-            cbox(0.022, 0.23, 0.065, c.hair, 0.104, 0.785 + hy, 0.052, 0.07),
-            cprism(0.2, 0.09, 0.18, 0.085, 0.25, c.hair, 0, 0.785 + hy, 0.085), // melena hasta el cuello
-            // Puntas a distinto largo: rompen el bloque, que es lo que más se ve desde la cámara.
-            cbox(0.066, 0.07, 0.05, c.hair, -0.062, 0.65 + hy, 0.112, 0.1),
-            cbox(0.07, 0.085, 0.055, c.hair, 0, 0.635 + hy, 0.112),
-            cbox(0.066, 0.07, 0.05, c.hair, 0.062, 0.65 + hy, 0.112, -0.1),
-          );
-          break;
-        case 'slick':
-          // Engominado hacia atrás: pegado al cráneo, con una onda sobre la frente y la nuca recogida.
-          headParts.push(
-            cprism(0.15, 0.17, 0.178, 0.208, 0.07, c.hair, 0, 0.915 + hy, 0.012),
-            cprism(0.12, 0.05, 0.15, 0.065, 0.035, c.hair, 0, 0.955 + hy, -0.058), // onda
-            cprism(0.18, 0.06, 0.16, 0.045, 0.12, c.hair, 0, 0.84 + hy, 0.075), // nuca
-            cbox(0.012, 0.07, 0.1, c.hair, -0.094, 0.855 + hy, 0.03),
-            cbox(0.012, 0.07, 0.1, c.hair, 0.094, 0.855 + hy, 0.03),
-          );
-          break;
-        case 'long':
-          // Melena peinada hacia atrás hasta el cuello, con dos mechones que enmarcan la cara.
-          headParts.push(
-            cprism(0.165, 0.19, 0.2, 0.215, 0.07, c.hair, 0, 0.9 + hy, 0.006),
-            cprism(0.1, 0.13, 0.165, 0.19, 0.025, c.hair, 0, 0.947 + hy, 0.012), // coronilla
-            cprism(0.2, 0.1, 0.13, 0.04, 0.26, c.hair, 0, 0.77 + hy, 0.085),
-            cbox(0.022, 0.19, 0.1, c.hair, -0.1, 0.8 + hy, 0.05),
-            cbox(0.022, 0.19, 0.1, c.hair, 0.1, 0.8 + hy, 0.05),
-            cbox(0.02, 0.13, 0.03, c.hair, -0.092, 0.825 + hy, -0.066, 0.1),
-            cbox(0.02, 0.13, 0.03, c.hair, 0.092, 0.825 + hy, -0.066, -0.1),
-          );
-          break;
-        case 'short':
-          headParts.push(
-            cprism(0.16, 0.185, 0.196, 0.212, 0.07, c.hair, 0, 0.905 + hy, 0.004),
-            cprism(0.196, 0.06, 0.18, 0.04, 0.12, c.hair, 0, 0.83 + hy, 0.085),
-            cbox(0.018, 0.07, 0.11, c.hair, -0.097, 0.845 + hy, 0.03),
-            cbox(0.018, 0.07, 0.11, c.hair, 0.097, 0.845 + hy, 0.03),
-          );
-          break;
-        case 'helmet':
-          headParts.push(
-            cprism(0.18, 0.2, 0.225, 0.245, 0.12, c.accent, 0, 0.895 + hy, 0.004),
-            cprism(0.225, 0.13, 0.21, 0.1, 0.09, c.accent, 0, 0.8 + hy, 0.06),
-            cbox(0.2, 0.04, 0.024, 0x0e1116, 0, 0.805 + hy, -0.1), // visor
-            cbox(0.012, 0.11, 0.014, 0x0e1116, -0.094, 0.755 + hy, -0.03), // barboquejo
-            cbox(0.012, 0.11, 0.014, 0x0e1116, 0.094, 0.755 + hy, -0.03),
-          );
-          break;
-        case 'cap':
-          headParts.push(
-            cprism(0.165, 0.19, 0.202, 0.218, 0.075, c.accent, 0, 0.9 + hy, 0.004),
-            cbox(0.17, 0.014, 0.11, shade(c.accent, 0.75), 0, 0.868 + hy, -0.15),
-            cprism(0.196, 0.05, 0.18, 0.04, 0.07, c.hair, 0, 0.83 + hy, 0.088),
-          );
-          break;
-        case 'bald':
-          break;
-      }
-      return merge(headParts);
-    });
+    this.addMesh(this.head, () => headGeometry(o));
     this.head.position.set(0, NECK_Y, 0);
     // Primero gira sobre la columna (compensa el giro del torso) y después cabecea.
     this.head.rotation.order = 'YXZ';
     this.torso.add(this.head);
 
     // --- Brazos: hombrera, brazo y antebrazo que se afinan, puño de camisa y mano con pulgar ---
-    const upperGeo = (): BufferGeometry =>
-      merge([
-        cprism(0.12 * b, 0.14 * b, 0.13 * b, 0.145 * b, 0.09, c.jacket, 0, 0.005, 0),
-        cprism(0.125 * b, 0.135 * b, 0.098 * b, 0.105 * b, 0.3, c.jacket, 0, -0.185, 0),
-      ]);
-    const foreGeo = (): BufferGeometry =>
-      merge([
-        cprism(0.102 * b, 0.108 * b, 0.08 * b, 0.086 * b, 0.26, c.jacket, 0, -0.125, -0.004),
-        cprism(0.07, 0.076, 0.066, 0.072, 0.026, c.shirt, 0, -0.264, -0.004),
-        cprism(0.046, 0.076, 0.038, 0.086, 0.095, c.skin, 0, HAND_Y - 0.008, -0.01),
-        cbox(0.02, 0.045, 0.026, c.skin, 0, HAND_Y + 0.012, -0.062),
-      ]);
+    const upperGeo = (): BufferGeometry => upperArmGeometry(o);
+    const foreGeo = (): BufferGeometry => forearmGeometry(o);
     this.armL.position.set(-0.285 * b, SHOULDER_Y, 0);
     this.armR.position.set(0.285 * b, SHOULDER_Y, 0);
     // El giro vertical del hombro (perfil con arma larga) va antes que la elevación y la apertura.
@@ -883,15 +193,9 @@ export class CharacterRig {
     this.foreR.add(this.weaponMount);
 
     // --- Piernas: muslo y espinilla que se afinan; el zapato va en su propio hueso (tobillo) ---
-    const thighGeo = (): BufferGeometry => cprism(0.168 * b, 0.185 * b, 0.128 * b, 0.14 * b, 0.48, c.pants, 0, -0.225, 0);
-    const shinGeo = (): BufferGeometry => cprism(0.128 * b, 0.14 * b, 0.104 * b, 0.114 * b, 0.42, c.pants, 0, -0.2, 0);
-    const footGeo = (): BufferGeometry =>
-      merge([
-        cbox(0.1 * b, 0.07, 0.11, c.shoes, 0, -FOOT_DROP + 0.035, 0.005), // talón
-        cprism(0.094 * b, 0.13, 0.1 * b, 0.17, 0.05, c.shoes, 0, -FOOT_DROP + 0.036, -0.125), // empeine
-        cprism(0.07 * b, 0.05, 0.09 * b, 0.07, 0.03, c.shoes, 0, -FOOT_DROP + 0.026, -0.235), // puntera
-        cbox(0.108 * b, 0.012, 0.325, 0x08080a, 0, -FOOT_DROP + 0.006, -0.1), // suela
-      ]);
+    const thighGeo = (): BufferGeometry => thighGeometry(o);
+    const shinGeo = (): BufferGeometry => shinGeometry(o);
+    const footGeo = (): BufferGeometry => footGeometry(o);
     this.thighL.position.set(-0.1 * b, 0, 0);
     this.thighR.position.set(0.1 * b, 0, 0);
     this.shinL.position.set(0, -0.46, 0);
