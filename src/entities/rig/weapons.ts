@@ -3,6 +3,18 @@ import { cbox, merge } from './geometry';
 import type { WeaponModel } from './types';
 
 /** Dónde agarra la mano izquierda cada arma, en el espacio del arma (cañón a −Z, arriba +Y). */
+/** Distancia (m) de la empuñadura a la cantonera de las armas que se encaran al hombro; 0 si no tienen culata. */
+export const STOCK: Record<WeaponModel, number> = {
+  rifle: 0.27,
+  dmr: 0.29,
+  smg: 0.18,
+  shotgun: 0.31,
+  shotgunTactical: 0.27,
+  pistol: 0,
+  revolver: 0,
+  knife: 0,
+  none: 0,
+};
 export const GRIP: Record<WeaponModel, readonly [number, number, number] | null> = {
   pistol: [-0.045, -0.035, -0.005],
   rifle: [0, -0.04, -0.4],

@@ -349,6 +349,28 @@ test.describe('Fase 1 · movimiento', () => {
     await page.screenshot({ path: shotPath('fase1-personaje-escaleras') });
   });
 
+  test('al apuntar con un arma larga, el cañón sigue la mira sin ladearse', async ({ page }) => {
+    await enterArena(page);
+    // El encare se calculaba con ángulos fijos y una corrección de muñeca: el arma se desviaba hasta 18° y se ladeaba 30°.
+    for (const pitch of [0, 0.3, -0.3]) {
+      const a = await page.evaluate((pitch) => {
+        const q = window.__EXCOM__!;
+        q.setManual(true);
+        q.releaseAll();
+        q.teleport(0, 0, 8, 0);
+        q.setLook(0, pitch);
+        q.press('weapon1');
+        q.step(40, {});
+        q.step(60, { aim: true });
+        return q.weaponAim()!;
+      }, pitch);
+      const expectedPitch = (pitch * 180) / Math.PI;
+      expect(Math.abs(a.yaw), `desvío horizontal con la mira a ${pitch} rad`).toBeLessThan(3);
+      expect(Math.abs(a.pitch - expectedPitch), `inclinación con la mira a ${pitch} rad`).toBeLessThan(3);
+      expect(Math.abs(a.roll), `ladeo con la mira a ${pitch} rad`).toBeLessThan(3);
+    }
+  });
+
   test('la silueta cabe en la cápsula que recibe los disparos, de pie y agachado', async ({ page }) => {
     await enterArena(page);
     for (const weapon of ['weapon2', 'weapon1'] as const) {

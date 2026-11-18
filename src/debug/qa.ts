@@ -124,6 +124,8 @@ export interface QaApi {
   player(): PlayerSnapshot | null;
   /** Altura real de la silueta del jugador con su pose actual (lenta: recorre la malla). */
   rigHeight(): number;
+  /** Arma del jugador respecto a su frente (grados): desvío horizontal del cañón, inclinación y ladeo. */
+  weaponAim(): { yaw: number; pitch: number; roll: number } | null;
   teleport(x: number, y: number, z: number, yaw: number): void;
   checkpoint(id: string): boolean;
   /** Ids de los checkpoints del nivel cargado. */
@@ -315,6 +317,7 @@ export function installQa(game: Game): void {
       game.stepManual(Math.max(0, Math.floor(n)));
     },
     rigHeight: () => game.session?.playerRig.silhouetteHeight() ?? 0,
+    weaponAim: () => game.session?.playerRig.weaponAim() ?? null,
     player: () => {
       const p = game.session?.player;
       if (!p) return null;

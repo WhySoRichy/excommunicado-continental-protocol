@@ -20,7 +20,7 @@ import { forearmGeometry, footGeometry, headGeometry, shinGeometry, thighGeometr
 import { acquire, merge, release, type SharedGeometry } from './rig/geometry';
 import { ANKLE_Y, ELBOW_Y, HAND_Y, HIP_CROUCH, HIP_KNEEL, HIP_SLIDE, HIP_STAND, NECK_Y, SHOULDER_Y, SPIN_Y } from './rig/skeleton';
 import type { RigColors, RigOptions, RigPose, WeaponModel } from './rig/types';
-import { GRIP, weaponGeometry } from './rig/weapons';
+import { GRIP, STOCK, weaponGeometry } from './rig/weapons';
 
 export { idlePose } from './rig/types';
 export type { HairStyle, Outfit, RigColors, RigOptions, RigPose, WeaponModel } from './rig/types';
@@ -31,6 +31,13 @@ const _local = new Matrix4();
 const _grip = new Vector3();
 const _hand = new Vector3();
 const _ikQ = new Quaternion();
+const _aim = new Vector3();
+const _pocket = new Vector3();
+const _zero = new Vector3();
+const _up = new Vector3(0, 1, 0);
+const _look = new Matrix4();
+const _qGun = new Quaternion();
+const _qFore = new Quaternion();
 const _bounds = new Box3();
 /** Esfera de recorte generosa (cubre volteretas, caídas y brazos extendidos). */
 const CULL_CENTER = new Vector3(0, 0.9, 0);
@@ -146,6 +153,16 @@ export class CharacterRig {
   private lsxS = 0;
   private lszS = 0;
   private lelS = 0;
+  // Brazo derecho y arma suavizados SIN la IK del encare (que se mezcla encima cada frame).
+  private rsxS = 0;
+  private rsyS = 0;
+  private rszS = 0;
+  private relS = 0;
+  private wristS = -Math.PI / 2;
+  /** 0..1 cuánto manda el encare (arma larga al hombro, mano derecha por IK). */
+  private shoulderK = 0;
+  private readonly armIkR: ArmReach = { elbow: 0, hy: 0, hz: 0 };
+  private readonly bulk: number;
   private opacity = 1;
   // Reutilizados cada frame (sin asignaciones en el bucle).
   private readonly stepL: FootStep = { along: 0, lift: 0 };
@@ -160,6 +177,7 @@ export class CharacterRig {
     this.rim = rim;
     const c = o.colors;
     const b = o.bulk ?? 1;
+    this.bulk = b;
 
     // --- Torso en V: pelvis, faldón, pecho, hombros rectos, cuello de camisa, solapas y corbata ---
     this.addMesh(this.torso, () => torsoGeometry(o));
@@ -554,10 +572,9 @@ export class CharacterRig {
         gLsx = 0.78;
         gLel = 0.42;
         gLsz = 0.52;
-        // Al hombro: codo abajo y abierto, el antebrazo sube hacia la empuñadura (la muñeca nivela el arma).
-        aRsx = 0.45 + 0.4 * p.aimPitch;
-        aRel = 2.15 + 0.6 * p.aimPitch;
-        // Apuntando, el codo derecho se abre: la culata queda en el hueco del hombro.
+        // Apuntando manda el encare (IK al final de update): estos ángulos solo guían la transición.
+        aRsx = 0.95 + 0.5 * p.aimPitch;
+        aRel = 0.62 + 0.5 * p.aimPitch;
         aRsz = -0.5;
         aLsx = 1.3 + 0.95 * p.aimPitch;
         aLel = 0.24;
@@ -603,8 +620,6 @@ export class CharacterRig {
       // Con el torso de perfil, el brazo derecho gira de vuelta para que el cañón siga la línea de mira.
       if (long) {
         rsy = BLADE_TORSO * bk * hold;
-        // La muñeca compensa lo que el antebrazo sube: el arma queda en la línea de mira.
-        wrist -= ak * hold * (aRsx + aRel - aimW);
       }
 
       // Retroceso: el arma salta y vuelve.
@@ -727,14 +742,39 @@ export class CharacterRig {
     this.lelS = s(this.lelS, lel);
     this.armL.rotation.set(this.lsxS, 0, this.lszS);
     this.foreL.rotation.x = this.lelS;
-    this.armR.rotation.x = s(this.armR.rotation.x, rsx);
-    this.armR.rotation.z = s(this.armR.rotation.z, rsz);
-    this.foreR.rotation.x = s(this.foreR.rotation.x, rel);
-    this.weaponMount.rotation.x = s(this.weaponMount.rotation.x, -HALF_PI + wrist);
+    const free = st === 'roll' || st === 'dead' || p.takedown >= 0 ? 0 : (1 - p.swap) * (1 - p.melee) * (1 - plantL) * (1 - kk);
+    this.rsxS = s(this.rsxS, rsx);
+    this.rsyS = s(this.rsyS, rsy * free);
+    this.rszS = s(this.rszS, rsz);
+    this.relS = s(this.relS, rel);
+    this.wristS = s(this.wristS, -HALF_PI + wrist);
+    this.armR.rotation.set(this.rsxS, this.rsyS, this.rszS);
+    this.foreR.rotation.set(this.relS, 0, 0);
+    this.weaponMount.rotation.set(this.wristS, 0, 0);
+    // Encare: con un arma larga apuntada manda el arma. La cantonera va al hueco del hombro derecho y el cañón
+    // sigue la línea de mira sin ladearse; la mano derecha alcanza la empuñadura por IK.
+    const stock = STOCK[model];
+    this.shoulderK = damp(this.shoulderK, stock > 0 && p.reload < 0 ? this.aimK * grip * free : 0, 14, dt);
+    if (this.shoulderK > 0.01) {
+      this.root.updateWorldMatrix(true, true);
+      const pitch = p.aimPitch + p.recoil * 0.06;
+      _aim.set(0, Math.sin(pitch), -Math.cos(pitch)).transformDirection(this.root.matrixWorld);
+      // Hueco del hombro (espacio del torso); la empuñadura queda una culata por delante, y el retroceso la empuja atrás.
+      _pocket.set(0.17 * this.bulk, SHOULDER_Y + 0.02, -0.06);
+      this.torso.localToWorld(_pocket).addScaledVector(_aim, stock - p.recoil * 0.03);
+      this.torso.worldToLocal(_pocket).sub(this.armR.position);
+      const ik = solveArm(_pocket.length(), -ELBOW_Y, -HAND_Y, this.armIkR);
+      _ikQ.setFromUnitVectors(_hand.set(0, ik.hy, ik.hz).normalize(), _pocket.normalize());
+      this.armR.quaternion.slerp(_ikQ, this.shoulderK);
+      this.foreR.rotation.x = lerp(this.relS, ik.elbow, this.shoulderK);
+      // El arma mira por donde se apunta: cañón (−Z del soporte) por la mira y su arriba hacia arriba.
+      this.foreR.updateWorldMatrix(true, false);
+      _qGun.setFromRotationMatrix(_look.lookAt(_zero, _aim, _up));
+      this.foreR.getWorldQuaternion(_qFore).invert().multiply(_qGun);
+      this.weaponMount.quaternion.slerp(_qFore, this.shoulderK);
+    }
     // Mano de apoyo: con el brazo derecho ya colocado, la izquierda va por IK al arma.
     const gripAt = GRIP[model];
-    const free = st === 'roll' || st === 'dead' || p.takedown >= 0 ? 0 : (1 - p.swap) * (1 - p.melee) * (1 - plantL) * (1 - kk);
-    this.armR.rotation.y = s(this.armR.rotation.y, rsy * free);
     this.gripK = damp(this.gripK, gripAt ? grip * free : 0, 14, dt);
     if (gripAt && this.gripK > 0.01) {
       this.torso.updateWorldMatrix(true, true);
@@ -764,6 +804,26 @@ export class CharacterRig {
    * Altura de la silueta sobre los pies con la pose actual: la malla deformada por el esqueleto.
    * Es cara (recorre todos los vértices); la usan las pruebas para comprobar que el cuerpo cabe en su cápsula.
    */
+  /**
+   * Cómo apunta el arma respecto al frente del personaje (grados): desvío del cañón en horizontal, inclinación
+   * del cañón y ladeo (giro sobre el propio cañón). La usan las pruebas del encare.
+   */
+  weaponAim(): { yaw: number; pitch: number; roll: number } {
+    this.root.updateWorldMatrix(true, true);
+    this.weaponMount.getWorldQuaternion(_qFore);
+    const barrel = _aim.set(0, 0, -1).applyQuaternion(_qFore);
+    const up = _pocket.set(0, 1, 0).applyQuaternion(_qFore);
+    const deg = 180 / Math.PI;
+    // Frente del personaje: −Z de la raíz.
+    const heading = Math.atan2(-barrel.x, -barrel.z) - this.root.rotation.y;
+    const yaw = Math.atan2(Math.sin(heading), Math.cos(heading)) * deg;
+    const pitch = Math.asin(clamp(barrel.y, -1, 1)) * deg;
+    // Ladeo: lo que el "arriba" del arma se sale del plano vertical que contiene al cañón.
+    const right = _hand.crossVectors(barrel, _up).normalize();
+    const roll = Math.asin(clamp(up.dot(right), -1, 1)) * deg;
+    return { yaw, pitch, roll };
+  }
+
   silhouetteHeight(): number {
     const body = this.meshes.find((m): m is SkinnedMesh => m instanceof SkinnedMesh);
     if (!body) return 0;
