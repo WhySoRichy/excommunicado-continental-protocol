@@ -5,6 +5,7 @@ test-results/
 playwright-report/
 blob-report/
 .vite/
+*.tsbuildinfo
 *.log
 .DS_Store
 Thumbs.db

@@ -1,6 +1,6 @@
 # Guía de desarrollo
 
-Todo lo necesario para retomar el proyecto desde cero, por una persona o por un asistente de programación. Léela entera antes de tocar código; después, [ARQUITECTURA.md](ARQUITECTURA.md) para el detalle técnico y [ROADMAP.md](ROADMAP.md) para saber qué hacer.
+Todo lo necesario para retomar el proyecto desde cero. Léela entera antes de tocar código; después, [ARQUITECTURA.md](ARQUITECTURA.md) para el detalle técnico y [ROADMAP.md](ROADMAP.md) para saber qué hacer.
 
 ## Puesta en marcha
 
