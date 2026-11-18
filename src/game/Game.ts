@@ -38,7 +38,7 @@ import { GAUNTLET_BLOCK } from '../missions/gauntlet';
 import { formatObjective } from '../missions/tutorial';
 import { MissionDirector, type MissionOutcome } from '../missions/MissionDirector';
 import { type MissionId, MISSIONS } from '../missions/types';
-import { loadRapier, QueryGroups, type Rapier } from '../physics/Physics';
+import { loadRapier, type Rapier } from '../physics/Physics';
 import { GameRenderer, type QualityPreset } from '../render/Renderer';
 import { type FatalText, hideBoot, setBootProgress, showFatal } from '../ui/boot';
 import { button, h } from '../ui/dom';
@@ -46,6 +46,7 @@ import { Hud, type HudData, type PromptSpec } from '../ui/Hud';
 import type { IntelView } from '../ui/Intel';
 import { type ResultsView, Screens } from '../ui/Screens';
 import { CameraRig, DEFAULT_CAMERA } from './CameraRig';
+import { checkCameraInvariants, checkCombatInvariants, checkPlayerInvariants, type QaInvariants } from './invariants';
 import { LevelSession } from './LevelSession';
 
 export interface GameOptions {
@@ -60,14 +61,6 @@ export interface GameOptions {
 }
 
 /** Contadores de invariantes de QA (deben quedar en 0). */
-export interface QaInvariants {
-  steps: number;
-  penetrations: number;
-  cameraInside: number;
-  cameraOccluded: number;
-  outOfBounds: number;
-  lastViolation: string;
-}
 
 const WEAPON_MODEL: Record<WeaponId, WeaponModel> = {
   carbine: 'rifle',
@@ -110,7 +103,6 @@ const LEVEL_LOAD_FAILED: FatalText = {
   reload: true,
 };
 
-const _head = new Vector3();
 const _feet = new Vector3();
 const _beacon = new Vector3();
 const _orbitTarget = new Vector3(0, 1, 0);
@@ -1101,8 +1093,8 @@ export class Game {
     }
     this.steps++;
     if (this.opts.qa) {
-      this.checkPlayerInvariants();
-      this.checkCombatInvariants();
+      checkPlayerInvariants(s, this.invariants);
+      this.combatInconsistencies += checkCombatInvariants(s, this.invariants);
     }
     if (s.combat.dead && this.fsm.controlling) this.onPlayerDeath();
     this.input.endStep();
@@ -1191,7 +1183,7 @@ export class Game {
     const p = s.player;
     p.renderFeet(alpha, _feet);
     this.camera.update({ feet: _feet, posture: p.posture, aiming: p.aiming, sprinting: p.sprinting, dt: realDt, zoom: s.combat.weapon.def.aimFov }, s.physics);
-    if (this.opts.qa) this.checkCameraInvariants();
+    if (this.opts.qa) checkCameraInvariants(s, this.camera, this.invariants);
     const rig = s.playerRig;
     rig.root.position.copy(_feet);
     const yaw = p.renderYaw(alpha);
@@ -1328,78 +1320,6 @@ export class Game {
     if (ctx.vault) return { key: lab('jump'), text: ctx.vault === 'vault' ? 'Saltar por encima' : 'Subir' };
     if (ctx.cover) return { key: lab('crouch'), text: ctx.cover === 'low' ? 'Cubrirse (cobertura baja)' : 'Cubrirse' };
     return null;
-  }
-
-  // =========================================================== QA
-  private checkPlayerInvariants(): void {
-    const s = this.session;
-    if (!s) return;
-    const inv = this.invariants;
-    inv.steps++;
-    const p = s.player;
-    if (p.penetration()) {
-      inv.penetrations++;
-      inv.lastViolation = `penetración en ${p.feet.x.toFixed(2)},${p.feet.y.toFixed(2)},${p.feet.z.toFixed(2)} (${p.state})`;
-    }
-    const b = s.data.bounds;
-    const f = p.feet;
-    if (f.x < b.min[0] - 0.5 || f.x > b.max[0] + 0.5 || f.z < b.min[2] - 0.5 || f.z > b.max[2] + 0.5 || f.y > b.max[1] + 2) {
-      inv.outOfBounds++;
-      inv.lastViolation = `fuera de límites en ${f.x.toFixed(2)},${f.y.toFixed(2)},${f.z.toFixed(2)}`;
-    }
-  }
-
-  /** Checklist ítem 7: ningún estado de combate inconsistente tras cualquier secuencia de acciones. */
-  private checkCombatInvariants(): void {
-    const s = this.session;
-    if (!s) return;
-    const c = s.combat;
-    const p = s.player;
-    for (const w of c.weapons.values()) {
-      const bad =
-        w.mag < 0 ||
-        w.mag > w.def.mag ||
-        w.reserve < 0 ||
-        Number.isNaN(w.reserve) ||
-        (w.reloading && !w.isGun) ||
-        (w.reloading && w.reloadT > w.reloadDur + 0.05);
-      if (bad) {
-        this.combatInconsistencies++;
-        this.invariants.lastViolation = `arma ${w.def.id} inconsistente: mag=${w.mag} reserva=${w.reserve} recargando=${w.reloading}`;
-      }
-    }
-    if (c.takedown && p.state !== 'locked' && !c.dead) {
-      this.combatInconsistencies++;
-      this.invariants.lastViolation = 'takedown activo sin jugador bloqueado';
-    }
-    if (!c.takedown && p.state === 'locked') {
-      this.combatInconsistencies++;
-      this.invariants.lastViolation = 'jugador bloqueado sin takedown';
-    }
-    if (c.dead !== (p.state === 'dead')) {
-      this.combatInconsistencies++;
-      this.invariants.lastViolation = `muerte desincronizada: combate=${c.dead} jugador=${p.state}`;
-    }
-    if (c.vitals.health < 0 || c.vitals.armor < 0 || c.vitals.health > c.vitals.maxHealth) {
-      this.combatInconsistencies++;
-      this.invariants.lastViolation = 'vitales fuera de rango';
-    }
-  }
-
-  private checkCameraInvariants(): void {
-    const s = this.session;
-    if (!s) return;
-    const inv = this.invariants;
-    const cam = this.camera.position;
-    if (s.physics.overlapsBall(cam, 0.1, QueryGroups.STATIC)) {
-      inv.cameraInside++;
-      inv.lastViolation = `cámara dentro de geometría en ${cam.x.toFixed(2)},${cam.y.toFixed(2)},${cam.z.toFixed(2)}`;
-    }
-    _head.copy(this.camera.pivot);
-    if (!s.physics.lineOfSight(cam, _head, QueryGroups.STATIC)) {
-      inv.cameraOccluded++;
-      inv.lastViolation = `jugador tapado desde la cámara en ${cam.x.toFixed(2)},${cam.y.toFixed(2)},${cam.z.toFixed(2)}`;
-    }
   }
 
   /** QA: avanza `n` pasos fijos de forma determinista (actualiza la cámara en cada paso). */
