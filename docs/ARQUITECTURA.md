@@ -112,6 +112,7 @@ Las transiciones válidas están declaradas y cualquier otra lanza un error: no 
 | Audio | Web Audio procedural, iniciado tras el primer gesto del usuario | Sin archivos ni licencias; cumple la política de autoplay |
 | Guardado | `localStorage` versionado y validado; partida (`excom.profile`) y ajustes (`excom.settings`) por separado | Un guardado corrupto se respalda y se empieza de cero sin romper el juego |
 | Pruebas | Vitest para la lógica pura; Playwright con `?qa=1` sobre un build de pruebas, separado del que se publica | Lo importante se verifica jugando de verdad, no solo con tests de funciones; la versión pública no lleva herramientas de prueba |
+| Seguridad | Política de seguridad de contenido (CSP) en un `<meta>` de los builds (`vite.config.ts`): scripts, estilos e imágenes solo del propio origen, `'wasm-unsafe-eval'` para el wasm de Rapier y nada de `eval` | GitHub Pages no permite cabeceras. Si alguien lograra inyectar HTML, el navegador no ejecutaría código ajeno; el smoke test falla ante cualquier bloqueo de la política |
 
 ## 5. Principios de render y robustez (R1–R7)
 
@@ -224,3 +225,4 @@ En el primer arranque el preset se elige según la GPU (las integradas de Intel,
 - El rendimiento en GPU integrada se estima con las medidas anteriores; no se probó en una integrada real.
 - El balance de precios y la dificultad no tienen pruebas con jugadores.
 - En CI el render es por software (~7 FPS): ahí solo se comprueban los presupuestos de escena, no los FPS.
+- GitHub Pages no permite cabeceras HTTP: la CSP va en un `<meta>`, que no admite `frame-ancestors`, así que otra web podría mostrar el juego dentro de un marco.

@@ -261,4 +261,12 @@ test.describe('Fase 6 · rendimiento', () => {
       ).toBe(false);
     }
   });
+
+  test('build público: con política de seguridad de contenido', async () => {
+    const html = readFileSync(join(process.cwd(), 'dist', 'index.html'), 'utf8');
+    // Vite escribe las comillas simples del atributo como entidades.
+    const csp = (/<meta http-equiv="Content-Security-Policy" content="([^"]+)"/.exec(html)?.[1] ?? '').replaceAll('&#39;', "'");
+    expect(csp, 'la CSP va en un <meta> del build público').toContain("script-src 'self' 'wasm-unsafe-eval'");
+    expect(csp).toContain("object-src 'none'");
+  });
 });

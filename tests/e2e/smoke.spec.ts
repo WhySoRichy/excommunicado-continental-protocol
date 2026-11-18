@@ -4,6 +4,12 @@ import { collectErrors, isCI, LUMINANCE_MIN, openGame, shotPath } from './helper
 test.describe('Fase 0 · smoke', () => {
   test('el build arranca sin errores, la escena es visible y F3 muestra FPS', async ({ page }) => {
     const errors = collectErrors(page);
+    // Registra todo lo que bloquee la política de seguridad de contenido del build.
+    await page.addInitScript(() => {
+      const w = window as Window & { cspViolations?: string[] };
+      w.cspViolations = [];
+      document.addEventListener('securitypolicyviolation', (e) => w.cspViolations?.push(`${e.effectiveDirective} ${e.blockedURI}`));
+    });
     await openGame(page);
 
     // Deja correr el bucle real ~1,5 s y mide FPS.
@@ -24,5 +30,7 @@ test.describe('Fase 0 · smoke', () => {
     await page.screenshot({ path: shotPath('fase0-arena-f3') });
 
     expect(errors).toEqual([]);
+    const csp = await page.evaluate(() => (window as Window & { cspViolations?: string[] }).cspViolations);
+    expect(csp, 'nada bloqueado por la política de seguridad de contenido').toEqual([]);
   });
 });
