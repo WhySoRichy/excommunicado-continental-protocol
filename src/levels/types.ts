@@ -219,7 +219,7 @@ export interface InteractableDef {
 export type ObjectiveKind = 'reach' | 'eliminate' | 'interact' | 'survive' | 'escape' | 'boss' | 'waves' | 'learn';
 
 /** Habilidades que enseña el tutorial (objetivos `learn`). */
-export type SkillId = 'move' | 'sprint' | 'vault' | 'slide' | 'dodge' | 'cover' | 'shoot' | 'reload' | 'switch' | 'focus' | 'takedown';
+export type SkillId = 'move' | 'sprint' | 'vault' | 'slide' | 'dodge' | 'cover' | 'shoulder' | 'shoot' | 'reload' | 'switch' | 'focus' | 'takedown';
 
 /** Objetivo de misión (se cumplen en orden). */
 export interface ObjectiveDef {

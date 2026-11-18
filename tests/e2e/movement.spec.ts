@@ -332,11 +332,14 @@ test.describe('Fase 1 · movimiento', () => {
     await frames(page, 0.3);
     await expect.poll(() => page.evaluate(() => window.__EXCOM__!.prompt())).toContain('Cubrirse');
     await page.screenshot({ path: shotPath('fase1-prompt-cover') });
-    // En cobertura alta, el aviso explica cómo asomarse/salir.
+    // En cobertura alta, el aviso explica cómo asomarse: lejos de un borde, que vayas a uno; junto a él, por qué lado.
     await page.evaluate(() => window.__EXCOM__!.step(2, { crouch: true }));
     await frames(page, 0.3);
-    await expect.poll(() => page.evaluate(() => window.__EXCOM__!.prompt())).toContain('Asomarse');
+    await expect.poll(() => page.evaluate(() => window.__EXCOM__!.prompt())).toContain('borde para asomarte');
     await page.screenshot({ path: shotPath('fase1-en-cobertura') });
+    await page.evaluate(() => window.__EXCOM__!.step(180, { moveX: 1 }));
+    await frames(page, 0.3);
+    await expect.poll(() => page.evaluate(() => window.__EXCOM__!.prompt())).toContain('Asomarse por la derecha');
     // Vista general del personaje y la cámara.
     await page.evaluate(() => {
       const q = window.__EXCOM__!;

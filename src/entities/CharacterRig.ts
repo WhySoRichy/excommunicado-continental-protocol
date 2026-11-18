@@ -174,6 +174,10 @@ export class CharacterRig {
   /** Giro e inclinación de la mirada de la cabeza sobre el torso (rad). */
   private readonly lookYawS: Spring = { x: 0, v: 0 };
   private readonly lookPitchS: Spring = { x: 0, v: 0 };
+  /** En cobertura alta o baja, y cuánto asomado por un borde (−1..1). */
+  private readonly coverHighS: Spring = { x: 0, v: 0 };
+  private readonly coverLowS: Spring = { x: 0, v: 0 };
+  private readonly peekS: Spring = { x: 0, v: 0 };
   /** Cadencia del último paso (pasos/s): al parar, el paso en curso se termina a ese ritmo. */
   private cadenceHz = 1.7;
   /** Dirección de la marcha respecto al frente (coseno y seno), suavizada. */
@@ -743,6 +747,29 @@ export class CharacterRig {
       rel = lerp(rel, 0.12, exec);
       rsz = lerp(rsz, -0.12, exec);
     }
+    // Cobertura. Alta: el cuerpo se arrima a la pared con el arma recogida; asomado por un borde, el torso se inclina
+    // hacia ese lado. Baja: más encogido y con la cabeza agachada; al apuntar por encima, se apoya sobre ella.
+    // Los brazos compensan la inclinación del torso para que la puntería no cambie.
+    const hk = this.blend(this.coverHighS, p.cover === 'high' ? 1 : 0, 10, dt);
+    const lk = this.blend(this.coverLowS, p.cover === 'low' ? 1 : 0, 10, dt);
+    const pk = spring(this.peekS, p.peek, 12, dt);
+    if (hk + lk > 0.001) {
+      const rest = 1 - ak;
+      const lean = (0.08 * hk + 0.16 * lk) * rest + 0.12 * lk * ak;
+      torsoX -= lean;
+      rsx += lean;
+      lsx += lean;
+      headX -= 0.14 * lk * rest;
+      if (armed && !knife) {
+        // Arma recogida contra el pecho, con los codos dentro (y lejos de la pared).
+        const tuck = (hk + lk) * rest;
+        rel += 0.35 * tuck;
+        rsx -= 0.2 * tuck;
+        lel += 0.3 * tuck;
+      }
+    }
+    // Un `torsoZ` positivo ladea el torso a la izquierda (visto desde detrás); asomado por la derecha, a la derecha.
+    torsoZ -= 0.22 * pk;
     // Mano izquierda apoyada (deslizamiento: detrás, en el suelo; vault: sobre el obstáculo).
     if (plantL > 0) {
       const sliding = st === 'slide';

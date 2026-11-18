@@ -121,6 +121,7 @@ export const practice: LevelData = {
       { id: 't-slide', kind: 'learn', skill: 'slide', text: 'Corriendo, pulsa {crouch} para deslizarte' },
       { id: 't-dodge', kind: 'learn', skill: 'dodge', text: 'Esquiva rodando con {dodge} (o doble {jump})' },
       { id: 't-cover', kind: 'learn', skill: 'cover', text: 'Pégate al muro alto y pulsa {crouch} para cubrirte', at: [4, 0, -4.2] },
+      { id: 't-shoulder', kind: 'learn', skill: 'shoulder', text: 'Cambia la cámara de hombro con {shoulder}: verás mejor por el lado izquierdo' },
       { id: 't-shoot', kind: 'learn', skill: 'shoot', text: 'En los carriles: apunta con {aim} y dispara con {fire}', at: [-14, 0, -7] },
       { id: 't-reload', kind: 'learn', skill: 'reload', text: 'Recarga con {reload}; vuelve a pulsar en la zona dorada' },
       { id: 't-switch', kind: 'learn', skill: 'switch', text: 'Cambia de arma con {weapon1}, {weapon2} o {weapon3}' },

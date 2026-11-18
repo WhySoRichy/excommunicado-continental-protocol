@@ -518,6 +518,7 @@ export class Game {
       session: s,
       block: id === 'gauntlet' ? GAUNTLET_BLOCK : undefined,
       label: (a) => this.input.label(a),
+      shoulderSwaps: () => this.camera.shoulderSwaps,
       hud: this.hud,
       audio: this.audio,
       profile: this.profile,
@@ -623,6 +624,7 @@ export class Game {
         { key: slots, text: 'Carabina · pistola · cuchillo' },
         { key: lab('takedown'), text: 'Takedown (cerca del enemigo)' },
         { key: lab('focus'), text: 'Foco: cámara lenta' },
+        { key: lab('shoulder'), text: 'Cambiar de hombro' },
         { key: lab('intel'), text: 'Intel (mantener)' },
         { key: lab('help'), text: 'Controles' },
       ]);
@@ -1141,6 +1143,8 @@ export class Game {
     if (!s) return;
     const p = s.player;
     p.renderFeet(alpha, _feet);
+    // Asomado por el borde de una cobertura, la cámara pasa al hombro de ese lado (sin contar como cambio del jugador).
+    this.camera.shoulderOverride = p.state === 'cover' ? (p.cover?.peekSide ?? 0) : 0;
     this.camera.update({ feet: _feet, posture: p.posture, aiming: p.aiming, sprinting: p.sprinting, dt: realDt, zoom: s.combat.weapon.def.aimFov }, s.physics);
     if (this.opts.qa) checkCameraInvariants(s, this.camera, this.invariants);
     const rig = s.playerRig;
@@ -1176,6 +1180,8 @@ export class Game {
     pose.swap = c.switchT > 0 ? Math.sin(swapT * Math.PI) : 0;
     pose.takedown = c.takedown ? c.takedown.t : -1;
     pose.vault = p.vaultProgress;
+    pose.cover = p.state === 'cover' && p.cover ? p.cover.height : 'none';
+    pose.peek = p.peekAmount;
     rig.update(pose, scaledDt);
     rig.setOpacity(this.camera.distanceToHead < 0.55 ? 0 : 1);
   }

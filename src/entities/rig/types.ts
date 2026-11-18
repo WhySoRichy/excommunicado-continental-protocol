@@ -1,4 +1,4 @@
-import type { MoveState, Posture } from '../PlayerController';
+import type { CoverHeight, MoveState, Posture } from '../PlayerController';
 
 /** Colores del personaje (low-poly con colores por vértice: 1 material por tipo). */
 export interface RigColors {
@@ -97,6 +97,10 @@ export interface RigPose {
   takedown: number;
   /** Progreso del vault 0..1 (−1 = sin dato: pose intermedia). */
   vault: number;
+  /** Cobertura en la que está ('none' fuera de ella). */
+  cover: CoverHeight | 'none';
+  /** Asomado por el borde de una cobertura alta: −1..1 (+ = por la derecha). */
+  peek: number;
 }
 
 export function idlePose(): RigPose {
@@ -123,5 +127,7 @@ export function idlePose(): RigPose {
     death: 0,
     takedown: -1,
     vault: -1,
+    cover: 'none',
+    peek: 0,
   };
 }

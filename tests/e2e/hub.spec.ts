@@ -84,7 +84,7 @@ test.describe('Fase 3 · El Continental', () => {
     expect(t0.objective).toContain('WASD');
     await page.evaluate(() => window.__EXCOM__!.skipTutorial());
     const m0 = await page.evaluate(() => window.__EXCOM__!.mission()!);
-    expect(m0.index).toBe(11);
+    expect(m0.index).toBe(12);
     expect(m0.objective).toContain('patio');
     expect(m0.beacon).not.toBeNull();
     expect(m0.markersTotal).toBe(3);
@@ -98,7 +98,8 @@ test.describe('Fase 3 · El Continental', () => {
       q.step(10, {});
       return { m: q.mission()!, enemies: q.enemies().filter((e) => e.alive).length };
     });
-    expect(m1.m.index).toBe(12);
+    expect(m1.m.index).toBe(m0.index + 1);
+    expect(m1.m.objective).toContain('maniquíes');
     expect(m1.enemies).toBe(6);
     expect(m1.m.respawn.z).toBeCloseTo(-11, 0);
     await page.screenshot({ path: shotPath('fase4-practica-objetivo') });

@@ -70,12 +70,12 @@ Cada contrato sigue el flujo **briefing** (3 líneas: objetivo, regla especial, 
 | Esquiva / voltereta | 0,5 s a 7,6 m/s con **i-frames de 0,05 a 0,36 s**; enfriamiento 0,35 s; en el aire es un "dive" (una vez por salto) |
 | Salto | 0,95 m de altura |
 | Vault | Con Espacio frente a obstáculos de 0,42 a 1,28 m de alto (a menos de 1 m) y hasta 1,6 m de fondo; si no hay espacio detrás, se sube encima |
-| Cobertura | C junto a una pared o caja. Te mueves pegado al borde y no te caes del final; al apuntar sales a disparar. Las balas del frente hacen −50 % de daño. Las coberturas bajas miden al menos 1,2 m: tapan a alguien agachado |
+| Cobertura | C junto a una pared o caja. Te mueves pegado a ella y no te caes del final. En una baja, al apuntar te incorporas por encima. En una alta solo se dispara desde un borde: al apuntar sales de lado lo justo para despejar la esquina (0,55 m por la derecha y 0,75 m por la izquierda, porque el arma va en la mano derecha), quedas expuesto y al soltar vuelves a la pared. Las balas del frente hacen −50 % de daño. Las coberturas bajas miden al menos 1,2 m: tapan a alguien agachado |
 | Levantarse | Solo si hay espacio sobre la cabeza (si no, sigues agachado: nunca quedas trabado en el techo) |
 
 **Cámara:**
-- Pivote en la cabeza, desplazado 0,7 m sobre el hombro (V cambia de hombro).
-- Distancia de 3,1 m (2,2 m al apuntar y 3,4 m corriendo). FOV de 68° por defecto (ajustable), un 30 % menos al apuntar.
+- Pivote en la cabeza, desplazado 0,7 m sobre el hombro. V cambia de hombro; asomado por el borde de una cobertura, la cámara pasa sola al hombro de ese lado.
+- Distancia de 3,1 m (2,7 m al apuntar y 3,4 m corriendo). FOV de 68° por defecto (ajustable), un 22 % menos al apuntar (el rifle de tirador tiene más aumento).
 - La colisión usa *sphere casts* de cabeza → hombro → cámara. Se acerca al instante si algo tapa y se aleja suavemente al despejarse.
 - El personaje se oculta si la cámara queda a menos de 0,55 m de la cabeza.
 
@@ -196,12 +196,13 @@ Hay cinco subnotas de 0 a 100: **tiempo** (frente al par), **precisión** (impac
   4. Deslizarse.
   5. Esquivar.
   6. Cubrirse tras el muro alto.
-  7. Apuntar y disparar en los carriles.
-  8. Recargar (con la recarga perfecta explicada).
-  9. Cambiar de arma.
-  10. Activar el Foco.
-  11. Takedown a un maniquí aturdido.
-  12. Bajar al patio y eliminar a los 6 maniquíes armados.
+  7. Cambiar la cámara de hombro.
+  8. Apuntar y disparar en los carriles.
+  9. Recargar (con la recarga perfecta explicada).
+  10. Cambiar de arma.
+  11. Activar el Foco.
+  12. Takedown a un maniquí aturdido.
+  13. Bajar al patio y eliminar a los 6 maniquíes armados.
 - **HUD siempre legible:**
   - Objetivo arriba y baliza dorada en el mundo con la distancia (flecha en el borde si está fuera de pantalla).
   - Abajo a la izquierda: integridad (armadura y salud) y marcadores.

@@ -119,9 +119,12 @@ export function contextPrompt(s: LevelSession, i: PromptInput): PromptSpec | nul
   }
   if (s.combat.takedownCandidate(s.ctx)) return { key: lab('takedown'), text: 'Takedown' };
   if (p.state === 'cover' && p.cover) {
-    return p.cover.height === 'low'
-      ? { key: `${lab('aim')} / ${lab('jump')}`, text: 'Asomarse · saltar por encima  ·  C: salir' }
-      : { key: lab('aim'), text: 'Asomarse  ·  C: salir de cobertura' };
+    const leave = `${lab('crouch')}: salir`;
+    if (p.cover.height === 'low') return { key: `${lab('aim')} / ${lab('jump')}`, text: `Asomarse por encima · saltarla  ·  ${leave}` };
+    // En la alta solo se asoma desde un borde.
+    const side = p.cover.peekSide || p.cover.edgeNear;
+    if (side !== 0) return { key: lab('aim'), text: `Asomarse por la ${side < 0 ? 'izquierda' : 'derecha'}  ·  ${leave}` };
+    return { key: `${lab('moveLeft')} / ${lab('moveRight')}`, text: `Ve hasta un borde para asomarte  ·  ${leave}` };
   }
   const ctx = p.peekContext(i.yaw, i.moveX, i.moveY);
   if (ctx.vault) return { key: lab('jump'), text: ctx.vault === 'vault' ? 'Saltar por encima' : 'Subir' };

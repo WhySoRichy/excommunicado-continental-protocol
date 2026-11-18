@@ -105,7 +105,21 @@ export interface CoverInfo {
   height: CoverHeight;
   /** −1/0/+1: en qué borde está detenido (0 = ninguno). */
   edge: number;
+  /** −1/0/+1: borde de una cobertura alta al alcance para asomarse (según se mira la pared: −1 izquierda). */
+  edgeNear: number;
+  /** Lado por el que está asomado (−1/+1) o 0; se mantiene mientras vuelve a la pared. */
+  peekSide: number;
+  /** Cuánto ha salido de lado al asomarse (m, con signo: + derecha). */
+  peekOffset: number;
 }
+
+/**
+ * Asomarse por el borde de una cobertura alta: cuánto sale de lado (m) y a qué velocidad máxima (m/s). Por la
+ * izquierda sale más porque el arma va en la mano derecha y tiene que despejar la esquina.
+ */
+const PEEK_OUT_RIGHT = 0.55;
+const PEEK_OUT_LEFT = 0.75;
+const PEEK_SPEED = 4;
 
 export interface PlayerMoveStats {
   jumps: number;
@@ -772,7 +786,7 @@ export class PlayerController {
     const dir = wishLen > 0.3 ? _tmp2.copy(_wish) : yawForward(it.camYaw, _tmp2);
     if (!this.probeCover(dir, MOVE.coverProbe)) return false;
     const p = this.coverProbe;
-    this.cover = { normal: new Vector3(p.nx, 0, p.nz), height: p.height, edge: 0 };
+    this.cover = { normal: new Vector3(p.nx, 0, p.nz), height: p.height, edge: 0, edgeNear: 0, peekSide: 0, peekOffset: 0 };
     if (p.height === 'low') this.setPosture('crouch');
     this.velocity.set(0, 0, 0);
     this.stats.coverEnters++;
@@ -824,33 +838,47 @@ export class PlayerController {
       }
     }
 
-    // ¿Sigue habiendo pared aquí?
+    let vt = 0;
+    let vn = 0;
     _tmp2.set(-n.x, 0, -n.z);
-    if (!this.probeCover(_tmp2, MOVE.coverProbe + 0.2)) {
-      this.exitCover();
-      return;
-    }
-    const here = this.coverProbe;
-    // Sigue paredes ligeramente curvas.
-    n.set(n.x * 0.7 + here.nx * 0.3, 0, n.z * 0.7 + here.nz * 0.3).normalize();
-    c.height = here.height;
-
-    // Borde: mira por delante en la dirección del movimiento lateral.
-    let vt = along * MOVE.cover * this.speedMultiplier;
-    c.edge = 0;
-    if (Math.abs(along) > 0.1) {
-      const s = Math.sign(along);
-      const look = PLAYER_RADIUS * 0.9 + Math.abs(vt) * dt;
-      const ph = this.physics;
-      _probe.set(this.feet.x + tx * s * look, this.feet.y + 0.45, this.feet.z + tz * s * look);
-      if (!ph.raycast(_probe, _tmp2, here.dist + 0.35, QueryGroups.STATIC, this.hit, this.char.collider)) {
-        vt = 0;
-        c.edge = s;
+    // Asomado, la pared queda a un lado: se sigue en cobertura hasta volver a ella.
+    if (c.peekSide === 0) {
+      // ¿Sigue habiendo pared aquí?
+      if (!this.probeCover(_tmp2, MOVE.coverProbe + 0.2)) {
+        this.exitCover();
+        return;
       }
+      const here = this.coverProbe;
+      // Sigue paredes ligeramente curvas.
+      n.set(n.x * 0.7 + here.nx * 0.3, 0, n.z * 0.7 + here.nz * 0.3).normalize();
+      c.height = here.height;
+
+      // Borde: mira por delante en la dirección del movimiento lateral.
+      vt = along * MOVE.cover * this.speedMultiplier;
+      c.edge = 0;
+      if (Math.abs(along) > 0.1) {
+        const s = Math.sign(along);
+        const look = PLAYER_RADIUS * 0.9 + Math.abs(vt) * dt;
+        _probe.set(this.feet.x + tx * s * look, this.feet.y + 0.45, this.feet.z + tz * s * look);
+        if (!this.physics.raycast(_probe, _tmp2, here.dist + 0.35, QueryGroups.STATIC, this.hit, this.char.collider)) {
+          vt = 0;
+          c.edge = s;
+        }
+      }
+      c.edgeNear = c.height === 'high' ? this.coverEdgeNear(tx, tz, here.dist, it.camYaw) : 0;
+      // Pegado a la pared a distancia constante.
+      const gap = here.dist - PLAYER_RADIUS - MOVE.coverGap;
+      vn = clamp(gap * 12, -2, 3);
     }
-    // Pegado a la pared a distancia constante.
-    const gap = here.dist - PLAYER_RADIUS - MOVE.coverGap;
-    const vn = clamp(gap * 12, -2, 3);
+
+    // Asomarse por el borde (cobertura alta): al apuntar junto a un borde sale de lado lo justo para despejar la
+    // esquina y queda expuesto; al soltar, vuelve a la pared.
+    if (c.peekSide === 0 && this.aiming && c.edgeNear !== 0) c.peekSide = c.edgeNear;
+    if (c.peekSide !== 0) {
+      const out = this.aiming ? c.peekSide * (c.peekSide < 0 ? PEEK_OUT_LEFT : PEEK_OUT_RIGHT) : 0;
+      vt = clamp((out - c.peekOffset) * 14, -PEEK_SPEED, PEEK_SPEED);
+      vn = 0;
+    }
     this.velocity.x = tx * vt - n.x * vn;
     this.velocity.z = tz * vt - n.z * vn;
     this.velocity.y = 0;
@@ -863,7 +891,39 @@ export class PlayerController {
     if (!this.grounded) {
       this.exitCover();
       this.setState('air');
+      return;
     }
+    if (c.peekSide !== 0) {
+      c.peekOffset += (this.feet.x - this.prevFeet.x) * tx + (this.feet.z - this.prevFeet.z) * tz;
+      if (!this.aiming && Math.abs(c.peekOffset) < 0.01) {
+        c.peekSide = 0;
+        c.peekOffset = 0;
+      }
+    }
+  }
+
+  /**
+   * Borde de una cobertura alta al alcance para asomarse: a cada lado, un poco más allá del hombro y a la altura del
+   * pecho, ¿sigue la pared? Si se acaba por los dos lados (una columna), gana el lado hacia el que mira la cámara.
+   */
+  private coverEdgeNear(tx: number, tz: number, dist: number, camYaw: number): number {
+    const reach = PLAYER_RADIUS * 0.9 + 0.12;
+    const right = this.wallEndsAt(tx * reach, tz * reach, dist);
+    const left = this.wallEndsAt(-tx * reach, -tz * reach, dist);
+    if (right && left) return -Math.sin(camYaw) * tx - Math.cos(camYaw) * tz >= 0 ? 1 : -1;
+    return right ? 1 : left ? -1 : 0;
+  }
+
+  private wallEndsAt(dx: number, dz: number, dist: number): boolean {
+    _probe.set(this.feet.x + dx, this.feet.y + 1.3, this.feet.z + dz);
+    return !this.physics.raycast(_probe, _tmp2, dist + 0.35, QueryGroups.STATIC, this.hit, this.char.collider);
+  }
+
+  /** Cuánto está asomado por el borde de una cobertura: −1..1 (+ = por la derecha). Lo usa la animación. */
+  get peekAmount(): number {
+    const c = this.state === 'cover' ? this.cover : null;
+    if (!c || c.peekOffset === 0) return 0;
+    return clamp(c.peekOffset / (c.peekOffset < 0 ? PEEK_OUT_LEFT : PEEK_OUT_RIGHT), -1, 1);
   }
 
   // ---------------------------------------------------------------------

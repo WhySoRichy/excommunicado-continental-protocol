@@ -67,6 +67,10 @@ export class CameraRig {
   settings: CameraSettings = { ...DEFAULT_CAMERA };
   /** +1 hombro derecho, −1 izquierdo. */
   shoulderSide = 1;
+  /** Veces que el jugador ha cambiado de hombro (lo cuenta el tutorial). */
+  shoulderSwaps = 0;
+  /** Hombro impuesto por el juego (±1, 0 = el que elija el jugador): al asomarse por un borde, el de ese lado. */
+  shoulderOverride = 0;
   readonly position = new Vector3();
   /** Punto de pivote (cabeza) del último frame. */
   readonly pivot = new Vector3();
@@ -108,6 +112,7 @@ export class CameraRig {
 
   toggleShoulder(): void {
     this.shoulderSide *= -1;
+    this.shoulderSwaps++;
   }
 
   addTrauma(v: number): void {
@@ -140,7 +145,7 @@ export class CameraRig {
     this.recover(dt);
     this.aimK = damp(this.aimK, f.aiming ? 1 : 0, 14, dt);
     this.aimFovFactor = f.zoom ?? AIM_FOV_FACTOR;
-    this.shoulderCur = damp(this.shoulderCur, this.shoulderSide, 10, dt);
+    this.shoulderCur = damp(this.shoulderCur, this.shoulderOverride || this.shoulderSide, 10, dt);
     this.pivotH = damp(this.pivotH, f.posture === 'crouch' ? PIVOT_CROUCH : PIVOT_STAND, 12, dt);
 
     _head.set(f.feet.x, f.feet.y + this.pivotH, f.feet.z);

@@ -5,10 +5,12 @@ Qué se puede mejorar y en qué orden. Cada bloque está pensado para una sesió
 ## Estado actual
 
 - Hub, tutorial, tres contratos y Gauntlet completos y jugables de principio a fin.
-- Personajes procedurales de diseño facetado (sombreado plano, torso en V, rasgos mínimos) y animación procedural con IK de piernas y de la mano de apoyo, pies articulados, reacciones de impacto, caídas variadas, vault en tres tiempos y takedown coreografiado (`src/entities/CharacterRig.ts`).
+- Personajes procedurales de diseño facetado (sombreado plano, torso en V, rasgos mínimos) y animación procedural con IK de piernas y de la mano de apoyo, pies articulados, reacciones de impacto, caídas variadas, vault en tres tiempos, takedown coreografiado y tajo de cuchillo en tres tiempos (`src/entities/CharacterRig.ts`). Las cabezas miran: los enemigos siguen al jugador con la vista y se inclinan hacia él al apuntar, los guardias vigilan a un lado y a otro, los NPC del vestíbulo te siguen con la mirada y el Huésped mira hacia donde apunta la cámara.
+- Animación sin tirones, medida articulación por articulación: las transiciones (agacharse, apuntar, arrancar, parar) van con muelles críticos, la zancada termina el paso al parar, el cuerpo gira con suavidad aunque la simulación gire en seco y la rodilla ya no frena de golpe al estirarse. Se corrigió además un enganchón del movimiento: al correr se perdía uno de cada 20 o 30 pasos de simulación.
+- Cobertura completa: pose propia en la alta y en la baja, asomarse de verdad por los bordes de la alta (el disparo sale de ahí y quedas expuesto) con cambio automático de hombro, y el cambio de hombro con V explicado en el tutorial.
 - Rediseño con más detalle dentro del estilo de bloques: el Huésped con los rasgos de Keanu Reeves (traje de tres piezas, media melena con raya al medio y barba), el Sommelier (camisa, chaleco, pajarita, delantal y catavinos), ocho modelos de arma y proyectiles más vistosos (trazadoras que viajan, fogonazo en estrella y casquillos de latón). Los personajes admiten prendas opcionales y rostros (`Outfit` y `FaceStyle` en `src/entities/rig/types.ts`).
 - Dirección de arte nocturna: cielo con silueta de ciudad en los exteriores, vestíbulo del Continental con papel pintado y damero de mármol, bloom y viñeta desde el preset Medio.
-- 169 pruebas unitarias y 53 e2e; CI y despliegue automático en GitHub Pages.
+- 189 pruebas unitarias y 54 e2e; CI y despliegue automático en GitHub Pages.
 - Arsenal ampliado: el revólver «Juez» y el rifle de tirador «Meridian» (con mira de aumento) se compran en la armería, y cada tecla de arma recorre su grupo.
 - El Gauntlet ya no se degrada con las oleadas: los caídos se retiran al empezar la siguiente y un cuerpo asentado deja de simularse y animarse. Tras doce oleadas, 81 draw calls (antes unas 400). Además, los personajes de igual aspecto comparten la geometría: un enemigo que aparece ya no construye ni sube a la GPU un cuerpo nuevo.
 - Primera pasada de robustez tras revisar el juego entero, jugándolo y midiendo: el mapa de sombras se libera al cambiar de nivel, el combate con el Juez se reinicia al reaparecer, un nivel que no se descarga se explica en pantalla, el audio posicional sigue a la cámara en Firefox, abrir el juego sin empezar no crea partida y la voltereta suena.
@@ -34,10 +36,10 @@ Lo que quedó pendiente de esa revisión. Conviene hacerlo antes del cuarto cont
 ## Prioridad alta: lo que más se nota al jugar
 
 ### 1. Pulido de animación
-La tercera pasada está completa: mano izquierda con IK sobre el arma, pies como hueso propio (suela plana, puntillas al agacharse, talón al deslizarse), vault con tiempos reales y takedown coreografiado. Queda como pulido:
+La cuarta pasada está completa: encare de las armas largas por IK, tajo de cuchillo propio (se arma junto a la oreja y corta en diagonal cruzando el cuerpo), cabezas que miran a su objetivo con independencia del torso, transiciones sin tirones y poses de cobertura. Queda como pulido:
 - **Muñecas y dedos**: la mano es un bloque rígido; no rodea el guardamanos ni la empuñadura.
-- **Cabeza que mira al objetivo** en enemigos y NPC, independiente del torso.
-- **Transiciones del cuerpo a cuerpo** con cuchillo, que hoy reutilizan el barrido genérico.
+- **Sacudida del Huésped al recibir un impacto**: los enemigos ya la tienen (`RigPose.flinch`), pero el jugador no la usa.
+- **Civiles que miran**: bailan, huyen y se esconden sin volver nunca la cabeza hacia el tiroteo.
 - Cómo comprobarlo: `npm run poses` genera capturas de perfil de cada pose en `qa-screenshots/poses/`.
 
 ### 2. Sensación de combate

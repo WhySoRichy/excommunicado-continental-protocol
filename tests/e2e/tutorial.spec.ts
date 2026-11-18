@@ -111,9 +111,27 @@ test.describe('Fase 5 · tutorial', () => {
       q.step(10, {});
     });
     seen.push(m.objective);
-    // 7 · Apuntar y disparar 3 veces en los carriles (salir de la cobertura antes).
+    // 7 · Cambiar de hombro. La V la atiende el bucle de fotogramas, no el paso fijo: se espera a que la cámara
+    // pase al lado izquierdo antes de avanzar la simulación.
     m = await at();
     expect(m.index).toBe(6);
+    expect(m.objective).toContain('V');
+    await page.evaluate(() => window.__EXCOM__!.press('shoulder'));
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const q = window.__EXCOM__!;
+          const c = q.camera();
+          const p = q.player()!;
+          return (c.x - p.x) * Math.cos(c.yaw) - (c.z - p.z) * Math.sin(c.yaw);
+        }),
+      )
+      .toBeLessThan(0);
+    await page.evaluate(() => window.__EXCOM__!.step(5, {}));
+    seen.push(m.objective);
+    // 8 · Apuntar y disparar 3 veces en los carriles (salir de la cobertura antes).
+    m = await at();
+    expect(m.index).toBe(7);
     await page.evaluate(() => {
       const q = window.__EXCOM__!;
       q.step(1, { crouch: true });
@@ -127,9 +145,9 @@ test.describe('Fase 5 · tutorial', () => {
     });
     await page.screenshot({ path: shotPath('fase5-tutorial-carriles') });
     seen.push(m.objective);
-    // 8 · Recargar · 9 · Cambiar de arma · 10 · Foco.
+    // 9 · Recargar · 10 · Cambiar de arma · 11 · Foco.
     m = await at();
-    expect(m.index).toBe(7);
+    expect(m.index).toBe(8);
     expect(m.objective).toContain('R');
     await page.evaluate(() => {
       const q = window.__EXCOM__!;
@@ -138,7 +156,7 @@ test.describe('Fase 5 · tutorial', () => {
     });
     seen.push(m.objective);
     m = await at();
-    expect(m.index).toBe(8);
+    expect(m.index).toBe(9);
     await page.evaluate(() => {
       const q = window.__EXCOM__!;
       q.step(150, {});
@@ -147,7 +165,7 @@ test.describe('Fase 5 · tutorial', () => {
     });
     seen.push(m.objective);
     m = await at();
-    expect(m.index).toBe(9);
+    expect(m.index).toBe(10);
     expect(m.objective).toContain('Q');
     await page.evaluate(() => {
       const q = window.__EXCOM__!;
@@ -157,9 +175,9 @@ test.describe('Fase 5 · tutorial', () => {
       q.step(5, {});
     });
     seen.push(m.objective);
-    // 11 · Takedown al maniquí aturdido (aparece con su paso y tiene baliza).
+    // 12 · Takedown al maniquí aturdido (aparece con su paso y tiene baliza).
     m = await at();
-    expect(m.index).toBe(10);
+    expect(m.index).toBe(11);
     const dummy = await page.evaluate(() => window.__EXCOM__!.enemies().find((e) => e.id.startsWith('tut-dummy'))!);
     expect(dummy.alive).toBe(true);
     expect(dummy.state).toBe('stunned');
@@ -176,7 +194,7 @@ test.describe('Fase 5 · tutorial', () => {
     );
     seen.push(m.objective);
     m = await at();
-    expect(m.index).toBe(11);
+    expect(m.index).toBe(12);
     expect(m.objective).toContain('patio');
     // El reloj del rango empieza aquí (como mucho, lo que quedaba de los 90 pasos del takedown).
     const scored = await page.evaluate(() => window.__EXCOM__!.mission()!.time);
@@ -208,7 +226,7 @@ test.describe('Fase 5 · tutorial', () => {
     await page.getByRole('button', { name: 'Saltar tutorial' }).click();
     await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('playing');
     const m = await page.evaluate(() => window.__EXCOM__!.mission()!);
-    expect(m.index).toBe(11);
+    expect(m.index).toBe(12);
     expect(m.objective).toContain('patio');
     expect(m.beacon).not.toBeNull();
     expect(await page.evaluate(() => window.__EXCOM__!.enemies().length)).toBe(0);

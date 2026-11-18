@@ -40,6 +40,8 @@ export interface MissionDirectorDeps {
   block?: MissionBlock;
   /** Etiqueta de la tecla asignada a una acción (textos del tutorial). */
   label?: (a: Action) => string;
+  /** Cambios de hombro de la cámara hechos por el jugador (tutorial). */
+  shoulderSwaps?: () => number;
   hud: Hud;
   audio: AudioEngine;
   profile: Profile;
@@ -168,6 +170,7 @@ export class MissionDirector {
     out.rolls = p.rolls;
     out.dives = p.dives;
     out.coverEnters = p.coverEnters;
+    out.shoulderSwaps = this.d.shoulderSwaps?.() ?? 0;
     out.shotsFired = c.shotsFired;
     out.reloads = c.reloads;
     out.switches = c.switches;

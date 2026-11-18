@@ -14,6 +14,7 @@ export interface SkillCounters {
   rolls: number;
   dives: number;
   coverEnters: number;
+  shoulderSwaps: number;
   shotsFired: number;
   reloads: number;
   switches: number;
@@ -31,6 +32,7 @@ export function emptyCounters(): SkillCounters {
     rolls: 0,
     dives: 0,
     coverEnters: 0,
+    shoulderSwaps: 0,
     shotsFired: 0,
     reloads: 0,
     switches: 0,
@@ -48,6 +50,7 @@ export function copyCounters(from: SkillCounters, to: SkillCounters): SkillCount
   to.rolls = from.rolls;
   to.dives = from.dives;
   to.coverEnters = from.coverEnters;
+  to.shoulderSwaps = from.shoulderSwaps;
   to.shotsFired = from.shotsFired;
   to.reloads = from.reloads;
   to.switches = from.switches;
@@ -64,6 +67,7 @@ export const SKILL_GOAL: Record<SkillId, number> = {
   slide: 1,
   dodge: 1,
   cover: 1,
+  shoulder: 1,
   shoot: 3,
   reload: 1,
   switch: 1,
@@ -85,6 +89,8 @@ export function skillCount(skill: SkillId, c: SkillCounters): number {
       return c.rolls + c.dives;
     case 'cover':
       return c.coverEnters;
+    case 'shoulder':
+      return c.shoulderSwaps;
     case 'shoot':
       return c.shotsFired;
     case 'reload':

@@ -1,11 +1,12 @@
 import { Vector3 } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { PlayerCombat } from '../../src/combat/PlayerCombat';
 import { FIXED_DT } from '../../src/core/Loop';
 import { Rng } from '../../src/core/rng';
 import { emptyIntent, MOVE, PlayerController, type PlayerIntent } from '../../src/entities/PlayerController';
 import { arena } from '../../src/levels/data/arena';
 import { buildLevelPhysics } from '../../src/levels/levelPhysics';
-import { loadRapier, PhysicsWorld, type Rapier } from '../../src/physics/Physics';
+import { createRayHit, loadRapier, PhysicsWorld, QueryGroups, type Rapier } from '../../src/physics/Physics';
 
 /**
  * Checklist anti-bugs de movimiento sobre el mundo Rapier REAL de la arena de pruebas.
@@ -267,6 +268,46 @@ describe('Movimiento · vault, mantle y cobertura', () => {
     expect(ctx.p.feet.x).toBeGreaterThan(1.0);
     run(ctx, 1 / 60, () => ({ camYaw: NORTH, crouchPressed: true }));
     expect(ctx.p.state).toBe('ground');
+    expectClean(ctx);
+  });
+
+  /** ¿Sale limpio un disparo hacia el norte desde la boca del arma (la misma que usa el combate)? */
+  function muzzleClear(ctx: Ctx): boolean {
+    const muzzle = new PlayerCombat(new Set()).muzzleOf(ctx.p, true, new Vector3());
+    return !ctx.physics.raycast(muzzle, new Vector3(0, 0, -1), 3, QueryGroups.STATIC, createRayHit(), ctx.p.collider);
+  }
+
+  it.each([
+    ['derecho', 1],
+    ['izquierdo', -1],
+  ])('cobertura alta: apuntando junto al borde %s se asoma, dispara despejado y al soltar vuelve', (_n, side) => {
+    const ctx = setup(0, 0, -3.4, NORTH);
+    run(ctx, 1 / 60, () => ({ camYaw: NORTH, crouchPressed: true }));
+    run(ctx, 3, () => ({ moveX: side, camYaw: NORTH }));
+    run(ctx, 0.2, () => ({ camYaw: NORTH }));
+    const atEdge = ctx.p.feet.x;
+    expect(ctx.p.cover?.edgeNear).toBe(side);
+    expect(muzzleClear(ctx), 'pegado a la pared, el disparo da en el muro').toBe(false);
+    run(ctx, 0.5, () => ({ camYaw: NORTH, aim: true }));
+    expect(ctx.p.state).toBe('cover');
+    expect(ctx.p.cover?.peekSide).toBe(side);
+    // El muro acaba en x = ±1,5: el cuerpo queda fuera de la esquina y expuesto.
+    expect(ctx.p.feet.x * side).toBeGreaterThan(1.5 + 0.1);
+    expect(muzzleClear(ctx), 'asomado, el disparo sale limpio').toBe(true);
+    run(ctx, 0.6, () => ({ camYaw: NORTH }));
+    expect(ctx.p.state).toBe('cover');
+    expect(ctx.p.cover?.peekSide).toBe(0);
+    expect(ctx.p.feet.x).toBeCloseTo(atEdge, 1);
+    expectClean(ctx);
+  });
+
+  it('cobertura alta: lejos de un borde, apuntar no lo saca de la pared', () => {
+    const ctx = setup(0, 0, -3.4, NORTH);
+    run(ctx, 1 / 60, () => ({ camYaw: NORTH, crouchPressed: true }));
+    run(ctx, 0.5, () => ({ camYaw: NORTH, aim: true }));
+    expect(ctx.p.cover?.edgeNear).toBe(0);
+    expect(ctx.p.cover?.peekSide).toBe(0);
+    expect(Math.abs(ctx.p.feet.x)).toBeLessThan(0.05);
     expectClean(ctx);
   });
 
