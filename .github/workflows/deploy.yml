@@ -6,28 +6,41 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Solo lectura por defecto; cada trabajo pide únicamente lo que necesita.
 permissions:
   contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: pages-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   test-and-build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      # configure-pages consulta la configuración de Pages del repositorio.
+      pages: read
+    # Un push nuevo cancela las pruebas del anterior, que aún no se ha publicado.
+    concurrency:
+      group: ci-${{ github.ref }}
+      cancel-in-progress: true
+    # Las acciones van fijadas por SHA (con su versión al lado) para que una etiqueta movida no cambie lo que se ejecuta.
     steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: 24
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
           cache: npm
 
       - name: Instalar dependencias
         run: npm ci
+
+      - name: Auditoría de las dependencias que se publican
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Linter y formato
+        run: npm run lint
 
       - name: Tests unitarios (Vitest)
         run: npm test
@@ -45,7 +58,7 @@ jobs:
 
       - name: Capturas de QA
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: qa-screenshots
           path: qa-screenshots
@@ -54,11 +67,11 @@ jobs:
       # Pages solo existe en repos públicos (plan gratuito): en privado la CI prueba y construye, sin desplegar.
       - name: Configurar Pages
         if: github.event_name != 'pull_request' && !github.event.repository.private
-        uses: actions/configure-pages@v6
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
 
       - name: Subir artefacto de Pages
         if: github.event_name != 'pull_request' && !github.event.repository.private
-        uses: actions/upload-pages-artifact@v5
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: dist
 
@@ -66,10 +79,18 @@ jobs:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && !github.event.repository.private
     needs: test-and-build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    # Un despliegue en curso nunca se cancela: el siguiente espera su turno.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Desplegar en GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v5
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

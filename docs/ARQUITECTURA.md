@@ -51,7 +51,7 @@ src/
   debug/      overlay F3 y API de QA (window.__EXCOM__ con ?qa=1; fuera del build público)
 tests/
   unit/       Vitest: lógica pura
-  e2e/        Playwright: el juego real sobre el build de producción
+  e2e/        Playwright: el juego real sobre el build de pruebas
   media/      capturas y GIF del README (npm run media)
 ```
 

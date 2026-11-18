@@ -12,6 +12,7 @@ Qué se puede mejorar y en qué orden. Cada bloque está pensado para una sesió
 - Arsenal ampliado: el revólver «Juez» y el rifle de tirador «Meridian» (con mira de aumento) se compran en la armería, y cada tecla de arma recorre su grupo.
 - El Gauntlet ya no se degrada con las oleadas: los caídos se retiran al empezar la siguiente y un cuerpo asentado deja de simularse y animarse. Tras doce oleadas, 81 draw calls (antes unas 400). Además, los personajes de igual aspecto comparten la geometría: un enemigo que aparece ya no construye ni sube a la GPU un cuerpo nuevo.
 - Primera pasada de robustez tras revisar el juego entero, jugándolo y midiendo: el mapa de sombras se libera al cambiar de nivel, el combate con el Juez se reinicia al reaparecer, un nivel que no se descarga se explica en pantalla, el audio posicional sigue a la cámara en Firefox, abrir el juego sin empezar no crea partida y la voltereta suena.
+- Herramientas de calidad: formato con Prettier, linter con información de tipos (oxlint), detección de código sin uso (knip) y TypeScript con `noUncheckedIndexedAccess`. La CI los ejecuta, audita las dependencias que se publican, fija sus acciones por SHA, da a cada trabajo solo los permisos que necesita y ya no interrumpe un despliegue en curso.
 - Build de pruebas separado del público: la API de QA y los comandos del F3 (monedas, modo dios) solo existen en desarrollo y en `npm run build:qa`. La versión publicada ya no los incluye, requisito previo de la tabla de récords en línea.
 
 ## Antes de añadir contenido: robustez y rendimiento
@@ -22,7 +23,6 @@ Lo que quedó pendiente de esa revisión. Conviene hacerlo antes del cuarto cont
 - Prueba de humo en Firefox dentro de la suite.
 - Validar el guion de cada misión (un `enemyId` o un `group` mal escrito deja el objetivo sin completarse) y que `tests/unit/hubNav.test.ts` recorra todos los niveles del registro.
 - Avisar cuando el navegador pierde el contexto gráfico y recuperar la iluminación de entorno al volver.
-- CI: límite de tiempo por trabajo y no cancelar un despliegue en curso.
 
 ### Lo que ya existe y no se ve
 - Pantalla de logros (hay 17 y solo aparecen al conseguirlos) y de estadísticas (el tiempo jugado se guarda y no se muestra).
