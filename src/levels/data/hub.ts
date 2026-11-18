@@ -166,7 +166,6 @@ export const hub: LevelData = {
     { id: 'plaque', kind: 'lore', pos: [6, 0, -13.3], radius: 2.0, prompt: 'Leer las reglas', action: 'read:rules' },
     { id: 'elevator', kind: 'door', pos: [12, 0, 10.6], radius: 1.7, prompt: 'Bajar al campo de práctica', action: 'goto:practice' },
   ],
-  triggers: [],
   music: 'hub',
   ambience: 'lobby',
   weather: null,

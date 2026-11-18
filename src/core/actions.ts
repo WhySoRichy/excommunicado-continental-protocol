@@ -163,27 +163,3 @@ export function cloneBindings(b: Bindings): Bindings {
   for (const a of ACTIONS) out[a] = [...(b[a] ?? DEFAULT_BINDINGS[a])];
   return out;
 }
-
-/**
- * Asigna `code` como tecla principal de `action` (sustituye la primera tecla de teclado/ratón).
- * Si el código ya estaba en otra acción, se le quita allí (sin conflictos silenciosos).
- * Devuelve la acción a la que se le quitó el código, si había una.
- */
-export function rebind(b: Bindings, action: Action, code: string): Action | null {
-  let stolenFrom: Action | null = null;
-  for (const a of ACTIONS) {
-    if (a === action) continue;
-    const i = b[a].indexOf(code);
-    if (i >= 0) {
-      b[a].splice(i, 1);
-      stolenFrom = a;
-    }
-  }
-  const list = b[action];
-  const kbIndex = list.findIndex((c) => !c.startsWith('Pad'));
-  if (kbIndex >= 0) list[kbIndex] = code;
-  else list.unshift(code);
-  // Quita duplicados dentro de la misma acción.
-  b[action] = [...new Set(list)];
-  return stolenFrom;
-}

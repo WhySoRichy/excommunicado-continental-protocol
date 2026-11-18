@@ -80,13 +80,9 @@ export const HUB_TEXT = {
   excommunicado: (lost: number) => `EXCOMUNICADO. La Alta Mesa cobra ${lost} monedas. El hotel es hostil.`,
   wave: (n: number, total: number) => `Oleada ${n} de ${total}`,
   readmitted: 'Readmisión concedida. El Continental vuelve a ser zona neutral.',
-  drillDone: (coins: number) => `Simulacro completado: +${coins} monedas. Vuelve al Continental por el ascensor.`,
-  drillRepeat: 'Simulacro completado. Vuelve al Continental por el ascensor.',
   zoneNeutral: 'ZONA NEUTRAL · PROHIBIDO DISPARAR',
   zoneHostile: (n: number, total: number) => `EXCOMUNICADO · OLEADA ${n}/${total}`,
   objectiveFirst: 'Habla con Charon en recepción',
   objectiveHub: 'Visita la armería o baja al campo de práctica',
   objectiveSurvive: (n: number, total: number) => `Sobrevive a la oleada ${n} de ${total}`,
-  objectiveDrill: 'Elimina a los 6 maniquíes armados del patio',
-  objectiveDrillDone: 'Vuelve al Continental por el ascensor',
 } as const;

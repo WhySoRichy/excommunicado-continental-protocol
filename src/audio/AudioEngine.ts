@@ -538,15 +538,12 @@ export class AudioEngine {
     this.tone(this.uiBus, { type: 'sine', f0: on ? 300 : 600, f1: on ? 120 : 900, gain: 0.25, decay: 0.35 });
   }
 
-  ui(kind: 'click' | 'hover' | 'coin' | 'error' | 'confirm'): void {
+  ui(kind: 'click' | 'coin' | 'error' | 'confirm'): void {
     if (!this.ready) return;
     const d = this.uiBus;
     switch (kind) {
       case 'click':
         this.tone(d, { type: 'triangle', f0: 880, gain: 0.08, decay: 0.04 });
-        break;
-      case 'hover':
-        this.tone(d, { type: 'sine', f0: 1200, gain: 0.03, decay: 0.03 });
         break;
       case 'coin':
         for (const [i, f] of [2093, 3135, 4186].entries()) this.tone(d, { type: 'sine', f0: f, gain: 0.12 / (i + 1), decay: 0.6, delay: i * 0.02 });

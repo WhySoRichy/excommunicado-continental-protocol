@@ -19,7 +19,7 @@ Qué se puede mejorar y en qué orden. Cada bloque está pensado para una sesió
 Lo que quedó pendiente de esa revisión. Conviene hacerlo antes del cuarto contrato, porque más contenido multiplica estos costes.
 
 ### Red de seguridad
-- Linter y detección de código sin uso; prueba de humo en Firefox dentro de la suite.
+- Prueba de humo en Firefox dentro de la suite.
 - Validar el guion de cada misión (un `enemyId` o un `group` mal escrito deja el objetivo sin completarse) y que `tests/unit/hubNav.test.ts` recorra todos los niveles del registro.
 - Avisar cuando el navegador pierde el contexto gráfico y recuperar la iluminación de entorno al volver.
 - CI: límite de tiempo por trabajo y no cancelar un despliegue en curso.

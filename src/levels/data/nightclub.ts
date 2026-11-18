@@ -156,7 +156,6 @@ export const nightclub: LevelData = {
     { id: 'p-armor', kind: 'armor', pos: [-10, MEZ, -9] },
   ],
   interactables: [{ id: 'alarm-panel', kind: 'alarmPanel', pos: [4.5, 0, 16], radius: 1.6, prompt: 'Desactivar la alarma', action: 'mission:alarm', hold: 2 }],
-  triggers: [],
   music: 'club',
   ambience: 'club',
   weather: 'rain',

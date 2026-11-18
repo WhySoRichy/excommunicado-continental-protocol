@@ -125,7 +125,6 @@ export const arena: LevelData = {
   civilians: [],
   pickups: [],
   interactables: [],
-  triggers: [],
   music: 'practice',
   ambience: 'range',
   weather: null,

@@ -37,7 +37,7 @@
     "qa": "npm run build && npm test && npm run test:e2e",
     "media": "npm run build:qa && playwright test -c playwright.media.config.ts && node scripts/make-gif.mjs",
     "poses": "node scripts/poses.mjs",
-    "lint": "oxlint && prettier --check .",
+    "lint": "oxlint && prettier --check . && knip",
     "format": "prettier --write ."
   },
   "dependencies": {
@@ -48,6 +48,7 @@
     "@playwright/test": "1.65.0",
     "@types/node": "26.6.6",
     "@types/three": "0.187.0",
+    "knip": "6.45.1",
     "oxlint": "1.94.0",
     "oxlint-tsgolint": "7.0.2007",
     "prettier": "3.10.1",

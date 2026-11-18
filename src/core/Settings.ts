@@ -1,4 +1,4 @@
-import { ACTIONS, type Action, type Bindings, DEFAULT_BINDINGS, REBINDABLE } from './actions';
+import { type Action, type Bindings, cloneBindings, DEFAULT_BINDINGS, REBINDABLE } from './actions';
 import { type KeyValueStore, SETTINGS_KEY } from './Save';
 
 /**
@@ -75,12 +75,6 @@ export function defaultSettings(): Settings {
     hints: true,
     bindings: cloneBindings(DEFAULT_BINDINGS),
   };
-}
-
-export function cloneBindings(b: Bindings): Bindings {
-  const out = {} as Bindings;
-  for (const a of ACTIONS) out[a] = [...b[a]];
-  return out;
 }
 
 const CODE_RE = /^(Key[A-Z]|Digit\d|Numpad\w+|Arrow(Up|Down|Left|Right)|F\d{1,2}|Mouse[0-4]|Wheel(Up|Down)|Pad\d{1,2}|[A-Z][A-Za-z]+)$/;

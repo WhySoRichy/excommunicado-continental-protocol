@@ -124,7 +124,6 @@ export const rooftop: LevelData = {
     { id: 'p-med-2', kind: 'medkit', pos: [26, C, -20] },
   ],
   interactables: [],
-  triggers: [],
   music: 'tower',
   ambience: 'wind',
   weather: 'rain',

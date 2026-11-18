@@ -110,6 +110,5 @@ export function validateLevel(d: LevelData): string[] {
   d.civilians.forEach((x) => uniq('civ', x.id));
   d.pickups.forEach((x) => uniq('pickup', x.id));
   d.interactables.forEach((x) => uniq('int', x.id));
-  d.triggers.forEach((x) => uniq('trig', x.id));
   return errs;
 }

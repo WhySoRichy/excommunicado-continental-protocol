@@ -215,14 +215,6 @@ export interface InteractableDef {
   hold?: number;
 }
 
-export interface TriggerDef {
-  id: string;
-  c: Vec3;
-  s: Vec3;
-  event: string;
-  once?: boolean;
-}
-
 /** `waves`: oleadas infinitas del Gauntlet (termina al morir). `learn`: paso del tutorial. */
 export type ObjectiveKind = 'reach' | 'eliminate' | 'interact' | 'survive' | 'escape' | 'boss' | 'waves' | 'learn';
 
@@ -290,7 +282,6 @@ export interface LevelData {
   civilians: CivilianDef[];
   pickups: PickupDef[];
   interactables: InteractableDef[];
-  triggers: TriggerDef[];
   music: MusicMood;
   ambience: AmbienceKind;
   weather?: 'rain' | null;

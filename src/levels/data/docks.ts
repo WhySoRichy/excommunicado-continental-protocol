@@ -160,7 +160,6 @@ export const docks: LevelData = {
     { id: 'cargo-2', kind: 'objective', pos: [14, 0, -4], radius: 2.2, prompt: 'Colocar carga explosiva', action: 'mission:cargo', hold: 2.5 },
     { id: 'cargo-3', kind: 'objective', pos: [-20, 0, -24], radius: 2.2, prompt: 'Colocar carga explosiva', action: 'mission:cargo', hold: 2.5 },
   ],
-  triggers: [],
   music: 'docks',
   ambience: 'harbor',
   weather: 'rain',
