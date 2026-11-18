@@ -73,8 +73,16 @@ export interface RigPose {
   reload: number;
   /** Retroceso visual 0..1 (decae). */
   recoil: number;
-  /** Golpe/forcejeo de melee 0..1. */
+  /** Forcejeo al empezar un takedown 0..1. */
   melee: number;
+  /** Fase del tajo del cuchillo 0..1 (−1 = sin tajo): preparación, corte y vuelta a la guardia. */
+  slash: number;
+  /** Hacia dónde mira la cabeza respecto al cuerpo (rad, + izquierda). */
+  lookYaw: number;
+  /** Inclinación de esa mirada (rad, + arriba); se suma a la de `aimPitch` mientras no apunta. */
+  lookPitch: number;
+  /** 0..1 cuánto manda la mirada (0 = la cabeza sigue al cuerpo). */
+  look: number;
   /** Cambio de arma 0..1 (0 = sin cambio; sube y baja durante el gesto). */
   swap: number;
   /** 0..1 arrodillado (enemigo aturdido o jefe entre fases). */
@@ -104,6 +112,10 @@ export function idlePose(): RigPose {
     reload: -1,
     recoil: 0,
     melee: 0,
+    slash: -1,
+    lookYaw: 0,
+    lookPitch: 0,
+    look: 0,
     swap: 0,
     kneel: 0,
     flinch: 0,

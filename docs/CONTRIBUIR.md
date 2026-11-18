@@ -55,7 +55,7 @@ La primera vez que se ejecuten las e2e: `npx playwright install chromium firefox
 
 ## Errores que ya se cometieron (para no repetirlos)
 
-- **Sentido de giro de los huesos.** El personaje mira a −Z. En huesos que cuelgan (brazos, piernas) la rotación X positiva va hacia delante; en los que suben (torso, cabeza), hacia atrás. Estuvo invertido (rodillas y arma hacia atrás) y solo se detectó al sacar capturas de perfil.
+- **Sentido de giro de los huesos.** El personaje mira a −Z. En huesos que cuelgan (brazos, piernas) la rotación X positiva va hacia delante; en los que suben (torso, cabeza), hacia atrás. Estuvo invertido (rodillas y arma hacia atrás) y solo se detectó al sacar capturas de perfil. Con la apertura de los brazos pasa lo mismo: la rotación Z positiva separa del cuerpo el brazo derecho y la negativa lo cruza por delante (en el izquierdo, al revés). El primer tajo del cuchillo se armó cruzando la cara por eso; de perfil no se notaba y de frente sí. Un test de `characterRig.test.ts` lo vigila midiendo dónde queda la mano.
 - **`hidden` no oculta si el CSS pone `display`.** Hay una regla global `[hidden] { display: none !important }` y un test que lo vigila.
 - **Tests que dependen del tiempo real.** En CI el juego va a ~3 FPS. Los tests deben avanzar con `step()` o esperar condiciones con `expect.poll`, nunca asumir que "en 0,5 s ya se movió".
 - **Luminancia medida en el canvas.** No detecta capas DOM que oscurezcan la pantalla.
@@ -71,6 +71,7 @@ La primera vez que se ejecuten las e2e: `npx playwright install chromium firefox
 - **Estado de misión que no acompaña a la reaparición.** Al reaparecer, los enemigos vivos recuperan la salud; lo que dependa de esa salud (las fases del jefe) debe reiniciarse a la vez (`MissionDirector.onPlayerRespawned`).
 - **Efectos que no terminan.** La cola de la trazadora se calculaba desde la cabeza ya detenida en el impacto y nunca llegaba al final: los destellos se quedaban flotando hasta reciclarse. El tramo se calcula en `render/tracerPath.ts` (lógica pura con test) y la e2e del arsenal comprueba con `vfx()` que no queda ningún efecto vivo.
 - **Un `await` sin camino de error.** Una carga que fallaba dejaba el juego en `loading` para siempre. Todo flujo asíncrono que cambie de estado necesita su salida (`Game.tryLoadSession`).
+- **Suavizar con `damp` lo que cambia de golpe.** Un suavizado de primer orden sigue al objetivo, pero su velocidad salta en el mismo fotograma en que el objetivo cambia: al agacharse, apuntar o arrancar, todo el cuerpo daba un tirón. Los pesos de mezcla del rig van con un muelle crítico (`spring` en `rigMath.ts`) y la API de pruebas mide la aceleración de cada articulación con `rigMotion()`; una e2e de movimiento la acota.
 - **Empujar al personaje contra el suelo.** En el suelo se le daba una velocidad vertical de −1 m/s "para que no flotara". Con los pies dentro del margen de separación de la KCC, Rapier daba por bloqueados pasos sueltos en llano y al correr se perdía uno de cada 20 o 30: tirones del cuerpo y de la cámara que no se veían en ninguna captura. Lo pega `snapToGround`; las pruebas "sin tirones en llano" de `playerMovement.test.ts` lo vigilan.
 - **Niveles:** escalones de más de 0,32 m o muebles sin `noWalk` rompen la navegación de los enemigos. Los tests de navegación lo detectan.
 

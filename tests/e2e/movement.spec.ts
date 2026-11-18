@@ -398,4 +398,77 @@ test.describe('Fase 1 · movimiento', () => {
       }
     }
   });
+
+  test('animación sin tirones: arrancar, parar, girar, agacharse, apuntar y mover la cámara', async ({ page }) => {
+    await enterArena(page);
+    // Mayor salto de velocidad entre dos fotogramas de cualquier articulación (rad/s²) o de manos y cabeza (m/s²).
+    // Con suavizado de primer orden, el giro en seco y el enganchón de la KCC había picos de 600 a 900.
+    const peaks = await page.evaluate(() => {
+      const q = window.__EXCOM__!;
+      type Intent = Parameters<typeof q.step>[1];
+      const out: Record<string, { joint: string; peak: number }> = {};
+      const measure = (name: string, script: (go: (n: number, it?: Intent, dYaw?: number) => void) => void): void => {
+        q.setManual(true);
+        q.releaseAll();
+        q.teleport(0, 0, 8, 0);
+        q.setLook(0, -0.15);
+        q.press('weapon2');
+        q.step(60, {});
+        const samples: Array<Record<string, number>> = [];
+        let yaw = 0;
+        script((n, it = {}, dYaw = 0) => {
+          for (let i = 0; i < n; i++) {
+            if (dYaw) q.setLook((yaw += dYaw), -0.15);
+            q.step(1, it);
+            samples.push(q.rigMotion()!);
+          }
+        });
+        // El giro del cuerpo se desenvuelve para que pasar de −π a π no cuente como salto.
+        for (let i = 1; i < samples.length; i++) {
+          const d = samples[i]!.yaw! - samples[i - 1]!.yaw!;
+          samples[i]!.yaw = samples[i - 1]!.yaw! + d - Math.round(d / (2 * Math.PI)) * 2 * Math.PI;
+        }
+        let best = { joint: '', peak: 0 };
+        for (const k of Object.keys(samples[0]!)) {
+          for (let i = 2; i < samples.length; i++) {
+            const a = Math.abs(samples[i]![k]! - 2 * samples[i - 1]![k]! + samples[i - 2]![k]!) * 3600;
+            if (a > best.peak) best = { joint: `${k} (paso ${i})`, peak: a };
+          }
+        }
+        out[name] = best;
+      };
+      measure('arrancar y parar', (go) => {
+        go(20);
+        go(50, { moveY: 1 });
+        go(50);
+      });
+      measure('esprintar y parar', (go) => {
+        go(60, { moveY: 1, sprint: true });
+        go(50);
+      });
+      measure('cambio de sentido', (go) => {
+        go(40, { moveX: 1 });
+        go(40, { moveX: -1 });
+        go(30);
+      });
+      measure('agacharse y levantarse', (go) => {
+        go(20);
+        go(1, { crouch: true });
+        go(50);
+        go(1, { crouch: true });
+        go(50);
+      });
+      measure('apuntar y dejar de apuntar', (go) => {
+        go(40, { aim: true });
+        go(40);
+      });
+      measure('golpe de cámara', (go) => {
+        go(20);
+        go(1, {}, 1.4);
+        go(40);
+      });
+      return out;
+    });
+    for (const [name, p] of Object.entries(peaks)) expect(p.peak, `${name}: ${p.joint}`).toBeLessThan(320);
+  });
 });

@@ -153,5 +153,26 @@ await ev(() => {
   q.step(40, { aim: true });
 });
 await shot(`${i++}-agachado-apuntando`);
+// Tajo del cuchillo (0,3 s = 18 pasos): brazo armado, mitad del corte y final del corte, de perfil y en 3/4 de frente.
+for (const [view, yawCam] of [
+  ['perfil', SIDE],
+  ['frente', Math.PI - 0.6],
+]) {
+  for (const [phase, steps] of [
+    ['a-armado', 6],
+    ['b-corte', 9],
+    ['c-final', 12],
+  ]) {
+    await reset(yawCam);
+    await ev((s) => {
+      const q = window.__EXCOM__;
+      q.press('weapon3');
+      q.step(40, {});
+      q.press('fire');
+      q.step(s, {});
+    }, steps);
+    await shot(`${i++}-cuchillo-${view}-${phase}`);
+  }
+}
 console.log('capturas en', OUT);
 await browser.close();

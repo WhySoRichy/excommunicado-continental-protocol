@@ -9,6 +9,7 @@ import type { Action } from '../core/actions';
 import { GameStateMachine, type GameStateId } from '../core/GameStateMachine';
 import { Input, type InputEvent, type Vec2 } from '../core/Input';
 import { AnimationLoop, FIXED_DT, FixedStepAccumulator } from '../core/Loop';
+import { wrapAngle } from '../core/math';
 import { Rng } from '../core/rng';
 import {
   addPlaytime,
@@ -27,6 +28,7 @@ import { probeGpu } from '../render/gpu';
 import { CollisionDebugView, DebugOverlay } from '../debug/DebugOverlay';
 import { FrameStats } from '../debug/FrameStats';
 import { idlePose, type RigPose, type WeaponModel } from '../entities/CharacterRig';
+import { type BodyYaw, bodyYaw, updateBodyYaw } from '../entities/rigMath';
 import { emptyIntent, type PlayerIntent } from '../entities/PlayerController';
 import { DIALOGUE, HUB_TEXT, rulesPlaque } from '../hub/dialogue';
 import { buy } from '../hub/economy';
@@ -141,6 +143,8 @@ export class Game {
   private readonly mouse: Vec2 = { x: 0, y: 0 };
   private readonly pad: Vec2 = { x: 0, y: 0 };
   private readonly pose: RigPose = idlePose();
+  /** Giro visual del Huésped (la simulación gira a ritmo constante; el cuerpo, con muelle). */
+  private readonly playerYaw: BodyYaw = bodyYaw();
   private readonly captureOverlay: HTMLDivElement;
   private readonly gpuOverlay: HTMLDivElement;
   /** Proveedor del texto del F3, creado una vez (pasar una flecha nueva en cada frame asignaba memoria). */
@@ -1141,7 +1145,7 @@ export class Game {
     if (this.opts.qa) checkCameraInvariants(s, this.camera, this.invariants);
     const rig = s.playerRig;
     rig.root.position.copy(_feet);
-    const yaw = p.renderYaw(alpha);
+    const yaw = updateBodyYaw(this.playerYaw, p.renderYaw(alpha), p.aiming, scaledDt);
     rig.root.rotation.y = yaw;
     const c = s.combat;
     const model: WeaponModel = c.holstered ? 'none' : WEAPON_MODEL[c.current];
@@ -1164,7 +1168,11 @@ export class Game {
     pose.stateTime = p.stateTime;
     pose.reload = c.weapon.reloadProgress;
     pose.recoil = c.recoilVis;
-    pose.melee = c.meleeT > 0 ? Math.sin((1 - c.meleeT / 0.45) * Math.PI) : 0;
+    pose.melee = c.grab;
+    pose.slash = c.slashPhase;
+    // La cabeza mira hacia donde apunta la cámara; con la cámara delante del personaje, al frente.
+    pose.lookYaw = wrapAngle(this.camera.yaw - yaw);
+    pose.look = 1;
     pose.swap = c.switchT > 0 ? Math.sin(swapT * Math.PI) : 0;
     pose.takedown = c.takedown ? c.takedown.t : -1;
     pose.vault = p.vaultProgress;

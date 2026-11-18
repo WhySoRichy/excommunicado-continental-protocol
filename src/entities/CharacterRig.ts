@@ -24,7 +24,22 @@ import { GRIP, STOCK, weaponGeometry } from './rig/weapons';
 
 export { idlePose } from './rig/types';
 export type { HairStyle, Outfit, RigColors, RigOptions, RigPose, WeaponModel } from './rig/types';
-import { type ArmReach, bell, cadence, footPitch, solveArm, type FootStep, footStep, type LegAngles, smooth, solveLeg } from './rigMath';
+import {
+  type ArmReach,
+  bell,
+  cadence,
+  footPitch,
+  solveArm,
+  type FootStep,
+  footStep,
+  type LegAngles,
+  lookWeight,
+  smooth,
+  smoother,
+  solveLeg,
+  type Spring,
+  spring,
+} from './rigMath';
 
 const _rootInv = new Matrix4();
 const _local = new Matrix4();
@@ -56,6 +71,14 @@ const SPRINT_SPEED = 5.6;
 /** Rigidez del suavizado de articulaciones (1/s). */
 const JOINT_K = 16;
 const HALF_PI = Math.PI / 2;
+/** Tajo del cuchillo: fin de la preparación y del corte (fracción del gesto) y rigidez del brazo mientras dura. */
+const SLASH_WIND = 0.24;
+const SLASH_CUT = 0.5;
+const SLASH_K = 30;
+/** Giro máximo de la cabeza sobre el torso al mirar algo (rad, unos 60°). */
+const LOOK_YAW_MAX = 1.05;
+/** Rigidez del muelle de la mirada (1/s): media vuelta de cabeza en algo menos de medio segundo. */
+const LOOK_OMEGA = 8;
 
 /** Todo lo que cambia la geometría del cuerpo (el material y el rim van aparte). */
 function appearanceKey(o: RigOptions): string {
@@ -138,13 +161,24 @@ export class CharacterRig {
   private readonly meshes: Array<Mesh | SkinnedMesh> = [];
   private phase = 0;
   private time = 0;
-  private crouchK = 0;
-  private bladeK = 0;
-  private aimK = 0;
-  private sprintK = 0;
-  private kneelK = 0;
-  /** 0..1 girando sobre sí mismo sin desplazarse (pasos cortos en el sitio). */
-  private turnK = 0;
+  // Pesos de mezcla entre poses (0..1) con muelle crítico: ver `blend`.
+  private readonly crouchS: Spring = { x: 0, v: 0 };
+  private readonly bladeS: Spring = { x: 0, v: 0 };
+  private readonly aimS: Spring = { x: 0, v: 0 };
+  private readonly sprintS: Spring = { x: 0, v: 0 };
+  private readonly kneelS: Spring = { x: 0, v: 0 };
+  /** Girando sobre sí mismo sin desplazarse (pasos cortos en el sitio). */
+  private readonly turnS: Spring = { x: 0, v: 0 };
+  /** Amplitud de la zancada. */
+  private readonly ampS: Spring = { x: 0, v: 0 };
+  /** Giro e inclinación de la mirada de la cabeza sobre el torso (rad). */
+  private readonly lookYawS: Spring = { x: 0, v: 0 };
+  private readonly lookPitchS: Spring = { x: 0, v: 0 };
+  /** Cadencia del último paso (pasos/s): al parar, el paso en curso se termina a ese ritmo. */
+  private cadenceHz = 1.7;
+  /** Dirección de la marcha respecto al frente (coseno y seno), suavizada. */
+  private moveCos = 1;
+  private moveSin = 0;
   private lastYaw = 0;
   /** 0..1 cuánto manda la IK sobre el brazo izquierdo (mano de apoyo en el arma). */
   private gripK = 0;
@@ -328,6 +362,14 @@ export class CharacterRig {
     this.root.visible = o >= 0.5;
   }
 
+  /**
+   * Peso de mezcla 0..1 con muelle crítico. Con un suavizado de primer orden, la velocidad del peso saltaba en el
+   * instante del cambio (agacharse, apuntar, arrancar) y todo el cuerpo daba un tirón; así arranca y frena suave.
+   */
+  private blend(s: Spring, target: number, omega: number, dt: number): number {
+    return clamp(spring(s, target, omega, dt), 0, 1);
+  }
+
   /** Anima la pose. `dt` = tiempo de render (incluye la escala del Foco). */
   update(p: RigPose, dt: number): void {
     this.time += dt;
@@ -339,17 +381,12 @@ export class CharacterRig {
 
     const onFeet = st === 'ground' || st === 'cover' || st === 'locked';
     const crouching = p.posture === 'crouch' && onFeet;
-    this.crouchK = damp(this.crouchK, crouching ? 1 : 0, 12, dt);
-    this.aimK = damp(this.aimK, knife ? 0 : p.aim, 18, dt);
-    this.sprintK = damp(this.sprintK, onFeet && p.grounded && p.speed > SPRINT_SPEED ? 1 : 0, 9, dt);
-    this.kneelK = damp(this.kneelK, p.kneel, 9, dt);
-    this.bladeK = damp(this.bladeK, long && onFeet ? 1 : 0, 8, dt);
-    const ck = this.crouchK;
-    const ak = this.aimK;
-    const sk = this.sprintK;
-    const kk = this.kneelK;
+    const ck = this.blend(this.crouchS, crouching ? 1 : 0, 13, dt);
+    const ak = this.blend(this.aimS, knife ? 0 : p.aim, 19, dt);
+    const sk = this.blend(this.sprintS, onFeet && p.grounded && p.speed > SPRINT_SPEED ? 1 : 0, 10, dt);
+    const kk = this.blend(this.kneelS, p.kneel, 10, dt);
     // Al esprintar el arma larga va cruzada y el cuerpo de frente.
-    const bk = this.bladeK * (1 - sk);
+    const bk = this.blend(this.bladeS, long && onFeet ? 1 : 0, 9, dt) * (1 - sk);
     // Giro en el sitio: se mide cuánto rota la raíz por segundo.
     let dYaw = this.root.rotation.y - this.lastYaw;
     this.lastYaw = this.root.rotation.y;
@@ -359,24 +396,32 @@ export class CharacterRig {
     // ------------------------------------------------------------- marcha
     const moving = p.grounded && p.speed > 0.25 && onFeet;
     const speedN = clamp(p.speed / 7, 0, 1);
-    this.turnK = damp(this.turnK, !moving && onFeet && p.grounded && st !== 'locked' ? clamp((turnRate - 0.9) / 2.2, 0, 1) : 0, 10, dt);
-    const tk = this.turnK;
-    if (moving) this.phase += Math.PI * cadence(p.speed) * dt;
-    else if (tk > 0.02) this.phase += Math.PI * 2.4 * tk * dt;
+    const tk = this.blend(this.turnS, !moving && onFeet && p.grounded && st !== 'locked' ? clamp((turnRate - 0.9) / 2.2, 0, 1) : 0, 12, dt);
+    // Zancada con muelle: crece al arrancar y, al parar, el paso en curso se termina mientras se apaga (antes los
+    // pies saltaban a la postura de reposo en el fotograma de la parada).
+    const amp = this.blend(this.ampS, moving ? clamp(p.speed / 2.2, 0.3, 1) : 0, 11, dt);
+    if (moving) {
+      this.cadenceHz = cadence(p.speed);
+      // Un cambio de sentido gira las piernas en unas décimas, no de un fotograma al siguiente.
+      this.moveCos = damp(this.moveCos, Math.cos(p.moveAngle), 10, dt);
+      this.moveSin = damp(this.moveSin, Math.sin(p.moveAngle), 10, dt);
+    }
+    this.phase += Math.PI * (this.cadenceHz * clamp(amp / 0.3, 0, 1) + 2.4 * tk) * dt;
     const ph = this.phase;
-    const amp = moving ? clamp(p.speed / 2.2, 0.3, 1) : 0;
     // El esprint alarga la zancada y sube más las rodillas; girando en el sitio, pasitos sin avance.
     const half = amp * lerp(0.2, 0.36, speedN) * (1 - 0.35 * ck) * (1 + 0.28 * sk);
     const liftH = amp * lerp(0.06, 0.16, speedN) * (1 - 0.4 * ck) * (1 + 0.6 * sk) + 0.05 * tk;
-    const cf = Math.cos(p.moveAngle);
-    const cr = -Math.sin(p.moveAngle);
+    const cf = this.moveCos;
+    const cr = -this.moveSin;
     const sL = footStep(ph, half, liftH, this.stepL);
     const sR = footStep(ph + Math.PI, half, liftH, this.stepR);
     const lead = Math.cos(ph) * amp;
 
     // Postura de combate: un pie adelantado al apuntar o agacharse (menos al caminar).
     const stance = (0.035 + 0.09 * ak + 0.13 * ck) * (1 - amp * 0.75);
-    let hipY = lerp(HIP_STAND - 0.02 * ak, HIP_CROUCH, ck) - 0.03 * amp * Math.abs(Math.cos(ph));
+    // La cadera baja al apoyar los dos pies y sube a mitad de paso (con coseno al cuadrado: sin pico arriba).
+    const cph = Math.cos(ph);
+    let hipY = lerp(HIP_STAND - 0.02 * ak, HIP_CROUCH, ck) - 0.03 * amp * cph * cph;
     let lF = sL.along * cf + stance;
     let rF = sR.along * cf - stance;
     let lSide = sL.along * cr;
@@ -651,12 +696,34 @@ export class CharacterRig {
       lel = lerp(lel, 0.35, p.swap * 0.7);
       lsz = lerp(lsz, -0.05, p.swap * 0.7);
     }
-    // Golpe cuerpo a cuerpo: barrido cruzado con giro de torso.
+    // Forcejeo al empezar el takedown: barrido cruzado con giro de torso.
     if (p.melee > 0) {
       rsx = lerp(rsx, 1.45 - torsoX, p.melee);
       rel = lerp(rel, 0.4, p.melee);
       rsz = lerp(rsz, -0.75, p.melee);
       torsoY += 0.45 * p.melee;
+    }
+    // Tajo del cuchillo en tres tiempos: el brazo se arma junto a la oreja derecha con el torso girado a la derecha,
+    // corta en diagonal hacia la cadera izquierda mientras el torso gira y se vence, y vuelve a la guardia.
+    // En el brazo derecho, `rsz` positivo lo abre hacia fuera y negativo lo cruza por delante del cuerpo.
+    const slashing = p.slash >= 0 && armed && armsFree < 1;
+    if (slashing) {
+      const u = p.slash;
+      const wind = smoother(0, SLASH_WIND, u) * (1 - smoother(SLASH_WIND, SLASH_CUT, u));
+      const cut = smoother(SLASH_WIND, SLASH_CUT, u) * (1 - smoother(SLASH_CUT + 0.1, 1, u));
+      rsx = lerp(rsx, 1.7 - torsoX, wind);
+      rel = lerp(rel, 1.9, wind);
+      rsz = lerp(rsz, 0.75, wind);
+      wrist += 0.45 * wind - 0.3 * cut;
+      torsoY -= 0.35 * wind;
+      rsx = lerp(rsx, 0.9 - torsoX, cut);
+      rel = lerp(rel, 0.3, cut);
+      rsz = lerp(rsz, -0.55, cut);
+      torsoY += 0.5 * cut;
+      torsoX -= 0.14 * cut;
+      // La izquierda se recoge al pecho para equilibrar el giro.
+      lsx = lerp(lsx, 0.2 - torsoX, cut * 0.6);
+      lel = lerp(lel, 1.55, cut * 0.6);
     }
     // Takedown: la izquierda agarra, el torso se vuelca para proyectar y la derecha remata hacia el suelo.
     if (p.takedown >= 0) {
@@ -711,7 +778,7 @@ export class CharacterRig {
     }
 
     // Respiración en reposo (rotación mínima, sin escalar huesos).
-    if (!moving && onFeet) torsoX += Math.sin(this.time * 1.7) * 0.012;
+    if (onFeet) torsoX += Math.sin(this.time * 1.7) * 0.012 * (1 - amp);
     torsoX += p.recoil * 0.025;
 
     // ------------------------------------------------------------- aplicación suavizada
@@ -732,30 +799,43 @@ export class CharacterRig {
     this.hips.position.y = s(this.hips.position.y, hipLocal);
     this.hips.rotation.y = s(this.hips.rotation.y, hipsYaw);
     this.torso.rotation.x = s(this.torso.rotation.x, torsoX + ak * p.aimPitch * 0.2);
-    this.torso.rotation.y = s(this.torso.rotation.y, torsoY - hipsYaw);
+    // El tajo dura 0,3 s: con el suavizado normal el brazo no llegaría a armarse antes de cortar.
+    const kArm = slashing ? SLASH_K : k;
+    this.torso.rotation.y = damp(this.torso.rotation.y, torsoY - hipsYaw, kArm, dt);
     this.torso.rotation.z = s(this.torso.rotation.z, torsoZ);
+    // Mirada: la cabeza se vuelve hacia lo que mira (el enemigo que vigila, el NPC que te sigue, el jugador
+    // hacia la cámara). Se apaga en volteretas, caídas y de rodillas, y si el objetivo queda a la espalda.
+    // Va con muelle propio: no sigue al ratón al instante ni vuelve al frente de golpe.
+    const lookOn = headLevel > 0 && kk < 0.5 ? p.look : 0;
+    const lookYawT = clamp(p.lookYaw, -LOOK_YAW_MAX, LOOK_YAW_MAX) * lookWeight(p.lookYaw) * lookOn * (1 - 0.5 * sk);
+    const lookY = spring(this.lookYawS, lookYawT, LOOK_OMEGA, dt);
+    headX += spring(this.lookPitchS, clamp(p.lookPitch, -0.6, 0.45) * lookOn * (1 - ak), LOOK_OMEGA, dt);
     this.head.rotation.x = s(this.head.rotation.x, clamp(headX - torsoX * headLevel, -0.9, 0.9));
-    // La cabeza compensa el giro del torso y sigue mirando al frente.
-    this.head.rotation.y = s(this.head.rotation.y, clamp(-torsoY * headLevel, -0.8, 0.8));
+    // La cabeza compensa el giro del torso: sin mirada, sigue al frente.
+    this.head.rotation.y = s(this.head.rotation.y, clamp(-torsoY * headLevel + lookY, -1.3, 1.3));
     this.lsxS = s(this.lsxS, lsx);
     this.lszS = s(this.lszS, lsz);
     this.lelS = s(this.lelS, lel);
     this.armL.rotation.set(this.lsxS, 0, this.lszS);
     this.foreL.rotation.x = this.lelS;
     const free = st === 'roll' || st === 'dead' || p.takedown >= 0 ? 0 : (1 - p.swap) * (1 - p.melee) * (1 - plantL) * (1 - kk);
-    this.rsxS = s(this.rsxS, rsx);
+    this.rsxS = damp(this.rsxS, rsx, kArm, dt);
     this.rsyS = s(this.rsyS, rsy * free);
-    this.rszS = s(this.rszS, rsz);
-    this.relS = s(this.relS, rel);
-    this.wristS = s(this.wristS, -HALF_PI + wrist);
+    this.rszS = damp(this.rszS, rsz, kArm, dt);
+    this.relS = damp(this.relS, rel, kArm, dt);
+    this.wristS = damp(this.wristS, -HALF_PI + wrist, kArm, dt);
     this.armR.rotation.set(this.rsxS, this.rsyS, this.rszS);
     this.foreR.rotation.set(this.relS, 0, 0);
     this.weaponMount.rotation.set(this.wristS, 0, 0);
     // Encare: con un arma larga apuntada manda el arma. La cantonera va al hueco del hombro derecho y el cañón
     // sigue la línea de mira sin ladearse; la mano derecha alcanza la empuñadura por IK.
     const stock = STOCK[model];
-    this.shoulderK = damp(this.shoulderK, stock > 0 && p.reload < 0 ? this.aimK * grip * free : 0, 14, dt);
-    if (this.shoulderK > 0.01) {
+    this.shoulderK = damp(this.shoulderK, stock > 0 && p.reload < 0 ? ak * grip * free : 0, 14, dt);
+    // Al cambiar de arma, las dos IK se apagan del todo justo cuando cambia el modelo (y con él, dónde se agarra):
+    // con un resto de peso, las manos saltaban de un agarre al otro en ese fotograma.
+    const swapOff = 1 - p.swap;
+    const shoulderW = this.shoulderK * swapOff;
+    if (shoulderW > 0.01) {
       this.root.updateWorldMatrix(true, true);
       const pitch = p.aimPitch + p.recoil * 0.06;
       _aim.set(0, Math.sin(pitch), -Math.cos(pitch)).transformDirection(this.root.matrixWorld);
@@ -765,26 +845,27 @@ export class CharacterRig {
       this.torso.worldToLocal(_pocket).sub(this.armR.position);
       const ik = solveArm(_pocket.length(), -ELBOW_Y, -HAND_Y, this.armIkR);
       _ikQ.setFromUnitVectors(_hand.set(0, ik.hy, ik.hz).normalize(), _pocket.normalize());
-      this.armR.quaternion.slerp(_ikQ, this.shoulderK);
-      this.foreR.rotation.x = lerp(this.relS, ik.elbow, this.shoulderK);
+      this.armR.quaternion.slerp(_ikQ, shoulderW);
+      this.foreR.rotation.x = lerp(this.relS, ik.elbow, shoulderW);
       // El arma mira por donde se apunta: cañón (−Z del soporte) por la mira y su arriba hacia arriba.
       this.foreR.updateWorldMatrix(true, false);
       _qGun.setFromRotationMatrix(_look.lookAt(_zero, _aim, _up));
       this.foreR.getWorldQuaternion(_qFore).invert().multiply(_qGun);
-      this.weaponMount.quaternion.slerp(_qFore, this.shoulderK);
+      this.weaponMount.quaternion.slerp(_qFore, shoulderW);
     }
     // Mano de apoyo: con el brazo derecho ya colocado, la izquierda va por IK al arma.
     const gripAt = GRIP[model];
     this.gripK = damp(this.gripK, gripAt ? grip * free : 0, 14, dt);
-    if (gripAt && this.gripK > 0.01) {
+    const gripW = this.gripK * swapOff;
+    if (gripAt && gripW > 0.01) {
       this.torso.updateWorldMatrix(true, true);
       _grip.set(gripAt[0], gripAt[1], gripAt[2]);
       this.torso.worldToLocal(this.weaponMount.localToWorld(_grip)).sub(this.armL.position);
       const ik = solveArm(_grip.length(), -ELBOW_Y, -HAND_Y, this.armIk);
       // El hombro gira lo justo para llevar la mano (en reposo, en el plano YZ) hasta el agarre.
       _ikQ.setFromUnitVectors(_hand.set(0, ik.hy, ik.hz).normalize(), _grip.normalize());
-      this.armL.quaternion.slerp(_ikQ, this.gripK);
-      this.foreL.rotation.x = lerp(this.lelS, ik.elbow, this.gripK);
+      this.armL.quaternion.slerp(_ikQ, gripW);
+      this.foreL.rotation.x = lerp(this.lelS, ik.elbow, gripW);
     }
     // La voltereta y la caída siguen el tiempo exacto del estado (no se suavizan).
     if (exact) {
@@ -822,6 +903,41 @@ export class CharacterRig {
     const right = _hand.crossVectors(barrel, _up).normalize();
     const roll = Math.asin(clamp(up.dot(right), -1, 1)) * deg;
     return { yaw, pitch, roll };
+  }
+
+  /**
+   * Muestra del movimiento: ángulos de las articulaciones (rad) y posición de manos y cabeza respecto a los pies (m,
+   * en el espacio del personaje). La usan las pruebas de fluidez para buscar tirones entre fotogramas.
+   */
+  motionSample(): Record<string, number> {
+    this.root.updateWorldMatrix(true, true);
+    const handR = this.root.worldToLocal(this.weaponMount.getWorldPosition(_grip));
+    const out: Record<string, number> = {
+      yaw: this.root.rotation.y,
+      hipsY: this.hips.position.y,
+      hipsYaw: this.hips.rotation.y,
+      torsoX: this.torso.rotation.x,
+      torsoY: this.torso.rotation.y,
+      torsoZ: this.torso.rotation.z,
+      headX: this.head.rotation.x,
+      headY: this.head.rotation.y,
+      thighL: this.thighL.rotation.x,
+      thighR: this.thighR.rotation.x,
+      shinL: this.shinL.rotation.x,
+      shinR: this.shinR.rotation.x,
+      handRx: handR.x,
+      handRy: handR.y,
+      handRz: handR.z,
+    };
+    const handL = this.root.worldToLocal(this.foreL.localToWorld(_grip.set(0, HAND_Y, 0)));
+    out.handLx = handL.x;
+    out.handLy = handL.y;
+    out.handLz = handL.z;
+    const head = this.root.worldToLocal(this.head.localToWorld(_grip.set(0, 0.12, -0.1)));
+    out.noseX = head.x;
+    out.noseY = head.y;
+    out.noseZ = head.z;
+    return out;
   }
 
   silhouetteHeight(): number {

@@ -3,7 +3,7 @@ import { AdditiveBlending, BoxGeometry, Color, Mesh, MeshBasicMaterial, type Sce
 import type { AudioEngine, ShotSound } from '../audio/AudioEngine';
 import { applyDamage, type DamageResult, type HitZone, makeVitals, restoreVitals, type Vitals } from '../combat/damage';
 import { FIXED_DT } from '../core/Loop';
-import { clamp, wrapAngle } from '../core/math';
+import { clamp, damp, wrapAngle } from '../core/math';
 import type { Rng } from '../core/rng';
 import type { NavGrid } from '../levels/nav/NavGrid';
 import type { EnemySpawnDef } from '../levels/types';
@@ -13,6 +13,7 @@ import { type AiState, EnemyBrain, emptyCommand, emptyPerception, type Tactics }
 import { ENEMY_TYPES, type EnemyTypeDef } from './ai/enemyTypes';
 import { CharacterRig, idlePose, type RigPose } from './CharacterRig';
 import { emptyIntent, PlayerController, yawFromDir } from './PlayerController';
+import { type BodyYaw, bodyYaw, type LookAngles, lookAngles, updateBodyYaw } from './rigMath';
 
 /** Lo que el enemigo necesita saber del jugador en cada paso. */
 export interface PlayerTarget {
@@ -130,6 +131,15 @@ export class Enemy {
   private deathStyle: 0 | 1 | 2 = 0;
   /** Tiempo desde que el jugador lo agarró en un takedown (s); −1 si no lo están proyectando. */
   private thrownT = -1;
+  /** Altura del pecho del objetivo sobre sus pies (se mira y se apunta ahí). */
+  private targetRise = 1.2;
+  /** Reloj de la vigilancia de guardia (mirar a un lado y a otro), desfasado entre enemigos. */
+  private glance: number;
+  private readonly look: LookAngles = { yaw: 0, pitch: 0 };
+  /** Inclinación suavizada hacia lo que mira (rad). */
+  private pitchS = 0;
+  /** Giro visual del cuerpo (con muelle sobre el de la simulación). */
+  private readonly visualYaw: BodyYaw = bodyYaw();
 
   constructor(def: EnemySpawnDef, w: EnemyWorld, index: number) {
     this.id = def.id;
@@ -137,6 +147,7 @@ export class Enemy {
     this.def = ENEMY_TYPES[def.type];
     this.w = w;
     this.home.set(def.pos[0], def.pos[1], def.pos[2]);
+    this.glance = index * 2.3;
     const patrol = (def.patrol ?? []).map((p) => new Vector3(p[0], p[1], p[2]));
     this.brain = new EnemyBrain(this.def, patrol, this.home, !!def.stationary, w.rng);
     this.mover = new PlayerController(w.physics, new Vector3(def.pos[0], def.pos[1] + 0.02, def.pos[2]), def.yaw, Groups.ENEMY);
@@ -206,6 +217,7 @@ export class Enemy {
       return;
     }
     this.perceive(dt, target);
+    this.targetRise = target.chest.y - target.feet.y;
     const p = this.perception;
     p.path = this.pathEvent ?? (this.hasPath ? 'moving' : 'idle');
     this.pathEvent = null;
@@ -527,17 +539,48 @@ export class Enemy {
   }
 
   // ======================================================== render
+  /**
+   * Mirada e inclinación al apuntar: la cabeza sigue al objetivo (al pecho, aunque esté más alto o más bajo)
+   * y el arma se inclina hacia él. De guardia y sin nada que mirar, vigila a un lado y a otro.
+   */
+  private updateLook(disabled: boolean, dt: number): void {
+    const pose = this.pose;
+    let pitch = 0;
+    pose.look = 0;
+    if (this.alive && !disabled) {
+      const c = this.cmd;
+      const r = this.rig.root;
+      if (c.hasLook) {
+        const eye = r.position.y + (this.mover.posture === 'crouch' ? 0.95 : 1.45);
+        const l = lookAngles(r.position.x, eye, r.position.z, r.rotation.y, c.lookAt.x, c.lookAt.y + this.targetRise, c.lookAt.z, this.look);
+        pose.lookYaw = l.yaw;
+        pose.look = 1;
+        pitch = clamp(l.pitch, -0.9, 0.9);
+      } else if (this.brain.state === 'patrol') {
+        this.glance += dt;
+        // Más amplio parado que caminando.
+        pose.lookYaw = 0.75 * Math.sin(this.glance * 0.42) * (1 - clamp(pose.speed / 2.5, 0, 0.6));
+        pose.look = 1;
+      }
+    }
+    // La inclinación (cabeza siempre; el arma, al apuntar) se suaviza para que no salte al dejar de mirar.
+    this.pitchS = damp(this.pitchS, pitch, 6, dt);
+    pose.aimPitch = this.pitchS;
+    pose.lookPitch = 0;
+  }
+
   renderUpdate(alpha: number, dt: number): void {
     // Un cuerpo ya asentado no se anima más: conserva su última pose.
     if (!this.alive && this.deadFor > CORPSE_SETTLE) return;
     const m = this.mover;
     m.renderFeet(alpha, this.rig.root.position);
-    this.rig.root.rotation.y = m.renderYaw(alpha);
+    const yaw = updateBodyYaw(this.visualYaw, m.renderYaw(alpha), this.intent.aim, dt);
+    this.rig.root.rotation.y = yaw;
     const pose = this.pose;
     pose.speed = m.stepSpeed(FIXED_DT);
     const vx = m.feet.x - m.prevFeet.x;
     const vz = m.feet.z - m.prevFeet.z;
-    pose.moveAngle = Math.hypot(vx, vz) > 1e-4 ? Math.atan2(-vx, -vz) - m.yaw : 0;
+    pose.moveAngle = Math.hypot(vx, vz) > 1e-4 ? Math.atan2(-vx, -vz) - yaw : 0;
     const stunned = this.alive && this.brain.state === 'stunned';
     const thrown = this.alive && this.thrownT >= 0;
     if (thrown) this.thrownT += dt;
@@ -546,7 +589,7 @@ export class Enemy {
     pose.posture = m.posture;
     pose.grounded = m.grounded;
     pose.aim = this.intent.aim ? 1 : 0;
-    pose.aimPitch = 0;
+    this.updateLook(stunned || thrown, dt);
     if (!this.alive) this.deadFor += dt;
     pose.stateTime = thrown ? Math.max(0, this.thrownT - THROW_DELAY) : this.alive ? m.stateTime : this.deadFor;
     pose.recoil = this.recoilVis;

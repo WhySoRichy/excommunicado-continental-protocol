@@ -126,6 +126,8 @@ export interface QaApi {
   rigHeight(): number;
   /** Arma del jugador respecto a su frente (grados): desvío horizontal del cañón, inclinación y ladeo. */
   weaponAim(): { yaw: number; pitch: number; roll: number } | null;
+  /** Ángulos de las articulaciones y posición de manos y cabeza del jugador (pruebas de fluidez). */
+  rigMotion(): Record<string, number> | null;
   teleport(x: number, y: number, z: number, yaw: number): void;
   checkpoint(id: string): boolean;
   /** Ids de los checkpoints del nivel cargado. */
@@ -318,6 +320,7 @@ export function installQa(game: Game): void {
     },
     rigHeight: () => game.session?.playerRig.silhouetteHeight() ?? 0,
     weaponAim: () => game.session?.playerRig.weaponAim() ?? null,
+    rigMotion: () => game.session?.playerRig.motionSample() ?? null,
     player: () => {
       const p = game.session?.player;
       if (!p) return null;

@@ -61,6 +61,7 @@ export interface BrainCommand {
   run: boolean;
   crouch: boolean;
   hasLook: boolean;
+  /** Punto que mira, a la altura de los pies (la cabeza y el arma buscan el pecho de quien esté ahí). */
   lookAt: Vector3;
   /** Dispara ESTE paso. */
   fire: boolean;
@@ -462,7 +463,7 @@ export class EnemyBrain {
     // Mira alrededor en el último punto conocido.
     cmd.hasLook = true;
     const a = this.stateTime * 1.3;
-    cmd.lookAt.set(p.selfPos.x + Math.sin(a) * 5, p.selfPos.y + 1.4, p.selfPos.z + Math.cos(a) * 5);
+    cmd.lookAt.set(p.selfPos.x + Math.sin(a) * 5, p.selfPos.y, p.selfPos.z + Math.cos(a) * 5);
     if (atLast) this.searchLook += dt;
     if (this.stateTime > 12 || this.searchLook > SEARCH_LOOK_TIME) {
       this.vigilant = 20;

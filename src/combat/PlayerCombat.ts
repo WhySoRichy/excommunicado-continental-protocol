@@ -68,6 +68,10 @@ const TD_SHOT1 = 0.55;
 const TD_SHOT2 = 0.75;
 const TD_RANGE = 1.9;
 const TD_ARC = 0.55; // cos(~57°)
+/** Forcejeo al empezar el takedown y tajo del cuchillo (s): duración de su animación. */
+const GRAB_TIME = 0.45;
+// El tajo cabe en la cadencia del cuchillo táctico (0,4 s entre golpes).
+const SLASH_TIME = 0.4;
 export const SWITCH_TIME = 0.28;
 const FOCUS_MIN = 30;
 const FOCUS_DRAIN = 22;
@@ -102,7 +106,9 @@ export class PlayerCombat {
   focus = 40;
   focusActive = false;
   takedown: TakedownState | null = null;
-  meleeT = 0;
+  /** Segundos que le quedan al forcejeo del takedown y al tajo del cuchillo. */
+  private grabT = 0;
+  private slashT = 0;
   dead = false;
   time = 0;
   readonly stats = {
@@ -176,6 +182,16 @@ export class PlayerCombat {
     }
   }
 
+  /** Forcejeo al empezar un takedown: sube y baja 0..1..0. */
+  get grab(): number {
+    return this.grabT > 0 ? Math.sin((1 - this.grabT / GRAB_TIME) * Math.PI) : 0;
+  }
+
+  /** Fase del tajo del cuchillo 0..1 (−1 = sin tajo). */
+  get slashPhase(): number {
+    return this.slashT > 0 ? 1 - this.slashT / SLASH_TIME : -1;
+  }
+
   /** Escala de tiempo deseada (Foco). */
   get timeScale(): number {
     if (this.hitPause > 0) return HIT_PAUSE_SCALE;
@@ -189,7 +205,8 @@ export class PlayerCombat {
     this.dead = false;
     this.takedown = null;
     this.switchT = 0;
-    this.meleeT = 0;
+    this.grabT = 0;
+    this.slashT = 0;
     this.focusActive = false;
     this.sinceDamage = 99;
     for (const w of this.weapons.values()) w.refill(false);
@@ -232,7 +249,8 @@ export class PlayerCombat {
     this.sinceDamage += dt;
     this.sinceDodge += dt;
     this.sinceCover += dt;
-    this.meleeT = Math.max(0, this.meleeT - dt);
+    this.grabT = Math.max(0, this.grabT - dt);
+    this.slashT = Math.max(0, this.slashT - dt);
     if (this.dead) return;
     tickVitals(this.vitals, dt);
     this.style.update(dt);
@@ -493,7 +511,7 @@ export class PlayerCombat {
   private melee(ctx: CombatCtx): void {
     const w = this.weapon;
     const p = ctx.player;
-    this.meleeT = 0.3;
+    this.slashT = SLASH_TIME;
     ctx.audio.knife();
     const range = w.def.meleeRange ?? 1.7;
     const arc = Math.cos(((w.def.meleeArcDeg ?? 70) / 2) * DEG2RAD);
@@ -558,7 +576,7 @@ export class PlayerCombat {
     ctx.player.setLocked(true);
     // El jugador encara al objetivo.
     ctx.player.yaw = Math.atan2(-(e.feet.x - ctx.player.feet.x), -(e.feet.z - ctx.player.feet.z));
-    this.meleeT = 0.45;
+    this.grabT = GRAB_TIME;
     ctx.audio.takedown();
     ctx.camera.addTrauma(0.25);
   }

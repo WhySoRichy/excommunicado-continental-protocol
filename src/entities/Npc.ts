@@ -3,6 +3,7 @@ import { dampAngle, wrapAngle } from '../core/math';
 import { disposeSprite, makeTextSprite } from '../render/labels';
 import { CharacterRig, type HairStyle, idlePose, type Outfit, type RigColors, type RigPose } from './CharacterRig';
 import { yawFromDir } from './PlayerController';
+import { type LookAngles, lookAngles } from './rigMath';
 
 export interface NpcDef {
   id: string;
@@ -20,10 +21,12 @@ export interface NpcDef {
 const ATTENTION_RADIUS = 7;
 /** Giro máximo respecto a su orientación base (no da la espalda al mostrador). */
 const MAX_TURN = 1.1;
+/** Altura de los ojos (de un NPC y del jugador) sobre los pies. */
+const EYE_Y = 1.62;
 
 /**
  * Personaje no jugable del hub (Charon, Sommelier, Winston): rig low-poly con
- * etiqueta de nombre, que se gira hacia el jugador cuando se acerca.
+ * etiqueta de nombre, que se gira hacia el jugador cuando se acerca y lo sigue con la mirada.
  * Su cuerpo físico es una caja `invisible` declarada en los datos del nivel.
  */
 export class Npc {
@@ -33,6 +36,7 @@ export class Npc {
   private readonly baseYaw: number;
   private yaw: number;
   private readonly pose: RigPose = idlePose();
+  private readonly look: LookAngles = { yaw: 0, pitch: 0 };
 
   constructor(
     readonly def: NpcDef,
@@ -62,7 +66,8 @@ export class Npc {
     const dx = playerFeet.x - this.pos.x;
     const dz = playerFeet.z - this.pos.z;
     let target = this.baseYaw;
-    if (dx * dx + dz * dz < ATTENTION_RADIUS * ATTENTION_RADIUS) {
+    const near = dx * dx + dz * dz < ATTENTION_RADIUS * ATTENTION_RADIUS;
+    if (near) {
       const toPlayer = yawFromDir(dx, dz);
       const off = Math.max(-MAX_TURN, Math.min(MAX_TURN, wrapAngle(toPlayer - this.baseYaw)));
       target = this.baseYaw + off;
@@ -72,6 +77,13 @@ export class Npc {
     this.pose.speed = 0;
     this.pose.state = 'ground';
     this.pose.grounded = true;
+    // El cuerpo no pasa de MAX_TURN; la cabeza hace el resto (y se adelanta al giro).
+    this.pose.look = near ? 1 : 0;
+    if (near) {
+      const l = lookAngles(this.pos.x, this.pos.y + EYE_Y, this.pos.z, this.yaw, playerFeet.x, playerFeet.y + EYE_Y, playerFeet.z, this.look);
+      this.pose.lookYaw = l.yaw;
+      this.pose.lookPitch = l.pitch;
+    }
     this.rig.update(this.pose, dt);
   }
 
