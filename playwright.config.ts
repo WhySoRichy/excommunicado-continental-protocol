@@ -28,19 +28,24 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      testIgnore: /firefox.spec.ts/,
+      testIgnore: /firefox\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 720 }, channel: 'chromium', launchOptions: { args: gpuArgs } },
     },
-    // Prueba de humo en Firefox: ya hubo un fallo exclusivo de este navegador (el audio posicional).
-    {
-      name: 'firefox',
-      testMatch: /firefox.spec.ts/,
-      use: {
-        ...devices['Desktop Firefox'],
-        viewport: { width: 1280, height: 720 },
-        launchOptions: { firefoxUserPrefs: { 'media.autoplay.default': 0, 'webgl.force-enabled': true } },
-      },
-    },
+    // Prueba de humo en Firefox: ya hubo un fallo exclusivo de este navegador (el audio posicional). Solo en
+    // local: en los runners de GitHub, sin GPU, Firefox sin pantalla no llega a arrancar el juego.
+    ...(isCI
+      ? []
+      : [
+          {
+            name: 'firefox',
+            testMatch: /firefox\.spec\.ts$/,
+            use: {
+              ...devices['Desktop Firefox'],
+              viewport: { width: 1280, height: 720 },
+              launchOptions: { firefoxUserPrefs: { 'media.autoplay.default': 0, 'webgl.force-enabled': true } },
+            },
+          },
+        ]),
   ],
   webServer: {
     command: 'npm run preview:qa',
