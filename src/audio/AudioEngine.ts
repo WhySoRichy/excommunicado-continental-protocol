@@ -215,7 +215,10 @@ export class AudioEngine {
   }
 
   /** Ráfaga de ruido filtrado con envolvente. */
-  private noiseHit(dest: AudioNode, opts: { freq: number; q?: number; type?: BiquadFilterType; gain: number; attack?: number; decay: number; delay?: number }): void {
+  private noiseHit(
+    dest: AudioNode,
+    opts: { freq: number; q?: number; type?: BiquadFilterType; gain: number; attack?: number; decay: number; delay?: number },
+  ): void {
     const ctx = this.ctx!;
     if (!this.noise || !this.voice()) return;
     const t = ctx.currentTime + (opts.delay ?? 0);

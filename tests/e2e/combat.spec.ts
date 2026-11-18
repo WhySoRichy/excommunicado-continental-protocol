@@ -71,7 +71,9 @@ test.describe('Fase 2 · combate', () => {
     expect(r.bad).toBe(0);
     expect(r.inv.penetrations).toBe(0);
     expect(r.inv.cameraInside).toBe(0);
-    console.log(`[1vN] ${(r.t / 60).toFixed(1)} s simulados, disparos ${r.combat.stats.shotsFired}, impactos ${r.combat.stats.shotsHit}, headshots ${r.combat.stats.headshots}, puntos ${r.combat.score}`);
+    console.log(
+      `[1vN] ${(r.t / 60).toFixed(1)} s simulados, disparos ${r.combat.stats.shotsFired}, impactos ${r.combat.stats.shotsHit}, headshots ${r.combat.stats.headshots}, puntos ${r.combat.score}`,
+    );
     expect(errors).toEqual([]);
   });
 
@@ -109,7 +111,9 @@ test.describe('Fase 2 · combate', () => {
       }).length;
       return { ai: q.aiStats()!, moved, states: q.enemies().map((e) => e.state) };
     });
-    console.log(`[IA] estados finales ${JSON.stringify(r.ai.states)} atascos detectados ${r.ai.stuckEvents} máx sin avanzar ${r.ai.maxNoProgress.toFixed(2)} s`);
+    console.log(
+      `[IA] estados finales ${JSON.stringify(r.ai.states)} atascos detectados ${r.ai.stuckEvents} máx sin avanzar ${r.ai.maxNoProgress.toFixed(2)} s`,
+    );
     expect(r.ai.maxNoProgress).toBeLessThan(3);
     // Los que pueden moverse (no el tirador fijo) se movieron.
     expect(r.moved).toBeGreaterThanOrEqual(4);

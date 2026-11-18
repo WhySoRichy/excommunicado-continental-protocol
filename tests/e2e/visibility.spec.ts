@@ -35,7 +35,10 @@ test.describe('GATE · claridad y visibilidad', () => {
   test('todos los contratos: luminancia en cada checkpoint, objetivo y baliza siempre visibles', async ({ page }) => {
     const errors = collectErrors(page);
     await openGame(page);
-    await page.getByRole('button', { name: /Nueva partida|Continuar/ }).first().click();
+    await page
+      .getByRole('button', { name: /Nueva partida|Continuar/ })
+      .first()
+      .click();
     await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('hub');
     const hub = await lumAtCheckpoints(page, 'hub');
     for (const c of hub) expect(c.lum, `hub/${c.id}`).toBeGreaterThan(LUMINANCE_MIN);

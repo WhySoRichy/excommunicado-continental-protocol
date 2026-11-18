@@ -16,7 +16,9 @@ if (!existsSync(join(frames, 'frame-000.png'))) {
   process.exit(1);
 }
 const filter = `fps=${FPS},scale=${WIDTH}:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=128:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle`;
-const r = spawnSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', String(FPS), '-i', join(frames, 'frame-%03d.png'), '-vf', filter, '-loop', '0', out], { stdio: 'inherit' });
+const r = spawnSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', String(FPS), '-i', join(frames, 'frame-%03d.png'), '-vf', filter, '-loop', '0', out], {
+  stdio: 'inherit',
+});
 if (r.error) {
   console.error('[gif] no se pudo ejecutar ffmpeg (¿está instalado y en el PATH?):', r.error.message);
   process.exit(1);

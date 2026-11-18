@@ -17,7 +17,16 @@ async function frames(page: Page, seconds: number): Promise<void> {
   await page.evaluate((s) => window.__EXCOM__!.measureFps(s), seconds);
 }
 
-function expectNoViolations(inv: { penetrations: number; cameraInside: number; cameraOccluded: number; outOfBounds: number; nanResets: number; killPlaneResets: number; maxHorizontalSpeed: number; lastViolation: string }): void {
+function expectNoViolations(inv: {
+  penetrations: number;
+  cameraInside: number;
+  cameraOccluded: number;
+  outOfBounds: number;
+  nanResets: number;
+  killPlaneResets: number;
+  maxHorizontalSpeed: number;
+  lastViolation: string;
+}): void {
   expect(inv.penetrations, inv.lastViolation).toBe(0);
   expect(inv.cameraInside, inv.lastViolation).toBe(0);
   expect(inv.cameraOccluded, inv.lastViolation).toBe(0);
@@ -268,7 +277,7 @@ test.describe('Fase 1 · movimiento', () => {
       const maxState: Record<string, number> = {};
       let last = '';
       let run = 0;
-      for (let t = 0; t < 30 * 60; ) {
+      for (let t = 0; t < 30 * 60;) {
         const n = 3 + Math.floor(rnd() * 15);
         q.setLook(rnd() * Math.PI * 2, -0.6 + rnd() * 1.2);
         q.step(1, {

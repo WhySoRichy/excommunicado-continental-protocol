@@ -84,7 +84,10 @@ test.describe('Fase 5 · ajustes', () => {
     expect(st.settings.bindings.reload[0]).toBe('KeyG');
 
     // En el hub, el aviso de Charon muestra la tecla real (R) y las pistas están ocultas.
-    await page.getByRole('button', { name: /Nueva partida|Continuar/ }).first().click();
+    await page
+      .getByRole('button', { name: /Nueva partida|Continuar/ })
+      .first()
+      .click();
     await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('hub');
     await page.evaluate(() => {
       const q = window.__EXCOM__!;
@@ -126,7 +129,9 @@ test.describe('Fase 5 · ajustes', () => {
     });
     expect(r).toEqual({ on: true, still: true, off: false });
     // Restablecer devuelve todo a fábrica (y las teclas).
-    await page.evaluate(() => window.__EXCOM__!.setSettings({ fov: 90, bindings: { ...window.__EXCOM__!.settings().settings.bindings, interact: ['KeyZ', 'Pad0'] } }));
+    await page.evaluate(() =>
+      window.__EXCOM__!.setSettings({ fov: 90, bindings: { ...window.__EXCOM__!.settings().settings.bindings, interact: ['KeyZ', 'Pad0'] } }),
+    );
     await page.keyboard.press('Escape');
     await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('paused');
     await openSettings(page);

@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_BINDINGS } from '../../src/core/actions';
 import { MemoryStore, SETTINGS_KEY } from '../../src/core/Save';
-import { bindingConflicts, defaultSettings, loadSettings, rebind, saveSettings, SETTING_RANGES, suggestPreset, validateSettings } from '../../src/core/Settings';
+import {
+  bindingConflicts,
+  defaultSettings,
+  loadSettings,
+  rebind,
+  saveSettings,
+  SETTING_RANGES,
+  suggestPreset,
+  validateSettings,
+} from '../../src/core/Settings';
 
 describe('ajustes', () => {
   it('los de fábrica no tienen teclas en conflicto', () => {
@@ -76,7 +85,11 @@ describe('ajustes', () => {
       if (!r.ok) return;
       b = r.bindings;
       expect(bindingConflicts(b)).toEqual([]);
-      for (const a of actions) expect(b[a].some((c) => !c.startsWith('Pad')), a).toBe(true);
+      for (const a of actions)
+        expect(
+          b[a].some((c) => !c.startsWith('Pad')),
+          a,
+        ).toBe(true);
     }
   });
 });

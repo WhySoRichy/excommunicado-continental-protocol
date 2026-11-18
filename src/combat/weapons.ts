@@ -273,7 +273,8 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
 };
 
 /** Mejoras de la armería (DISENO §5.2). */
-export type UpgradeId = 'extMag' | 'suppressor' | 'hollowPoint' | 'compensator' | 'suit1' | 'suit2' | 'suit3' | 'tacticalKnife' | 'shotgun' | 'revolver' | 'dmr' | 'extraMarker';
+export type UpgradeId =
+  'extMag' | 'suppressor' | 'hollowPoint' | 'compensator' | 'suit1' | 'suit2' | 'suit3' | 'tacticalKnife' | 'shotgun' | 'revolver' | 'dmr' | 'extraMarker';
 
 /** Cada tecla de arma recorre las que tengas de su grupo: 1 primarias, 2 armas cortas, 3 cuchillo. */
 export const SLOT_GROUPS: Readonly<Record<1 | 2 | 3, readonly WeaponId[]>> = { 1: ['carbine', 'shotgun', 'dmr'], 2: ['pistol', 'revolver'], 3: ['knife'] };

@@ -14,7 +14,10 @@ test.describe('Arsenal', () => {
   test('revólver y rifle de tirador: se compran, se eligen con 2 y 1, disparan y el rifle amplía la mira', async ({ page }) => {
     const errors = collectErrors(page);
     await openGame(page);
-    await page.getByRole('button', { name: /Nueva partida|Continuar/ }).first().click();
+    await page
+      .getByRole('button', { name: /Nueva partida|Continuar/ })
+      .first()
+      .click();
     await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('hub');
     // Armería del Sommelier: diálogo y tienda.
     await page.evaluate(() => {
@@ -25,7 +28,8 @@ test.describe('Arsenal', () => {
       q.step(4, {});
       q.interact();
     });
-    for (let i = 0; i < 5 && (await page.evaluate(() => window.__EXCOM__!.menu())) === 'dialog'; i++) await page.evaluate(() => window.__EXCOM__!.advanceDialog());
+    for (let i = 0; i < 5 && (await page.evaluate(() => window.__EXCOM__!.menu())) === 'dialog'; i++)
+      await page.evaluate(() => window.__EXCOM__!.advanceDialog());
     await expect.poll(() => page.evaluate(() => window.__EXCOM__!.menu())).toBe('shop');
     expect(await page.evaluate(() => window.__EXCOM__!.buy('revolver'))).toBe(true);
     expect(await page.evaluate(() => window.__EXCOM__!.buy('dmr'))).toBe(true);
@@ -65,7 +69,17 @@ test.describe('Arsenal', () => {
       // Pasados unos segundos sin disparar no queda ningún efecto vivo (las trazadoras se quedaban flotando).
       q.step(150, {});
       const fxEnd = q.vfx();
-      return { loadout, rev: { weapon: rev.weapon, mag: rev.mag, magMax: rev.magMax }, afterShot, first, dmr: { weapon: dmr.weapon, magMax: dmr.magMax }, fovDmr, fovCarbine, fxShot, fxEnd };
+      return {
+        loadout,
+        rev: { weapon: rev.weapon, mag: rev.mag, magMax: rev.magMax },
+        afterShot,
+        first,
+        dmr: { weapon: dmr.weapon, magMax: dmr.magMax },
+        fovDmr,
+        fovCarbine,
+        fxShot,
+        fxEnd,
+      };
     });
     expect(r.fxShot.tracers).toBeGreaterThanOrEqual(1);
     expect(r.fxShot.casings).toBeGreaterThanOrEqual(1);

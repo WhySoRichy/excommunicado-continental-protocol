@@ -58,15 +58,36 @@ export interface QaInvariants {
   lastViolation: string;
 }
 
-const WEAPON_MODEL: Record<WeaponId, WeaponModel> = { carbine: 'rifle', shotgun: 'shotgun', dmr: 'dmr', pistol: 'pistol', revolver: 'revolver', knife: 'knife' };
+const WEAPON_MODEL: Record<WeaponId, WeaponModel> = {
+  carbine: 'rifle',
+  shotgun: 'shotgun',
+  dmr: 'dmr',
+  pistol: 'pistol',
+  revolver: 'revolver',
+  knife: 'knife',
+};
 /** Nivel que se carga para cada contrato. */
 const MISSION_LEVEL: Record<MissionId, LevelId> = { practice: 'practice', nightclub: 'nightclub', docks: 'docks', rooftop: 'rooftop', gauntlet: 'hub' };
 const SUB_LABELS = { time: 'Tiempo', accuracy: 'Precisión', damage: 'Daño recibido', variety: 'Variedad', civilians: 'Civiles ilesos' } as const;
 /** Margen (fracción de media pantalla) donde se pega la flecha de la baliza fuera de pantalla. */
 const BEACON_EDGE = 0.88;
-const SLOT_ACTIONS: Record<WeaponId, Action> = { carbine: 'weapon1', shotgun: 'weapon1', dmr: 'weapon1', pistol: 'weapon2', revolver: 'weapon2', knife: 'weapon3' };
+const SLOT_ACTIONS: Record<WeaponId, Action> = {
+  carbine: 'weapon1',
+  shotgun: 'weapon1',
+  dmr: 'weapon1',
+  pistol: 'weapon2',
+  revolver: 'weapon2',
+  knife: 'weapon3',
+};
 /** Nombre corto de cada arma en el HUD. */
-const SLOT_NAMES: Record<WeaponId, string> = { carbine: 'Carabina', shotgun: 'Escopeta', dmr: 'Rifle', pistol: 'Pistola', revolver: 'Revólver', knife: 'Cuchillo' };
+const SLOT_NAMES: Record<WeaponId, string> = {
+  carbine: 'Carabina',
+  shotgun: 'Escopeta',
+  dmr: 'Rifle',
+  pistol: 'Pistola',
+  revolver: 'Revólver',
+  knife: 'Cuchillo',
+};
 /** Tiempo mínimo en la pantalla de muerte antes de poder reaparecer. */
 const DEATH_MIN = 1.2;
 /** Autoguardado del tiempo de juego. */
@@ -542,7 +563,9 @@ export class Game {
       achievements: o.achievements.map((a) => ({ name: a.name, coins: a.coins })),
       newBest: o.newBest,
       styleScore: this.session?.combat.style.score ?? 0,
-      gauntlet: o.gauntlet ? { waves: o.gauntlet.waves, position: o.gauntlet.position, top: o.gauntlet.top.map((g) => ({ waves: g.waves, score: g.score })) } : null,
+      gauntlet: o.gauntlet
+        ? { waves: o.gauntlet.waves, position: o.gauntlet.position, top: o.gauntlet.top.map((g) => ({ waves: g.waves, score: g.score })) }
+        : null,
     };
     this.audio.ui(o.success ? 'coin' : 'error');
     this.screens.showResults(
@@ -679,7 +702,16 @@ export class Game {
         const lab = (a: Action): string => this.input.label(a);
         this.openMenu(() =>
           this.screens.showDialog(
-            rulesPlaque({ interact: lab('interact'), fire: lab('fire'), crouch: lab('crouch'), jump: lab('jump'), takedown: lab('takedown'), reload: lab('reload'), focus: lab('focus'), sprint: lab('sprint') }),
+            rulesPlaque({
+              interact: lab('interact'),
+              fire: lab('fire'),
+              crouch: lab('crouch'),
+              jump: lab('jump'),
+              takedown: lab('takedown'),
+              reload: lab('reload'),
+              focus: lab('focus'),
+              sprint: lab('sprint'),
+            }),
           ),
         );
         break;
@@ -869,7 +901,8 @@ export class Game {
       const def = MISSIONS[m.id];
       notes.push(def.briefing[1] ?? '');
       notes.push(def.briefing[2] ?? '');
-      if (data?.mission?.alarm && !m.alarmDisabled) notes.push(m.alarmSounded ? 'La alarma ya ha sonado.' : 'Si alguien da la voz de alarma llegan refuerzos. Busca el panel para desactivarla.');
+      if (data?.mission?.alarm && !m.alarmDisabled)
+        notes.push(m.alarmSounded ? 'La alarma ya ha sonado.' : 'Si alguien da la voz de alarma llegan refuerzos. Busca el panel para desactivarla.');
     } else if (this.currentLevel === 'hub') {
       notes.push(this.director?.hostile ? HUB_TEXT.intelHostile : HUB_TEXT.intelNeutral);
       notes.push(HUB_TEXT.intelContracts);
@@ -1062,7 +1095,10 @@ export class Game {
       this.hud.setMarkers(this.mission.markersUsed, this.mission.markersTotal);
       if (!canRespawn) return; // el director ya cerró el contrato: pantalla de resultados
       const left = this.mission.markersLeft;
-      this.hud.showDeath(s.combat.deathCause(this.camera.yaw), `Gastas un marcador de sangre (${left} restante${left === 1 ? '' : 's'}). Pulsa ${lab} o clic para volver al último punto de control.`);
+      this.hud.showDeath(
+        s.combat.deathCause(this.camera.yaw),
+        `Gastas un marcador de sangre (${left} restante${left === 1 ? '' : 's'}). Pulsa ${lab} o clic para volver al último punto de control.`,
+      );
       return;
     }
     this.hud.showDeath(s.combat.deathCause(this.camera.yaw), `Pulsa ${lab} o clic para reaparecer`);
@@ -1242,7 +1278,11 @@ export class Game {
     const near = this.nearInteractable;
     if (near) {
       const hold = near.hold ?? 0;
-      if (hold > 0) return { key: `Mantén ${lab('interact')}`, text: this.holdT > 0 ? `${near.prompt} · ${Math.min(99, Math.round((this.holdT / hold) * 100))} %` : near.prompt };
+      if (hold > 0)
+        return {
+          key: `Mantén ${lab('interact')}`,
+          text: this.holdT > 0 ? `${near.prompt} · ${Math.min(99, Math.round((this.holdT / hold) * 100))} %` : near.prompt,
+        };
       return { key: lab('interact'), text: near.prompt };
     }
     if (s.combat.takedownCandidate(s.ctx)) return { key: lab('takedown'), text: 'Takedown' };
@@ -1283,7 +1323,13 @@ export class Game {
     const c = s.combat;
     const p = s.player;
     for (const w of c.weapons.values()) {
-      const bad = w.mag < 0 || w.mag > w.def.mag || w.reserve < 0 || Number.isNaN(w.reserve) || (w.reloading && !w.isGun) || (w.reloading && w.reloadT > w.reloadDur + 0.05);
+      const bad =
+        w.mag < 0 ||
+        w.mag > w.def.mag ||
+        w.reserve < 0 ||
+        Number.isNaN(w.reserve) ||
+        (w.reloading && !w.isGun) ||
+        (w.reloading && w.reloadT > w.reloadDur + 0.05);
       if (bad) {
         this.combatInconsistencies++;
         this.invariants.lastViolation = `arma ${w.def.id} inconsistente: mag=${w.mag} reserva=${w.reserve} recargando=${w.reloading}`;
@@ -1403,14 +1449,18 @@ export class Game {
       lines.push(
         `Jugador ${p.feet.x.toFixed(2)}, ${p.feet.y.toFixed(2)}, ${p.feet.z.toFixed(2)}  ${p.state}/${p.posture}  suelo=${p.grounded ? 'sí' : 'no'}  v=${p.stepSpeed(FIXED_DT).toFixed(2)} m/s`,
         `Salud ${Math.ceil(s.combat.vitals.health)}  armadura ${Math.ceil(s.combat.vitals.armor)}  arma ${s.combat.current} ${s.combat.weapon.mag}/${s.combat.weapon.reserve}  ${s.combat.holstered ? 'enfundada' : ''}`,
-        `Enemigos vivos ${ai.alive}/${ai.total}  atascos ${ai.stuckEvents}  máx. sin avanzar ${ai.maxNoProgress.toFixed(1)} s  ${Object.entries(ai.states).map(([k, v]) => `${k}:${v}`).join(' ')}`,
+        `Enemigos vivos ${ai.alive}/${ai.total}  atascos ${ai.stuckEvents}  máx. sin avanzar ${ai.maxNoProgress.toFixed(1)} s  ${Object.entries(ai.states)
+          .map(([k, v]) => `${k}:${v}`)
+          .join(' ')}`,
         `Hub ${this.director ? `${this.director.state} oleada ${this.director.rules.wave}` : '—'}   cámara dist ${this.camera.distanceToHead.toFixed(2)}  yaw ${this.camera.yaw.toFixed(2)}`,
         `Input mantenidas ${this.input.heldCount}  pointer lock ${this.input.pointerLocked ? 'sí' : 'no'}  dispositivo ${this.input.lastDevice}`,
       );
     }
     if (this.opts.qa) {
       const v = this.invariants;
-      lines.push(`QA penetraciones ${v.penetrations}  cámara dentro ${v.cameraInside}  tapada ${v.cameraOccluded}  fuera ${v.outOfBounds}  combate ${this.combatInconsistencies}`);
+      lines.push(
+        `QA penetraciones ${v.penetrations}  cámara dentro ${v.cameraInside}  tapada ${v.cameraOccluded}  fuera ${v.outOfBounds}  combate ${this.combatInconsistencies}`,
+      );
     }
     lines.push(`GPU ${this.renderer.gpuInfo()}`);
     return lines.join('\n');

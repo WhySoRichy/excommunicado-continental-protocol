@@ -34,7 +34,7 @@ La primera vez que se ejecuten las e2e: `npx playwright install chromium`. Requi
 1. **Entender antes de cambiar.** Leer el archivo y sus tests. Las reglas del proyecto (bucle sin asignaciones, niveles como datos, una sola máquina de estados, arreglar la causa y no el síntoma) están en [ARQUITECTURA.md](ARQUITECTURA.md#7-convenciones-de-código).
 2. **La lógica pura va con test unitario.** Si algo se puede decidir sin three ni DOM, va en un archivo aparte con su test en `tests/unit/`.
 3. **Lo que se ve o se juega se comprueba jugando.** Las e2e usan la API de pruebas `window.__EXCOM__` (se activa con `?qa=1` en desarrollo y en el build de pruebas; definida en `src/debug/qa.ts`). Permite avanzar paso a paso, teletransportar, pulsar acciones y leer el estado. Para cambios visuales, sacar capturas y mirarlas.
-4. **Antes de cada commit:** `npm run build`, `npm test` y `npm run test:e2e` en verde. Para reproducir el entorno de GitHub Actions (render por software, muy pocos FPS): `CI=1 npm run test:e2e`.
+4. **Antes de cada commit:** `npm run format`, y `npm run build`, `npm test` y `npm run test:e2e` en verde. Para reproducir el entorno de GitHub Actions (render por software, muy pocos FPS): `CI=1 npm run test:e2e`.
 5. **Commits** convencionales y en español (`feat:`, `fix:`, `perf:`, `test:`, `docs:`, `chore:`), con un cuerpo que explique el porqué.
 6. **Documentación al día:** si cambia una mecánica, actualizar `DISENO.md`; si cambia una decisión técnica, `ARQUITECTURA.md`; al terminar algo del roadmap, moverlo a "Estado actual".
 

@@ -13,7 +13,10 @@ test.describe('Robustez', () => {
 
   test('si un nivel no se puede descargar, se explica en pantalla y recargar devuelve al juego', async ({ page }) => {
     await openGame(page);
-    await page.getByRole('button', { name: /Nueva partida|Continuar/ }).first().click();
+    await page
+      .getByRole('button', { name: /Nueva partida|Continuar/ })
+      .first()
+      .click();
     await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('hub');
     // El archivo del nivel deja de estar disponible: sin red, o un despliegue nuevo con otros nombres.
     await page.route('**/assets/nightclub-*.js', (route) => route.abort('failed'));

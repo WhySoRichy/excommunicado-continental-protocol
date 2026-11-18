@@ -18,7 +18,11 @@ function hex(c: number): string {
   return `#${c.toString(16).padStart(6, '0')}`;
 }
 
-function buildings(ctx: CanvasRenderingContext2D, rng: Rng, o: { base: number; minH: number; maxH: number; minW: number; maxW: number; body: string; lit: number; win: string[] }): void {
+function buildings(
+  ctx: CanvasRenderingContext2D,
+  rng: Rng,
+  o: { base: number; minH: number; maxH: number; minW: number; maxW: number; body: string; lit: number; win: string[] },
+): void {
   let x = -10;
   while (x < TEX_W) {
     const w = rng.range(o.minW, o.maxW);
@@ -87,7 +91,11 @@ function skylineTexture(horizon: number): CanvasTexture {
   ctx.arc(mx, my, 13, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = 'rgba(150,160,185,0.5)';
-  for (const [dx, dy, r] of [[-4, -3, 3], [5, 2, 2.4], [-1, 6, 2]] as const) {
+  for (const [dx, dy, r] of [
+    [-4, -3, 3],
+    [5, 2, 2.4],
+    [-1, 6, 2],
+  ] as const) {
     ctx.beginPath();
     ctx.arc(mx + dx, my + dy, r, 0, Math.PI * 2);
     ctx.fill();

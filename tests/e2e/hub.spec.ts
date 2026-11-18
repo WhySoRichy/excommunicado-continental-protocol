@@ -8,7 +8,10 @@ import { collectErrors, LUMINANCE_MIN, openGame, shotPath } from './helpers';
 
 async function enterHub(page: Page): Promise<void> {
   await openGame(page);
-  await page.getByRole('button', { name: /Nueva partida|Continuar/ }).first().click();
+  await page
+    .getByRole('button', { name: /Nueva partida|Continuar/ })
+    .first()
+    .click();
   await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('hub');
   await page.evaluate(() => {
     const q = window.__EXCOM__!;
@@ -195,7 +198,15 @@ test.describe('Fase 3 · El Continental', () => {
       const q = window.__EXCOM__!;
       q.press('fire');
       q.step(3, {});
-      return { hub: q.hub()!, c: q.combat()!, hud: q.hud(), coins: q.profile().coins, excom: q.profile().excommunicados, achievements: q.profile().achievements, enemies: q.enemies().filter((e) => e.alive).length };
+      return {
+        hub: q.hub()!,
+        c: q.combat()!,
+        hud: q.hud(),
+        coins: q.profile().coins,
+        excom: q.profile().excommunicados,
+        achievements: q.profile().achievements,
+        enemies: q.enemies().filter((e) => e.alive).length,
+      };
     });
     expect(ex.c.stats.shotsFired).toBe(1);
     expect(ex.hub.state).toBe('excommunicado');

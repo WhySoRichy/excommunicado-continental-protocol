@@ -98,7 +98,13 @@ export class Hud {
 
   constructor(uiRoot: HTMLElement) {
     this.root = h('div', { id: 'hud', ariaLabel: 'HUD' });
-    this.crosshair = h('div', { class: 'crosshair', ariaLabel: 'Mira' }, [h('i', { class: 'ch ch-t' }), h('i', { class: 'ch ch-b' }), h('i', { class: 'ch ch-l' }), h('i', { class: 'ch ch-r' }), h('i', { class: 'ch-dot' })]);
+    this.crosshair = h('div', { class: 'crosshair', ariaLabel: 'Mira' }, [
+      h('i', { class: 'ch ch-t' }),
+      h('i', { class: 'ch ch-b' }),
+      h('i', { class: 'ch ch-l' }),
+      h('i', { class: 'ch ch-r' }),
+      h('i', { class: 'ch-dot' }),
+    ]);
     this.hitmark = h('div', { class: 'hitmark' }, [h('i'), h('i'), h('i'), h('i')]);
     this.promptKey = keycap('E');
     this.promptText = h('span', { class: 'prompt-text' });
@@ -132,7 +138,11 @@ export class Hud {
     this.ammoMag = h('span', { class: 'ammo-mag' });
     this.ammoRes = h('span', { class: 'ammo-res' });
     this.slots = h('div', { class: 'slots' });
-    this.weaponPanel = h('div', { class: 'weapon-panel', ariaLabel: 'Arma y munición' }, [this.weaponName, h('div', { class: 'ammo' }, [this.ammoMag, this.ammoRes]), this.slots]);
+    this.weaponPanel = h('div', { class: 'weapon-panel', ariaLabel: 'Arma y munición' }, [
+      this.weaponName,
+      h('div', { class: 'ammo' }, [this.ammoMag, this.ammoRes]),
+      this.slots,
+    ]);
 
     this.reloadFill = h('div', { class: 'reload-fill' });
     this.reloadWindow = h('div', { class: 'reload-window' });
@@ -152,7 +162,13 @@ export class Hud {
     this.styleGauge = h('div', { class: 'style-gauge-fill' });
     this.styleScore = h('div', { class: 'style-score' });
     this.feed = h('div', { class: 'feed' });
-    this.style = h('div', { class: 'style', ariaLabel: 'Medidor de estilo' }, [this.styleMult, this.styleRank, h('div', { class: 'style-gauge' }, [this.styleGauge]), this.styleScore, this.feed]);
+    this.style = h('div', { class: 'style', ariaLabel: 'Medidor de estilo' }, [
+      this.styleMult,
+      this.styleRank,
+      h('div', { class: 'style-gauge' }, [this.styleGauge]),
+      this.styleScore,
+      this.feed,
+    ]);
 
     this.focusFill = h('div', { class: 'focus-fill' });
     this.focusLabel = h('div', { class: 'focus-label' });
@@ -169,7 +185,28 @@ export class Hud {
 
     this.intel = h('div', { class: 'intel-wrap' });
     this.intel.hidden = true;
-    this.root.append(this.focusTint, this.vignette, this.beacon, this.beaconArrow, this.crosshair, this.hitmark, this.dmgRing, this.prompt, this.zone, this.objective, this.markers, this.hints, this.vitals, this.weaponPanel, this.reloadBar, this.style, this.focusBox, this.toast, this.death, this.intel);
+    this.root.append(
+      this.focusTint,
+      this.vignette,
+      this.beacon,
+      this.beaconArrow,
+      this.crosshair,
+      this.hitmark,
+      this.dmgRing,
+      this.prompt,
+      this.zone,
+      this.objective,
+      this.markers,
+      this.hints,
+      this.vitals,
+      this.weaponPanel,
+      this.reloadBar,
+      this.style,
+      this.focusBox,
+      this.toast,
+      this.death,
+      this.intel,
+    );
     this.root.hidden = true;
     uiRoot.appendChild(this.root);
   }
@@ -235,7 +272,10 @@ export class Hud {
     const key = `${used}/${total}`;
     if (this.markersKey === key) return;
     this.markersKey = key;
-    this.markers.replaceChildren(h('span', { class: 'markers-label', text: 'MARCADORES' }), ...Array.from({ length: total }, (_, i) => h('i', { class: `marker${i < total - used ? ' on' : ''}` })));
+    this.markers.replaceChildren(
+      h('span', { class: 'markers-label', text: 'MARCADORES' }),
+      ...Array.from({ length: total }, (_, i) => h('i', { class: `marker${i < total - used ? ' on' : ''}` })),
+    );
   }
 
   private markersKey = '';
@@ -372,7 +412,9 @@ export class Hud {
     const feedKey = d.feed.map((f) => `${f.text}${f.points}`).join('|');
     if (this.cache.get('feed') !== feedKey) {
       this.cache.set('feed', feedKey);
-      this.feed.replaceChildren(...d.feed.map((f) => h('div', { class: 'feed-item' }, [h('span', { text: f.text }), f.points > 0 ? h('b', { text: `+${f.points}` }) : null])));
+      this.feed.replaceChildren(
+        ...d.feed.map((f) => h('div', { class: 'feed-item' }, [h('span', { text: f.text }), f.points > 0 ? h('b', { text: `+${f.points}` }) : null])),
+      );
     }
 
     // Foco.

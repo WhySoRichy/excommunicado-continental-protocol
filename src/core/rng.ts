@@ -44,4 +44,3 @@ export class Rng {
     return this.next() < 0.5 ? -1 : 1;
   }
 }
-

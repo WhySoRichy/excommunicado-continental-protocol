@@ -264,7 +264,14 @@ export class EnemyBrain {
         break;
     }
     cmd.detection = this.detection;
-    cmd.icon = this.state === 'patrol' ? (this.detection > 0.05 ? 'suspicious' : 'none') : this.state === 'suspicious' || this.state === 'search' ? 'suspicious' : 'alert';
+    cmd.icon =
+      this.state === 'patrol'
+        ? this.detection > 0.05
+          ? 'suspicious'
+          : 'none'
+        : this.state === 'suspicious' || this.state === 'search'
+          ? 'suspicious'
+          : 'alert';
   }
 
   private moveTo(target: Vector3, run: boolean, cmd: BrainCommand, p: Perception, t: Tactics): void {

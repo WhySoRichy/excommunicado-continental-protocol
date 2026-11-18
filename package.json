@@ -36,7 +36,9 @@
     "test:e2e": "npm run build:qa && playwright test",
     "qa": "npm run build && npm test && npm run test:e2e",
     "media": "npm run build:qa && playwright test -c playwright.media.config.ts && node scripts/make-gif.mjs",
-    "poses": "node scripts/poses.mjs"
+    "poses": "node scripts/poses.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "0.21.0",
@@ -46,6 +48,7 @@
     "@playwright/test": "1.65.0",
     "@types/node": "26.6.6",
     "@types/three": "0.187.0",
+    "prettier": "3.10.1",
     "typescript": "7.0.2",
     "vite": "8.3.7",
     "vitest": "5.1.0"

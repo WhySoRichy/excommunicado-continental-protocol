@@ -8,7 +8,10 @@ import { collectErrors, openGame, shotPath } from './helpers';
  */
 async function startPractice(page: Page): Promise<void> {
   await openGame(page);
-  await page.getByRole('button', { name: /Nueva partida|Continuar/ }).first().click();
+  await page
+    .getByRole('button', { name: /Nueva partida|Continuar/ })
+    .first()
+    .click();
   await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('hub');
   await page.evaluate(() => window.__EXCOM__!.startContract('practice'));
   await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('briefing');

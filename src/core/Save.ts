@@ -44,7 +44,20 @@ export interface Profile {
 
 export type LoadStatus = 'new' | 'loaded' | 'migrated' | 'reset-corrupt';
 
-export const ALL_UPGRADES: readonly UpgradeId[] = ['extMag', 'suppressor', 'hollowPoint', 'compensator', 'suit1', 'suit2', 'suit3', 'tacticalKnife', 'shotgun', 'revolver', 'dmr', 'extraMarker'];
+export const ALL_UPGRADES: readonly UpgradeId[] = [
+  'extMag',
+  'suppressor',
+  'hollowPoint',
+  'compensator',
+  'suit1',
+  'suit2',
+  'suit3',
+  'tacticalKnife',
+  'shotgun',
+  'revolver',
+  'dmr',
+  'extraMarker',
+];
 export const GAUNTLET_TOP = 10;
 /** Fondos iniciales: la "cortesía del Continental" (DISENO §5.2). */
 export const STARTING_COINS = 8;

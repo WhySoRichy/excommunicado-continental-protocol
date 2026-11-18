@@ -31,9 +31,23 @@ export interface AchievementDef {
 
 export const ACHIEVEMENTS: readonly AchievementDef[] = [
   // Simulacro
-  { id: 'practice.clean', name: 'Calentamiento', desc: 'Completa el simulacro sin gastar marcadores.', coins: 1, mission: 'practice', check: (r) => r.stats.markersUsed === 0 },
+  {
+    id: 'practice.clean',
+    name: 'Calentamiento',
+    desc: 'Completa el simulacro sin gastar marcadores.',
+    coins: 1,
+    mission: 'practice',
+    check: (r) => r.stats.markersUsed === 0,
+  },
   // Club Kairos
-  { id: 'nightclub.noCivs', name: 'Nadie más', desc: 'Ningún civil herido.', coins: 2, mission: 'nightclub', check: (r) => r.stats.civiliansHurt === 0 && r.stats.civiliansKilled === 0 },
+  {
+    id: 'nightclub.noCivs',
+    name: 'Nadie más',
+    desc: 'Ningún civil herido.',
+    coins: 2,
+    mission: 'nightclub',
+    check: (r) => r.stats.civiliansHurt === 0 && r.stats.civiliansKilled === 0,
+  },
   { id: 'nightclub.ghost', name: 'Fantasma', desc: 'Sin disparar la alarma.', coins: 2, mission: 'nightclub', check: (r) => !r.alarmSounded },
   { id: 'nightclub.gunfu', name: 'Gun-fu', desc: '3 takedowns en el club.', coins: 2, mission: 'nightclub', check: (r) => r.stats.takedowns >= 3 },
   // Muelle 9
@@ -41,7 +55,14 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = [
   { id: 'docks.knife', name: 'Filo', desc: '5 bajas con cuchillo.', coins: 2, mission: 'docks', check: (r) => r.stats.knifeKills >= 5 },
   { id: 'docks.untouched', name: 'Intocable', desc: 'La salud nunca bajó de 100.', coins: 3, mission: 'docks', check: (r) => r.minHealth >= 100 },
   // Torre Meridian
-  { id: 'rooftop.marksmen', name: 'Cazatiradores', desc: 'Todos los tiradores con headshot.', coins: 2, mission: 'rooftop', check: (r) => r.marksmenTotal > 0 && r.marksmenHeadshots >= r.marksmenTotal },
+  {
+    id: 'rooftop.marksmen',
+    name: 'Cazatiradores',
+    desc: 'Todos los tiradores con headshot.',
+    coins: 2,
+    mission: 'rooftop',
+    check: (r) => r.marksmenTotal > 0 && r.marksmenHeadshots >= r.marksmenTotal,
+  },
   { id: 'rooftop.punctual', name: 'Puntual', desc: 'Escapa con más de 20 s.', coins: 2, mission: 'rooftop', check: (r) => r.escapeSecondsLeft > 20 },
   { id: 'rooftop.economy', name: 'Economía de movimiento', desc: 'Máximo 2 recargas.', coins: 3, mission: 'rooftop', check: (r) => r.reloads <= 2 },
   // Gauntlet

@@ -46,7 +46,10 @@ test('capturas del README', async ({ page }) => {
   await ready(page);
   await settle(page, 2.5);
   await shot(page, '01-titulo');
-  await page.getByRole('button', { name: /Nueva partida|Continuar/ }).first().click();
+  await page
+    .getByRole('button', { name: /Nueva partida|Continuar/ })
+    .first()
+    .click();
   await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('hub');
   await page.evaluate(() => {
     const q = window.__EXCOM__!;
@@ -96,7 +99,10 @@ test('capturas del README', async ({ page }) => {
 test('fotogramas del GIF: el simulacro a tiros', async ({ page }) => {
   mkdirSync(FRAMES, { recursive: true });
   await ready(page);
-  await page.getByRole('button', { name: /Nueva partida|Continuar/ }).first().click();
+  await page
+    .getByRole('button', { name: /Nueva partida|Continuar/ })
+    .first()
+    .click();
   await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('hub');
   await contract(page, 'practice');
   await page.evaluate(() => {

@@ -149,9 +149,7 @@ export function saveSettings(kv: KeyValueStore, s: Settings): void {
   kv.set(SETTINGS_KEY, JSON.stringify(s));
 }
 
-export type RebindResult =
-  | { ok: true; bindings: Bindings; displaced: Action | null }
-  | { ok: false; reason: 'reserved' | 'not-rebindable' | 'pad' };
+export type RebindResult = { ok: true; bindings: Bindings; displaced: Action | null } | { ok: false; reason: 'reserved' | 'not-rebindable' | 'pad' };
 
 const isKbm = (c: string): boolean => !c.startsWith('Pad');
 

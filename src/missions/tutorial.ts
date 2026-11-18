@@ -22,7 +22,21 @@ export interface SkillCounters {
 }
 
 export function emptyCounters(): SkillCounters {
-  return { distance: 0, sprintTime: 0, vaults: 0, mantles: 0, slides: 0, rolls: 0, dives: 0, coverEnters: 0, shotsFired: 0, reloads: 0, switches: 0, focusUses: 0, takedowns: 0 };
+  return {
+    distance: 0,
+    sprintTime: 0,
+    vaults: 0,
+    mantles: 0,
+    slides: 0,
+    rolls: 0,
+    dives: 0,
+    coverEnters: 0,
+    shotsFired: 0,
+    reloads: 0,
+    switches: 0,
+    focusUses: 0,
+    takedowns: 0,
+  };
 }
 
 export function copyCounters(from: SkillCounters, to: SkillCounters): SkillCounters {

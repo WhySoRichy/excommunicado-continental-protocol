@@ -105,7 +105,21 @@ export class PlayerCombat {
   meleeT = 0;
   dead = false;
   time = 0;
-  readonly stats = { shotsFired: 0, shotsHit: 0, kills: 0, headshots: 0, takedowns: 0, damageTaken: 0, healthLost: 0, reloads: 0, perfectReloads: 0, deaths: 0, switches: 0, focusUses: 0, knifeKills: 0 };
+  readonly stats = {
+    shotsFired: 0,
+    shotsHit: 0,
+    kills: 0,
+    headshots: 0,
+    takedowns: 0,
+    damageTaken: 0,
+    healthLost: 0,
+    reloads: 0,
+    perfectReloads: 0,
+    deaths: 0,
+    switches: 0,
+    focusUses: 0,
+    knifeKills: 0,
+  };
   sinceDamage = 99;
   sinceDodge = 99;
   sinceCover = 99;
@@ -381,7 +395,11 @@ export class PlayerCombat {
       // Distribución uniforme en disco (más densa al centro de forma controlada).
       const a = ctx.rng.range(0, Math.PI * 2);
       const r = Math.sqrt(ctx.rng.next()) * Math.tan(spread);
-      _dir.copy(base).addScaledVector(_right, Math.cos(a) * r).addScaledVector(_up, Math.sin(a) * r).normalize();
+      _dir
+        .copy(base)
+        .addScaledVector(_right, Math.cos(a) * r)
+        .addScaledVector(_up, Math.sin(a) * r)
+        .normalize();
       const hit = ph.raycast(_muzzle, _dir, d.range, QueryGroups.PLAYER_SHOT, this.hit, p.collider);
       if (hit) {
         _end.copy(this.hit.point as Vector3);
@@ -411,7 +429,19 @@ export class PlayerCombat {
     if (anyEnemyHit) this.stats.shotsHit++;
     ctx.vfx.muzzle(_muzzle, base, true);
     ctx.vfx.casing(_muzzle, base, p.feet.y);
-    ctx.audio.shot(d.id === 'carbine' ? 'carbine' : d.id === 'shotgun' ? 'shotgun' : d.id === 'dmr' ? 'dmr' : d.id === 'revolver' ? 'revolver' : d.noise < 12 ? 'pistolSilenced' : 'pistol');
+    ctx.audio.shot(
+      d.id === 'carbine'
+        ? 'carbine'
+        : d.id === 'shotgun'
+          ? 'shotgun'
+          : d.id === 'dmr'
+            ? 'dmr'
+            : d.id === 'revolver'
+              ? 'revolver'
+              : d.noise < 12
+                ? 'pistolSilenced'
+                : 'pistol',
+    );
     const k = aiming ? 0.75 : 1;
     ctx.camera.kick(rec[0] * DEG2RAD * k, -rec[1] * DEG2RAD * k);
     ctx.camera.addTrauma(d.id === 'shotgun' ? 0.22 : d.id === 'dmr' || d.id === 'revolver' ? 0.14 : 0.07);

@@ -148,10 +148,7 @@ export class PhysicsWorld {
   /** Cápsula de personaje (parentless) + controlador. `pos` es el centro de la cápsula. */
   createCharacter(pos: Vec3Like, radius: number, halfHeight: number, groups: number, cfg: CharacterControllerConfig = DEFAULT_KCC): CharacterBody {
     const collider = this.world.createCollider(
-      this.R.ColliderDesc.capsule(halfHeight, radius)
-        .setTranslation(pos.x, pos.y, pos.z)
-        .setCollisionGroups(groups)
-        .setSolverGroups(groups),
+      this.R.ColliderDesc.capsule(halfHeight, radius).setTranslation(pos.x, pos.y, pos.z).setCollisionGroups(groups).setSolverGroups(groups),
     );
     const controller = this.world.createCharacterController(cfg.offset);
     controller.setUp({ x: 0, y: 1, z: 0 });

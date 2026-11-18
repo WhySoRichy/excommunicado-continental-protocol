@@ -78,7 +78,17 @@ describe('rango del contrato', () => {
     expect(killed.rank).toBe('C');
     expect(killed.capped).toBe(true);
     // Si ya era D, la limitación no lo sube.
-    const bad = computeRank({ ...base, hasCivilians: true, civiliansKilled: 1, timeSec: 400, shotsHit: 0, damageTaken: 400, varietyCount: 0, styleBest: 1, markersUsed: 3 });
+    const bad = computeRank({
+      ...base,
+      hasCivilians: true,
+      civiliansKilled: 1,
+      timeSec: 400,
+      shotsHit: 0,
+      damageTaken: 400,
+      varietyCount: 0,
+      styleBest: 1,
+      markersUsed: 3,
+    });
     expect(bad.rank).toBe('D');
     expect(bad.capped).toBe(false);
   });

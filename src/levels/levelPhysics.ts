@@ -33,7 +33,10 @@ export function rampToOriented(r: RampDef): OrientedBox {
   const lateral = new Vector3().crossVectors(UP, dir).normalize();
   const normal = new Vector3().crossVectors(dir, lateral).normalize();
   const quat = new Quaternion().setFromRotationMatrix(new Matrix4().makeBasis(lateral, normal, dir));
-  const center = new Vector3().addVectors(from, to).multiplyScalar(0.5).addScaledVector(normal, -t / 2);
+  const center = new Vector3()
+    .addVectors(from, to)
+    .multiplyScalar(0.5)
+    .addScaledVector(normal, -t / 2);
   return { center, half: new Vector3(r.w / 2, t / 2, length / 2), quat };
 }
 

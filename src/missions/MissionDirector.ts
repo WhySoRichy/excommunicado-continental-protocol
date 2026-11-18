@@ -11,15 +11,7 @@ import type { LevelSession } from '../game/LevelSession';
 import type { CheckpointDef, EnemyType, MissionBlock, ObjectiveDef, Vec3 } from '../levels/types';
 import type { Hud } from '../ui/Hud';
 import { evaluateAchievements, type MissionRunSummary, type UnlockedAchievement } from './achievements';
-import {
-  GAUNTLET_BREAK,
-  GAUNTLET_HEAL,
-  GAUNTLET_SPAWN_CLEARANCE,
-  GAUNTLET_SPAWN_INTERVAL,
-  gauntletSpawnPoints,
-  gauntletWave,
-  waveQueue,
-} from './gauntlet';
+import { GAUNTLET_BREAK, GAUNTLET_HEAL, GAUNTLET_SPAWN_CLEARANCE, GAUNTLET_SPAWN_INTERVAL, gauntletSpawnPoints, gauntletWave, waveQueue } from './gauntlet';
 import { copyCounters, emptyCounters, formatObjective, SKILL_GOAL, type SkillCounters, skillProgress, skillTally } from './tutorial';
 import { MISSIONS, type MissionId } from './types';
 
@@ -593,7 +585,10 @@ export class MissionDirector {
         this.bossKneeling = e;
         this.bossKneel = BOSS_KNEEL_TIME;
         const n = s.enemies.spawnEvent(`boss-phase-${i + 1}`);
-        this.d.hud.showToast(n > 0 ? '¡El Juez se arrodilla! Remátalo con un takedown. Llegan escoltas.' : '¡El Juez se arrodilla! Remátalo con un takedown.', 3.5);
+        this.d.hud.showToast(
+          n > 0 ? '¡El Juez se arrodilla! Remátalo con un takedown. Llegan escoltas.' : '¡El Juez se arrodilla! Remátalo con un takedown.',
+          3.5,
+        );
         this.d.audio.alert(e.feet);
         return;
       }

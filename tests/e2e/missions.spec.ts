@@ -9,7 +9,10 @@ type MissionId = 'practice' | 'nightclub' | 'docks' | 'rooftop' | 'gauntlet';
 
 async function enterContract(page: Page, id: MissionId): Promise<void> {
   await openGame(page);
-  await page.getByRole('button', { name: /Nueva partida|Continuar/ }).first().click();
+  await page
+    .getByRole('button', { name: /Nueva partida|Continuar/ })
+    .first()
+    .click();
   await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('hub');
   await page.evaluate((m) => window.__EXCOM__!.startContract(m), id);
   await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('briefing');
@@ -264,7 +267,10 @@ test.describe('Fase 4 · contratos 2 y 3', () => {
     expect(m1.respawn.z).toBeCloseTo(4, 0);
     const c3 = await plant(-20, -24, -20, -22.5);
     expect(c3.index).toBe(2);
-    const o3 = await page.evaluate(() => ({ m: window.__EXCOM__!.mission()!, boat: window.__EXCOM__!.enemies().filter((e) => e.id.startsWith('b-') && e.alive).length }));
+    const o3 = await page.evaluate(() => ({
+      m: window.__EXCOM__!.mission()!,
+      boat: window.__EXCOM__!.enemies().filter((e) => e.id.startsWith('b-') && e.alive).length,
+    }));
     expect(o3.m.objective).toContain('bote');
     expect(o3.boat).toBe(3);
     await page.evaluate(() => {
@@ -484,7 +490,13 @@ test.describe('Fase 4 · contratos 2 y 3', () => {
       q.teleport(12, 7.68, -16, 0);
       q.step(20, { aim: true });
       const all = q.enemies();
-      return { died, state: q.state(), markers: q.mission()!.markersUsed, health: all.find((e) => e.id === 'judge')!.health, adds: all.filter((e) => e.id.startsWith('p1-') || e.id.startsWith('p2-')).length };
+      return {
+        died,
+        state: q.state(),
+        markers: q.mission()!.markersUsed,
+        health: all.find((e) => e.id === 'judge')!.health,
+        adds: all.filter((e) => e.id.startsWith('p1-') || e.id.startsWith('p2-')).length,
+      };
     });
     expect(back.died).toBe(true);
     expect(back.state).toBe('playing');
@@ -585,7 +597,11 @@ test.describe('Fase 4 · Gauntlet', () => {
     // Volver al Continental: hub limpio y neutral otra vez.
     await page.getByRole('button', { name: 'Volver al Continental' }).click();
     await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('hub');
-    const hub = await page.evaluate(() => ({ enemies: window.__EXCOM__!.enemies().length, zone: window.__EXCOM__!.hud().zone, mission: window.__EXCOM__!.mission() }));
+    const hub = await page.evaluate(() => ({
+      enemies: window.__EXCOM__!.enemies().length,
+      zone: window.__EXCOM__!.hud().zone,
+      mission: window.__EXCOM__!.mission(),
+    }));
     expect(hub.enemies).toBe(0);
     expect(hub.zone).toContain('ZONA NEUTRAL');
     expect(hub.mission).toBeNull();

@@ -1,0 +1,6 @@
+# Generado por npm.
+package-lock.json
+# La documentación se escribe a mano (tablas incluidas).
+*.md
+# Los niveles son datos con forma de tabla: una entidad por línea se lee mejor.
+src/levels/data/

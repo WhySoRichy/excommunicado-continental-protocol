@@ -29,16 +29,7 @@ function withOpts(b: BoxDef, o?: BoxOpts): BoxDef {
 }
 
 /** Caja alineada a ejes a partir de esquinas mínima y máxima. */
-export function aabb(
-  minX: number,
-  minY: number,
-  minZ: number,
-  maxX: number,
-  maxY: number,
-  maxZ: number,
-  mat: MaterialId,
-  o?: BoxOpts,
-): BoxDef {
+export function aabb(minX: number, minY: number, minZ: number, maxX: number, maxY: number, maxZ: number, mat: MaterialId, o?: BoxOpts): BoxDef {
   if (maxX <= minX || maxY <= minY || maxZ <= minZ) {
     throw new Error(`aabb inválida: [${minX},${minY},${minZ}] → [${maxX},${maxY},${maxZ}]`);
   }

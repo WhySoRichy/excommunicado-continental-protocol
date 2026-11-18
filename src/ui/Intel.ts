@@ -46,7 +46,13 @@ export function buildIntel(v: IntelView): HTMLElement {
     h('div', { class: 'intel-place', text: v.place }),
     v.objective ? h('p', { class: 'intel-objective' }, [h('b', { text: 'Objetivo: ' }), v.objective]) : null,
     facts.length ? h('div', { class: 'intel-facts', text: facts.join(' · ') }) : null,
-    v.notes.length ? h('ul', { class: 'intel-notes' }, v.notes.map((n) => h('li', { text: n }))) : null,
+    v.notes.length
+      ? h(
+          'ul',
+          { class: 'intel-notes' },
+          v.notes.map((n) => h('li', { text: n })),
+        )
+      : null,
     legend.length ? h('div', { class: 'intel-sub', text: 'Leyenda' }) : null,
     legend.length ? h('ul', { class: 'intel-legend' }, legend) : null,
   ]);

@@ -103,7 +103,10 @@ export class Vfx {
   private readonly smokeTex: CanvasTexture;
   private smokeNext = 0;
 
-  constructor(private readonly scene: Scene, particleScale: number) {
+  constructor(
+    private readonly scene: Scene,
+    particleScale: number,
+  ) {
     // Trazadoras: caja unitaria escalada a lo largo de Z y afilada hacia la cola (la cabeza va delante, en +Z).
     const tgeo = new BoxGeometry(1, 1, 1);
     const tp = tgeo.getAttribute('position');
@@ -147,8 +150,24 @@ export class Vfx {
     // Fogonazos: estrella de frente y llamarada que se abre hacia delante vista de lado.
     this.flashTex = [flashTexture('star'), flashTexture('flame')];
     const flashColor = new Color(0xffd08a).multiplyScalar(3);
-    const fmat = new MeshBasicMaterial({ map: this.flashTex[0], color: flashColor, blending: AdditiveBlending, transparent: true, depthWrite: false, toneMapped: false, side: DoubleSide });
-    const smat = new MeshBasicMaterial({ map: this.flashTex[1], color: flashColor, blending: AdditiveBlending, transparent: true, depthWrite: false, toneMapped: false, side: DoubleSide });
+    const fmat = new MeshBasicMaterial({
+      map: this.flashTex[0],
+      color: flashColor,
+      blending: AdditiveBlending,
+      transparent: true,
+      depthWrite: false,
+      toneMapped: false,
+      side: DoubleSide,
+    });
+    const smat = new MeshBasicMaterial({
+      map: this.flashTex[1],
+      color: flashColor,
+      blending: AdditiveBlending,
+      transparent: true,
+      depthWrite: false,
+      toneMapped: false,
+      side: DoubleSide,
+    });
     const fgeo = new PlaneGeometry(0.3, 0.3);
     const sgeo = new PlaneGeometry(0.42, 0.2);
     for (let i = 0; i < MAX_FLASHES; i++) {
@@ -165,7 +184,11 @@ export class Vfx {
     scene.add(this.playerLight);
 
     // Casquillos de latón (instanciados): giran, rebotan en el suelo y desaparecen encogiéndose.
-    this.casings = new InstancedMesh(new BoxGeometry(0.011, 0.011, 0.026), new MeshStandardMaterial({ color: 0xc9a14a, metalness: 0.5, roughness: 0.35 }), MAX_CASINGS);
+    this.casings = new InstancedMesh(
+      new BoxGeometry(0.011, 0.011, 0.026),
+      new MeshStandardMaterial({ color: 0xc9a14a, metalness: 0.5, roughness: 0.35 }),
+      MAX_CASINGS,
+    );
     this.casings.instanceMatrix.setUsage(DynamicDrawUsage);
     this.casings.frustumCulled = false;
     for (let i = 0; i < MAX_CASINGS; i++) this.casings.setMatrixAt(i, HIDE);

@@ -63,7 +63,10 @@ test.describe('Fase 6 · rendimiento', () => {
 
   test('presupuesto por nivel: draw calls, triángulos, programas y CPU por frame', async ({ page }) => {
     await openGame(page);
-    await page.getByRole('button', { name: /Nueva partida|Continuar/ }).first().click();
+    await page
+      .getByRole('button', { name: /Nueva partida|Continuar/ })
+      .first()
+      .click();
     await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('hub');
     const samples = await sampleCheckpoints(page, 'hub', 1);
     for (const id of LEVELS) {
@@ -77,9 +80,14 @@ test.describe('Fase 6 · rendimiento', () => {
       });
       samples.push(...(await sampleCheckpoints(page, id, 1)));
     }
-    for (const s of samples) console.log(`[perf] ${s.level}/${s.cp}: ${s.fps.toFixed(0)} FPS · CPU ${s.cpuMs.toFixed(2)} ms · ${s.calls} calls · ${(s.triangles / 1000).toFixed(1)}k tris · ${s.programs} programas`);
+    for (const s of samples)
+      console.log(
+        `[perf] ${s.level}/${s.cp}: ${s.fps.toFixed(0)} FPS · CPU ${s.cpuMs.toFixed(2)} ms · ${s.calls} calls · ${(s.triangles / 1000).toFixed(1)}k tris · ${s.programs} programas`,
+      );
     const worst = (k: 'calls' | 'triangles' | 'programs' | 'cpuMs'): Sample => samples.reduce((a, b) => (b[k] > a[k] ? b : a));
-    console.log(`[perf] peor: calls ${worst('calls').calls} (${worst('calls').level}) · tris ${worst('triangles').triangles} (${worst('triangles').level}) · programas ${worst('programs').programs} · CPU ${worst('cpuMs').cpuMs.toFixed(2)} ms (${worst('cpuMs').level})`);
+    console.log(
+      `[perf] peor: calls ${worst('calls').calls} (${worst('calls').level}) · tris ${worst('triangles').triangles} (${worst('triangles').level}) · programas ${worst('programs').programs} · CPU ${worst('cpuMs').cpuMs.toFixed(2)} ms (${worst('cpuMs').level})`,
+    );
     expect(worst('programs').programs, 'programas en la sesión').toBeLessThanOrEqual(BUDGET.programsSession);
     for (const s of samples) {
       const where = `${s.level}/${s.cp}`;
@@ -95,7 +103,10 @@ test.describe('Fase 6 · rendimiento', () => {
   test('CPU frenada (portátil con gráfica integrada): ×2 cabe en 60 FPS; ×4 se registra', async ({ page }) => {
     test.skip(isCI, 'En CI el render es por software: la medida de CPU no es representativa.');
     await openGame(page);
-    await page.getByRole('button', { name: /Nueva partida|Continuar/ }).first().click();
+    await page
+      .getByRole('button', { name: /Nueva partida|Continuar/ })
+      .first()
+      .click();
     await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('hub');
     const cdp = await page.context().newCDPSession(page);
     const rows: string[] = [];
@@ -130,7 +141,10 @@ test.describe('Fase 6 · rendimiento', () => {
   test('cambiar de nivel no acumula texturas ni geometrías en la GPU', async ({ page }) => {
     // Preset medio forzado: con sombras (en CI el preset automático es Bajo y no habría mapa de sombras).
     await openGame(page, 'preset=medium');
-    await page.getByRole('button', { name: /Nueva partida|Continuar/ }).first().click();
+    await page
+      .getByRole('button', { name: /Nueva partida|Continuar/ })
+      .first()
+      .click();
     await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('hub');
     const round = async (): Promise<{ textures: number; geometries: number }> => {
       for (const id of LEVELS) {
@@ -150,14 +164,19 @@ test.describe('Fase 6 · rendimiento', () => {
     // La primera vuelta crea lo que se comparte entre niveles (texturas de materiales); la segunda no debe sumar nada.
     const first = await round();
     const second = await round();
-    console.log(`[perf] recursos tras recorrer los niveles: ${first.textures} → ${second.textures} texturas · ${first.geometries} → ${second.geometries} geometrías`);
+    console.log(
+      `[perf] recursos tras recorrer los niveles: ${first.textures} → ${second.textures} texturas · ${first.geometries} → ${second.geometries} geometrías`,
+    );
     expect(second.textures, 'texturas').toBeLessThanOrEqual(first.textures);
     expect(second.geometries, 'geometrías').toBeLessThanOrEqual(first.geometries);
   });
 
   test('Gauntlet: tras doce oleadas la escena sigue dentro del presupuesto (los caídos se retiran)', async ({ page }) => {
     await openGame(page, 'preset=medium');
-    await page.getByRole('button', { name: /Nueva partida|Continuar/ }).first().click();
+    await page
+      .getByRole('button', { name: /Nueva partida|Continuar/ })
+      .first()
+      .click();
     await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('hub');
     await page.evaluate(() => window.__EXCOM__!.startContract('gauntlet'));
     await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('briefing');
@@ -236,7 +255,10 @@ test.describe('Fase 6 · rendimiento', () => {
       .filter((f) => f.endsWith('.js'))
       .map((f) => readFileSync(join(dir, f), 'utf8'));
     for (const marker of ['__EXCOM__', 'God mode']) {
-      expect(code.some((js) => js.includes(marker)), `"${marker}" no debe llegar al build público`).toBe(false);
+      expect(
+        code.some((js) => js.includes(marker)),
+        `"${marker}" no debe llegar al build público`,
+      ).toBe(false);
     }
   });
 });

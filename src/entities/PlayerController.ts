@@ -511,7 +511,9 @@ export class PlayerController {
     const t = this.stateTime;
     this.invulnerable = t >= MOVE.rollIFrameStart && t <= MOVE.rollIFrameEnd;
     const speed =
-      t < MOVE.rollFastPhase ? MOVE.rollSpeed : lerp(MOVE.rollSpeed, MOVE.rollEndSpeed, clamp((t - MOVE.rollFastPhase) / (MOVE.rollTime - MOVE.rollFastPhase), 0, 1));
+      t < MOVE.rollFastPhase
+        ? MOVE.rollSpeed
+        : lerp(MOVE.rollSpeed, MOVE.rollEndSpeed, clamp((t - MOVE.rollFastPhase) / (MOVE.rollTime - MOVE.rollFastPhase), 0, 1));
     this.velocity.x = this.rollDir.x * speed * this.speedMultiplier;
     this.velocity.z = this.rollDir.z * speed * this.speedMultiplier;
     if (this.grounded && this.velocity.y <= 0) this.velocity.y = -1;

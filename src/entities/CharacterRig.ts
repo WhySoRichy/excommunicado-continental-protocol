@@ -114,7 +114,26 @@ export interface RigPose {
 }
 
 export function idlePose(): RigPose {
-  return { speed: 0, moveAngle: 0, state: 'ground', posture: 'stand', grounded: true, aim: 0, aimPitch: 0, stateTime: 0, reload: -1, recoil: 0, melee: 0, swap: 0, kneel: 0, flinch: 0, flinchSide: 0, death: 0, takedown: -1, vault: -1 };
+  return {
+    speed: 0,
+    moveAngle: 0,
+    state: 'ground',
+    posture: 'stand',
+    grounded: true,
+    aim: 0,
+    aimPitch: 0,
+    stateTime: 0,
+    reload: -1,
+    recoil: 0,
+    melee: 0,
+    swap: 0,
+    kneel: 0,
+    flinch: 0,
+    flinchSide: 0,
+    death: 0,
+    takedown: -1,
+    vault: -1,
+  };
 }
 
 const tmpColor = new Color();
@@ -257,7 +276,22 @@ function release(cache: Map<string, SharedGeometry>, key: string): void {
 /** Todo lo que cambia la geometría del cuerpo (el material y el rim van aparte). */
 function appearanceKey(o: RigOptions): string {
   const c = o.colors;
-  return [c.jacket, c.shirt, c.tie, c.pants, c.shoes, c.skin, c.hair, c.accent, o.hair, o.bulk ?? 1, o.vest ? 1 : 0, o.beard ? 1 : 0, JSON.stringify(o.outfit ?? {}), o.face ?? 'stern'].join('|');
+  return [
+    c.jacket,
+    c.shirt,
+    c.tie,
+    c.pants,
+    c.shoes,
+    c.skin,
+    c.hair,
+    c.accent,
+    o.hair,
+    o.bulk ?? 1,
+    o.vest ? 1 : 0,
+    o.beard ? 1 : 0,
+    JSON.stringify(o.outfit ?? {}),
+    o.face ?? 'stern',
+  ].join('|');
 }
 
 /**
@@ -644,7 +678,11 @@ export class CharacterRig {
         const cup = new CylinderGeometry(0.03, 0.03, 0.012, 8);
         cup.rotateX(HALF_PI);
         cup.translate(0, 0.36, -0.135);
-        torsoParts.push(cbox(0.006, 0.253, 0.006, silver, -0.02, 0.515, -0.132, 0.159), cbox(0.006, 0.253, 0.006, silver, 0.02, 0.515, -0.132, -0.159), paint(cup, silver));
+        torsoParts.push(
+          cbox(0.006, 0.253, 0.006, silver, -0.02, 0.515, -0.132, 0.159),
+          cbox(0.006, 0.253, 0.006, silver, 0.02, 0.515, -0.132, -0.159),
+          paint(cup, silver),
+        );
       }
       if (o.vest) {
         const plate = shade(c.accent, 0.62);
@@ -682,18 +720,20 @@ export class CharacterRig {
         cbox(0.02, 0.05, 0.035, shade(c.skin, 0.9), -0.092, 0.79 + hy, 0.005), // orejas
         cbox(0.02, 0.05, 0.035, shade(c.skin, 0.9), 0.092, 0.79 + hy, 0.005),
       ];
-      const headParts: BufferGeometry[] = wick ? wickFace() : [
-        cprism(0.15, 0.17, 0.186, 0.2, 0.12, c.skin, 0, 0.875 + hy, 0), // cráneo
-        cprism(0.186, 0.2, 0.172, 0.186, 0.07, c.skin, 0, 0.78 + hy, 0), // pómulos
-        cprism(0.172, 0.186, 0.105, 0.12, 0.08, jawColor, 0, 0.705 + hy, -0.008), // mandíbula
-        cbox(0.062, 0.016, 0.024, c.hair, -0.046, 0.824 + hy, -0.092, -0.16), // cejas fruncidas
-        cbox(0.062, 0.016, 0.024, c.hair, 0.046, 0.824 + hy, -0.092, 0.16),
-        cbox(0.036, 0.013, 0.012, dark, -0.046, 0.803 + hy, -0.096), // ojos
-        cbox(0.036, 0.013, 0.012, dark, 0.046, 0.803 + hy, -0.096),
-        cprism(0.026, 0.02, 0.042, 0.046, 0.062, shade(c.skin, 0.9), 0, 0.776 + hy, -0.106), // nariz
-        cbox(0.02, 0.05, 0.035, shade(c.skin, 0.9), -0.097, 0.79 + hy, 0.005), // orejas
-        cbox(0.02, 0.05, 0.035, shade(c.skin, 0.9), 0.097, 0.79 + hy, 0.005),
-      ];
+      const headParts: BufferGeometry[] = wick
+        ? wickFace()
+        : [
+            cprism(0.15, 0.17, 0.186, 0.2, 0.12, c.skin, 0, 0.875 + hy, 0), // cráneo
+            cprism(0.186, 0.2, 0.172, 0.186, 0.07, c.skin, 0, 0.78 + hy, 0), // pómulos
+            cprism(0.172, 0.186, 0.105, 0.12, 0.08, jawColor, 0, 0.705 + hy, -0.008), // mandíbula
+            cbox(0.062, 0.016, 0.024, c.hair, -0.046, 0.824 + hy, -0.092, -0.16), // cejas fruncidas
+            cbox(0.062, 0.016, 0.024, c.hair, 0.046, 0.824 + hy, -0.092, 0.16),
+            cbox(0.036, 0.013, 0.012, dark, -0.046, 0.803 + hy, -0.096), // ojos
+            cbox(0.036, 0.013, 0.012, dark, 0.046, 0.803 + hy, -0.096),
+            cprism(0.026, 0.02, 0.042, 0.046, 0.062, shade(c.skin, 0.9), 0, 0.776 + hy, -0.106), // nariz
+            cbox(0.02, 0.05, 0.035, shade(c.skin, 0.9), -0.097, 0.79 + hy, 0.005), // orejas
+            cbox(0.02, 0.05, 0.035, shade(c.skin, 0.9), 0.097, 0.79 + hy, 0.005),
+          ];
       if (o.beard && wick) {
         // Barba corta y cerrada: bigote unido a la barba por las comisuras, mejillas, patillas y mentón.
         headParts.push(
@@ -719,7 +759,8 @@ export class CharacterRig {
       } else {
         headParts.push(cbox(0.056, 0.01, 0.012, shade(c.skin, 0.55), 0, 0.722 + hy, -0.092));
         // Bigote encerado con las puntas hacia arriba.
-        if (o.outfit?.mustache) headParts.push(cbox(0.042, 0.013, 0.016, c.hair, -0.022, 0.738 + hy, -0.1, -0.2), cbox(0.042, 0.013, 0.016, c.hair, 0.022, 0.738 + hy, -0.1, 0.2));
+        if (o.outfit?.mustache)
+          headParts.push(cbox(0.042, 0.013, 0.016, c.hair, -0.022, 0.738 + hy, -0.1, -0.2), cbox(0.042, 0.013, 0.016, c.hair, 0.022, 0.738 + hy, -0.1, 0.2));
       }
       switch (o.hair) {
         case 'parted':
@@ -798,7 +839,10 @@ export class CharacterRig {
 
     // --- Brazos: hombrera, brazo y antebrazo que se afinan, puño de camisa y mano con pulgar ---
     const upperGeo = (): BufferGeometry =>
-      merge([cprism(0.12 * b, 0.14 * b, 0.13 * b, 0.145 * b, 0.09, c.jacket, 0, 0.005, 0), cprism(0.125 * b, 0.135 * b, 0.098 * b, 0.105 * b, 0.3, c.jacket, 0, -0.185, 0)]);
+      merge([
+        cprism(0.12 * b, 0.14 * b, 0.13 * b, 0.145 * b, 0.09, c.jacket, 0, 0.005, 0),
+        cprism(0.125 * b, 0.135 * b, 0.098 * b, 0.105 * b, 0.3, c.jacket, 0, -0.185, 0),
+      ]);
     const foreGeo = (): BufferGeometry =>
       merge([
         cprism(0.102 * b, 0.108 * b, 0.08 * b, 0.086 * b, 0.26, c.jacket, 0, -0.125, -0.004),
@@ -869,7 +913,22 @@ export class CharacterRig {
    * solo se construye la primera vez. El esqueleto sí es de cada uno.
    */
   private buildSkin(key: string): void {
-    const bones = [this.spin, this.hips, this.torso, this.head, this.armL, this.armR, this.foreL, this.foreR, this.thighL, this.thighR, this.shinL, this.shinR, this.footL, this.footR];
+    const bones = [
+      this.spin,
+      this.hips,
+      this.torso,
+      this.head,
+      this.armL,
+      this.armR,
+      this.foreL,
+      this.foreR,
+      this.thighL,
+      this.thighR,
+      this.shinL,
+      this.shinR,
+      this.footL,
+      this.footR,
+    ];
     this.root.updateMatrixWorld(true);
     const geo = acquire(bodyGeometries, key, () => {
       _rootInv.copy(this.root.matrixWorld).invert();
@@ -914,7 +973,10 @@ export class CharacterRig {
     this.weaponModel = model;
     if (model === 'none') return;
     this.weaponKey = `${model}|${accent}`;
-    this.weaponMesh = new Mesh(acquire(weaponGeometries, this.weaponKey, () => weaponGeometry(model, accent)), this.material);
+    this.weaponMesh = new Mesh(
+      acquire(weaponGeometries, this.weaponKey, () => weaponGeometry(model, accent)),
+      this.material,
+    );
     this.weaponMesh.castShadow = true;
     this.weaponMount.add(this.weaponMesh);
   }

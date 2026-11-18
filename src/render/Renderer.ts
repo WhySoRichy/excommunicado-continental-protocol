@@ -72,9 +72,7 @@ function tuneHighPass(fragment: string): string | null {
   const read = 'vec4 texel = texture2D( tDiffuse, vUv );';
   const lum = 'float v = luminance( texel.xyz );';
   if (!fragment.includes(read) || !fragment.includes(lum)) return null;
-  return fragment
-    .replace(read, `${read}\n\t\t\ttexel.rgb = min( texel.rgb, vec3( 4.0 ) );`)
-    .replace(lum, 'float v = max( texel.r, max( texel.g, texel.b ) );');
+  return fragment.replace(read, `${read}\n\t\t\ttexel.rgb = min( texel.rgb, vec3( 4.0 ) );`).replace(lum, 'float v = max( texel.r, max( texel.g, texel.b ) );');
 }
 
 export class GameRenderer {

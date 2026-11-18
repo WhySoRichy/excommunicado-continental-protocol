@@ -11,7 +11,10 @@ test.describe('Fase 5 · UX', () => {
   test('Intel: contrato, objetivo, marcadores y leyenda de enemigos con glifo; en el hub, las reglas', async ({ page }) => {
     const errors = collectErrors(page);
     await openGame(page);
-    await page.getByRole('button', { name: /Nueva partida|Continuar/ }).first().click();
+    await page
+      .getByRole('button', { name: /Nueva partida|Continuar/ })
+      .first()
+      .click();
     await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('hub');
     // Hub neutral.
     await page.evaluate(() => window.__EXCOM__!.hold('intel', true));
@@ -39,14 +42,19 @@ test.describe('Fase 5 · UX', () => {
     await page.evaluate(() => window.__EXCOM__!.hold('intel', false));
     await expect(page.locator('#hud .intel')).toHaveCount(0);
     // Regresión: nada con el atributo hidden se pinta (un overlay vacío oscurecía la pantalla).
-    const leaking = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>('[hidden]')].filter((e) => getComputedStyle(e).display !== 'none').map((e) => e.className || e.id));
+    const leaking = await page.evaluate(() =>
+      [...document.querySelectorAll<HTMLElement>('[hidden]')].filter((e) => getComputedStyle(e).display !== 'none').map((e) => e.className || e.id),
+    );
     expect(leaking).toEqual([]);
     expect(errors).toEqual([]);
   });
 
   test('GATE · mezcla de audio: música presente sin saturar, sube con el combate y los disparos destacan', async ({ page }) => {
     await openGame(page);
-    await page.getByRole('button', { name: /Nueva partida|Continuar/ }).first().click();
+    await page
+      .getByRole('button', { name: /Nueva partida|Continuar/ })
+      .first()
+      .click();
     await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('hub');
     // Se deja que terminen los fundidos de entrada (música 1,2 s y ambiente 1,5 s) antes de medir.
     await page.evaluate(() => window.__EXCOM__!.audioMeter(2.5));

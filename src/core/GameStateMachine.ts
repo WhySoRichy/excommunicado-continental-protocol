@@ -2,17 +2,7 @@
  * Máquina de estados ÚNICA del juego. Las transiciones son explícitas: cualquier
  * transición no declarada lanza un error (los tests la recorren entera).
  */
-export type GameStateId =
-  | 'boot'
-  | 'title'
-  | 'loading'
-  | 'hub'
-  | 'hubMenu'
-  | 'briefing'
-  | 'playing'
-  | 'paused'
-  | 'dead'
-  | 'results';
+export type GameStateId = 'boot' | 'title' | 'loading' | 'hub' | 'hubMenu' | 'briefing' | 'playing' | 'paused' | 'dead' | 'results';
 
 export const TRANSITIONS: Readonly<Record<GameStateId, readonly GameStateId[]>> = {
   boot: ['title', 'loading'],

@@ -49,7 +49,16 @@ export const DIALOGUE = {
 } as const satisfies Record<string, Dialogue>;
 
 /** Texto de la Placa de las Reglas (lore + tutorial). `keys` lleva las teclas reales. */
-export function rulesPlaque(keys: { interact: string; fire: string; crouch: string; jump: string; takedown: string; reload: string; focus: string; sprint: string }): Dialogue {
+export function rulesPlaque(keys: {
+  interact: string;
+  fire: string;
+  crouch: string;
+  jump: string;
+  takedown: string;
+  reload: string;
+  focus: string;
+  sprint: string;
+}): Dialogue {
   return {
     speaker: 'Reglas de la casa',
     lines: [

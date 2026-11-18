@@ -139,6 +139,7 @@ El código cita estas reglas por su número.
 ## 7. Convenciones de código
 
 - TypeScript `strict`. Identificadores y código en inglés; **los textos que ve el jugador, en español**.
+- **Formato automático** con Prettier (`npm run format`): comillas simples y líneas de hasta 160 caracteres. Quedan fuera la documentación y los datos de nivel, que se escriben como tablas (una entidad por línea). `.editorconfig` fija la codificación, los saltos de línea y la sangría para cualquier editor.
 - Cada módulo vive en su dominio (`src/<dominio>/`). Lo que no necesita three ni el DOM va en un archivo puro con tests.
 - **Bucle caliente sin asignaciones**: nada de `new Vector3()` ni closures por frame. Se usan los vectores reutilizables de `core/math.ts`, los pools de `render/vfx.ts` y objetos preasignados.
 - **Niveles = datos** en `src/levels/data/*.ts`. Los helpers (`roomShell`, `stairs`, `ramp`...) son funciones puras que devuelven cajas.

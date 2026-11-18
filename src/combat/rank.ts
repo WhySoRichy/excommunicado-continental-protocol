@@ -107,4 +107,3 @@ export function computeRank(s: MissionStats): RankResult {
   }
   return { subs, styleBonus: Math.round(styleBonus * 10) / 10, markerPenalty, total, rank, capped };
 }
-

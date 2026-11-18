@@ -15,10 +15,22 @@ const FLEE_SPEED = 0.95;
 const PANIC_RADIUS = 14;
 
 const OUTFITS: ReadonlyArray<{ colors: RigColors; hair: HairStyle }> = [
-  { colors: { jacket: 0xb33a5a, shirt: 0xf0e6e0, tie: 0xb33a5a, pants: 0x2b2b30, shoes: 0x111, skin: 0xd9b08c, hair: 0x3b2a1e, accent: 0xff2e88 }, hair: 'long' },
-  { colors: { jacket: 0x2d6cb5, shirt: 0xf5f5f5, tie: 0x2d6cb5, pants: 0x1f2a3a, shoes: 0x111, skin: 0x8c5a3c, hair: 0x1a1512, accent: 0x19e3ff }, hair: 'short' },
-  { colors: { jacket: 0xe8c04a, shirt: 0x141414, tie: 0xe8c04a, pants: 0x3a3a3a, shoes: 0x111, skin: 0xf0c8a8, hair: 0xc9a46a, accent: 0xffd23f }, hair: 'long' },
-  { colors: { jacket: 0x6a3cff, shirt: 0xe9e9f2, tie: 0x6a3cff, pants: 0x202030, shoes: 0x111, skin: 0xb98a6a, hair: 0x2a1e18, accent: 0x7a3cff }, hair: 'cap' },
+  {
+    colors: { jacket: 0xb33a5a, shirt: 0xf0e6e0, tie: 0xb33a5a, pants: 0x2b2b30, shoes: 0x111, skin: 0xd9b08c, hair: 0x3b2a1e, accent: 0xff2e88 },
+    hair: 'long',
+  },
+  {
+    colors: { jacket: 0x2d6cb5, shirt: 0xf5f5f5, tie: 0x2d6cb5, pants: 0x1f2a3a, shoes: 0x111, skin: 0x8c5a3c, hair: 0x1a1512, accent: 0x19e3ff },
+    hair: 'short',
+  },
+  {
+    colors: { jacket: 0xe8c04a, shirt: 0x141414, tie: 0xe8c04a, pants: 0x3a3a3a, shoes: 0x111, skin: 0xf0c8a8, hair: 0xc9a46a, accent: 0xffd23f },
+    hair: 'long',
+  },
+  {
+    colors: { jacket: 0x6a3cff, shirt: 0xe9e9f2, tie: 0x6a3cff, pants: 0x202030, shoes: 0x111, skin: 0xb98a6a, hair: 0x2a1e18, accent: 0x7a3cff },
+    hair: 'cap',
+  },
 ];
 
 type CivState = 'calm' | 'flee' | 'hide' | 'dead';
@@ -203,13 +215,7 @@ export class CivilianManager {
   private readonly byHandle = new Map<number, Civilian>();
   onHurt: ((c: Civilian, killed: boolean) => void) | null = null;
 
-  constructor(
-    defs: readonly CivilianDef[],
-    physics: PhysicsWorld,
-    nav: NavGrid,
-    scene: Scene,
-    rng: Rng,
-  ) {
+  constructor(defs: readonly CivilianDef[], physics: PhysicsWorld, nav: NavGrid, scene: Scene, rng: Rng) {
     defs.forEach((d, i) => {
       const c = new Civilian(d, physics, nav, scene, rng, i);
       this.list.push(c);

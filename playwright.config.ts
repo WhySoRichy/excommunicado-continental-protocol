@@ -6,7 +6,9 @@ const isCI = !!process.env.CI;
 // sean representativas. En CI (sin GPU) Chromium cae a SwiftShader y el FPS solo se registra.
 // El audio se mide en los tests (gate de mezcla): sin esperar gesto para el AudioContext.
 const audioArgs = ['--autoplay-policy=no-user-gesture-required'];
-const gpuArgs = (isCI ? ['--enable-unsafe-swiftshader', '--use-angle=swiftshader'] : ['--enable-gpu', '--ignore-gpu-blocklist', '--use-angle=d3d11']).concat(audioArgs);
+const gpuArgs = (isCI ? ['--enable-unsafe-swiftshader', '--use-angle=swiftshader'] : ['--enable-gpu', '--ignore-gpu-blocklist', '--use-angle=d3d11']).concat(
+  audioArgs,
+);
 
 export default defineConfig({
   testDir: 'tests/e2e',

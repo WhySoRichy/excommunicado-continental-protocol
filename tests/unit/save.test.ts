@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { loadProfile, MemoryStore, newProfile, PROFILE_KEY, recordBest, recordGauntlet, saveProfile, STARTING_COINS, validateProfile } from '../../src/core/Save';
+import {
+  loadProfile,
+  MemoryStore,
+  newProfile,
+  PROFILE_KEY,
+  recordBest,
+  recordGauntlet,
+  saveProfile,
+  STARTING_COINS,
+  validateProfile,
+} from '../../src/core/Save';
 
 describe('guardado', () => {
   it('sin partida devuelve un perfil nuevo con los fondos iniciales', () => {
@@ -39,7 +49,17 @@ describe('guardado', () => {
 
   it('perfil manipulado: valores imposibles se sanean y las mejoras desconocidas se descartan', () => {
     const kv = new MemoryStore();
-    kv.set(PROFILE_KEY, JSON.stringify({ version: 1, coins: -50, upgrades: ['compensator', 'laserGun', 7], best: { practice: { rank: 'Z' } }, flags: { x: 'no' }, gauntlet: [{ waves: 3 }, { waves: 0 }, 'basura'] }));
+    kv.set(
+      PROFILE_KEY,
+      JSON.stringify({
+        version: 1,
+        coins: -50,
+        upgrades: ['compensator', 'laserGun', 7],
+        best: { practice: { rank: 'Z' } },
+        flags: { x: 'no' },
+        gauntlet: [{ waves: 3 }, { waves: 0 }, 'basura'],
+      }),
+    );
     const r = loadProfile(kv);
     expect(r.status).toBe('loaded');
     expect(r.profile.coins).toBe(0);

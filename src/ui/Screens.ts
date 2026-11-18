@@ -243,7 +243,11 @@ export class Screens {
         h('li', {}, [h('b', { text: 'Regla. ' }), rule]),
         h('li', {}, [h('b', { text: 'Meta. ' }), target]),
       ]),
-      h('div', { class: 'menu menu-row' }, [button('Empezar', b.onStart, 'btn btn-primary'), ...(b.onSkip ? [button('Saltar tutorial', b.onSkip)] : []), button('Volver', b.onBack)]),
+      h('div', { class: 'menu menu-row' }, [
+        button('Empezar', b.onStart, 'btn btn-primary'),
+        ...(b.onSkip ? [button('Saltar tutorial', b.onSkip)] : []),
+        button('Volver', b.onBack),
+      ]),
       h('p', { class: 'screen-hint' }, ['Pulsa ', keycap('Enter'), ' para empezar.']),
     ]);
   }
@@ -264,7 +268,13 @@ export class Screens {
     );
     const extras: HTMLElement[] = [];
     if (r.success) {
-      extras.push(h('div', { class: 'coins coins-big' }, [h('span', { class: 'coin-icon', text: '◉' }), h('b', { class: 'coin-count', text: `+${r.coins}` }), ' Monedas Continental']));
+      extras.push(
+        h('div', { class: 'coins coins-big' }, [
+          h('span', { class: 'coin-icon', text: '◉' }),
+          h('b', { class: 'coin-count', text: `+${r.coins}` }),
+          ' Monedas Continental',
+        ]),
+      );
       if (r.newBest) extras.push(h('div', { class: 'results-best', text: 'Nuevo mejor resultado' }));
       if (r.achievements.length) {
         extras.push(h('div', { class: 'achv-title', text: 'Logros' }));
@@ -277,27 +287,50 @@ export class Screens {
       h('div', { class: 'brief-kicker', text: r.success ? 'CONTRATO CUMPLIDO' : 'CONTRATO FALLIDO' }),
       h('h2', { class: 'screen-heading', text: r.missionName.toUpperCase() }),
       h('div', { class: 'results-grid' }, [
-        h('div', { class: 'rank-box', dataset: { rank: r.rank } }, [h('div', { class: 'rank-letter', text: r.success ? r.rank : '—' }), h('div', { class: 'rank-total', text: r.success ? `${Math.round(r.total)} / 100${r.capped ? ' · limitado a C' : ''}` : '' })]),
+        h('div', { class: 'rank-box', dataset: { rank: r.rank } }, [
+          h('div', { class: 'rank-letter', text: r.success ? r.rank : '—' }),
+          h('div', { class: 'rank-total', text: r.success ? `${Math.round(r.total)} / 100${r.capped ? ' · limitado a C' : ''}` : '' }),
+        ]),
         h('div', { class: 'subs' }, subs),
       ]),
-      h('div', { class: 'results-line', text: `Tiempo ${mm}:${String(ss).padStart(2, '0')} · Bajas ${r.kills} · Estilo ${r.styleScore.toLocaleString('es')} · Marcadores usados ${r.markersUsed}/${r.markersTotal}` }),
+      h('div', {
+        class: 'results-line',
+        text: `Tiempo ${mm}:${String(ss).padStart(2, '0')} · Bajas ${r.kills} · Estilo ${r.styleScore.toLocaleString('es')} · Marcadores usados ${r.markersUsed}/${r.markersTotal}`,
+      }),
       ...extras,
-      h('div', { class: 'menu menu-row' }, [button('Volver al Continental', x.onHub, 'btn btn-primary'), button(r.success ? 'Repetir contrato' : 'Reintentar', x.onRetry)]),
+      h('div', { class: 'menu menu-row' }, [
+        button('Volver al Continental', x.onHub, 'btn btn-primary'),
+        button(r.success ? 'Repetir contrato' : 'Reintentar', x.onRetry),
+      ]),
     ]);
   }
 
   private buildGauntletResults(r: ResultsView, g: NonNullable<ResultsView['gauntlet']>, onRetry: () => void, onHub: () => void): HTMLElement {
-    const extras: HTMLElement[] = [h('div', { class: 'coins coins-big' }, [h('span', { class: 'coin-icon', text: '◉' }), h('b', { class: 'coin-count', text: `+${r.coins}` }), ' Monedas Continental'])];
+    const extras: HTMLElement[] = [
+      h('div', { class: 'coins coins-big' }, [
+        h('span', { class: 'coin-icon', text: '◉' }),
+        h('b', { class: 'coin-count', text: `+${r.coins}` }),
+        ' Monedas Continental',
+      ]),
+    ];
     if (r.achievements.length) {
       extras.push(h('div', { class: 'achv-title', text: 'Logros' }));
       for (const a of r.achievements) extras.push(h('div', { class: 'achv', text: `${a.name}${a.coins ? ` · +${a.coins}` : ''}` }));
     }
-    const place = g.position > 0 ? `Puesto ${g.position} del top 10${g.position === 1 ? ' · nuevo récord' : ''}` : g.waves > 0 ? 'Fuera del top 10' : 'Sin oleadas superadas';
+    const place =
+      g.position > 0
+        ? `Puesto ${g.position} del top 10${g.position === 1 ? ' · nuevo récord' : ''}`
+        : g.waves > 0
+          ? 'Fuera del top 10'
+          : 'Sin oleadas superadas';
     return h('section', { class: 'screen screen-results ok', role: 'dialog', ariaLabel: 'Resultados del Gauntlet' }, [
       h('div', { class: 'brief-kicker', text: 'GAUNTLET TERMINADO' }),
       h('h2', { class: 'screen-heading', text: r.missionName.toUpperCase() }),
       h('div', { class: 'results-grid' }, [
-        h('div', { class: 'rank-box gauntlet-box' }, [h('div', { class: 'rank-letter gauntlet-waves', text: String(g.waves) }), h('div', { class: 'rank-total', text: g.waves === 1 ? 'oleada superada' : 'oleadas superadas' })]),
+        h('div', { class: 'rank-box gauntlet-box' }, [
+          h('div', { class: 'rank-letter gauntlet-waves', text: String(g.waves) }),
+          h('div', { class: 'rank-total', text: g.waves === 1 ? 'oleada superada' : 'oleadas superadas' }),
+        ]),
         this.gauntletTable(g.top, g.position),
       ]),
       h('div', { class: 'results-line gauntlet-place', text: `${place} · Bajas ${r.kills} · Estilo ${r.styleScore.toLocaleString('es')}` }),
@@ -312,7 +345,12 @@ export class Screens {
     return h(
       'ol',
       { class: 'gauntlet-top', ariaLabel: 'Top 10 del Gauntlet' },
-      top.map((e, i) => h('li', { class: i + 1 === highlight ? 'me' : '' }, [h('span', { class: 'gt-waves', text: `${e.waves} oleadas` }), h('span', { class: 'gt-score', text: e.score.toLocaleString('es') })])),
+      top.map((e, i) =>
+        h('li', { class: i + 1 === highlight ? 'me' : '' }, [
+          h('span', { class: 'gt-waves', text: `${e.waves} oleadas` }),
+          h('span', { class: 'gt-score', text: e.score.toLocaleString('es') }),
+        ]),
+      ),
     );
   }
 
@@ -328,7 +366,10 @@ export class Screens {
       menu.push(button('Arena de pruebas (QA)', () => this.cb.onPlayArena(), 'btn btn-dev'));
     }
     return h('section', { class: 'screen screen-title', role: 'dialog', ariaLabel: 'Pantalla de título' }, [
-      h('div', { class: 'title-block' }, [h('div', { class: 'title-main', text: 'EXCOMMUNICADO' }), h('div', { class: 'title-sub', text: 'CONTINENTAL PROTOCOL' })]),
+      h('div', { class: 'title-block' }, [
+        h('div', { class: 'title-main', text: 'EXCOMMUNICADO' }),
+        h('div', { class: 'title-sub', text: 'CONTINENTAL PROTOCOL' }),
+      ]),
       h('div', { class: 'menu' }, menu),
       h('p', { class: 'fan-note', text: 'Proyecto de fans sin fines de lucro. No afiliado ni respaldado por los titulares de la franquicia John Wick.' }),
     ]);
@@ -338,12 +379,19 @@ export class Screens {
     return h('section', { class: 'screen', role: 'alertdialog', ariaLabel: 'Confirmar nueva partida' }, [
       h('h2', { class: 'screen-heading', text: '¿NUEVA PARTIDA?' }),
       h('p', { class: 'screen-hint', text: 'Se borrará la partida guardada (monedas, mejoras y récords). Esta acción no se puede deshacer.' }),
-      h('div', { class: 'menu' }, [button('Sí, borrar y empezar', () => this.cb.onNewGame(), 'btn btn-danger'), button('No, volver', () => this.show('title'), 'btn btn-primary')]),
+      h('div', { class: 'menu' }, [
+        button('Sí, borrar y empezar', () => this.cb.onNewGame(), 'btn btn-danger'),
+        button('No, volver', () => this.show('title'), 'btn btn-primary'),
+      ]),
     ]);
   }
 
   private buildPause(): HTMLElement {
-    const menu = [button('Reanudar', () => this.cb.onResume(), 'btn btn-primary'), button('Controles', () => this.show('controls')), button('Ajustes', () => this.show('settings'))];
+    const menu = [
+      button('Reanudar', () => this.cb.onResume(), 'btn btn-primary'),
+      button('Controles', () => this.show('controls')),
+      button('Ajustes', () => this.show('settings')),
+    ];
     if (!this.cb.inHub()) menu.push(button('Volver al Continental', () => this.cb.onReturnToHub()));
     menu.push(button('Salir al título', () => this.cb.onQuitToTitle()));
     return h('section', { class: 'screen screen-pause', role: 'dialog', ariaLabel: 'Pausa' }, [
@@ -432,7 +480,10 @@ export class Screens {
         ];
         break;
       case 'keys':
-        body = [this.keysTable(), h('p', { class: 'screen-hint', text: 'Esc y F3 están reservadas. El clic izquierdo no se puede capturar: "Restablecer" lo devuelve a Disparar.' })];
+        body = [
+          this.keysTable(),
+          h('p', { class: 'screen-hint', text: 'Esc y F3 están reservadas. El clic izquierdo no se puede capturar: "Restablecer" lo devuelve a Disparar.' }),
+        ];
         break;
     }
     return h('section', { class: 'screen screen-settings', role: 'dialog', ariaLabel: 'Ajustes' }, [
@@ -515,7 +566,15 @@ export class Screens {
       const waiting = this.rebinding === a;
       const btn = button(waiting ? 'Pulsa una tecla…' : 'Cambiar', () => this.startRebind(a), `btn btn-small${waiting ? ' capturing' : ''}`);
       btn.dataset.rebind = a;
-      return h('tr', { dataset: { action: a } }, [h('th', { text: ACTION_LABELS[a] }), h('td', { class: 'keys' }, [...new Set(kbm.map(codeLabel))].map((l) => keycap(l))), h('td', {}, [btn])]);
+      return h('tr', { dataset: { action: a } }, [
+        h('th', { text: ACTION_LABELS[a] }),
+        h(
+          'td',
+          { class: 'keys' },
+          [...new Set(kbm.map(codeLabel))].map((l) => keycap(l)),
+        ),
+        h('td', {}, [btn]),
+      ]);
     });
     return h('table', { class: 'controls-table keys-table' }, [h('tbody', {}, rows)]);
   }
@@ -580,7 +639,11 @@ export class Screens {
     });
     return h('section', { class: 'screen screen-shop', role: 'dialog', ariaLabel: 'Armería del Sommelier' }, [
       h('h2', { class: 'screen-heading', text: 'ARMERÍA DEL SOMMELIER' }),
-      h('div', { class: 'coins', ariaLabel: 'Monedas' }, [h('span', { class: 'coin-icon', text: '◉' }), h('b', { class: 'coin-count', text: String(p.coins) }), ' Monedas Continental']),
+      h('div', { class: 'coins', ariaLabel: 'Monedas' }, [
+        h('span', { class: 'coin-icon', text: '◉' }),
+        h('b', { class: 'coin-count', text: String(p.coins) }),
+        ' Monedas Continental',
+      ]),
       h('div', { class: 'shop-list' }, rows),
       h('div', { class: 'menu' }, [button('Cerrar', () => this.cb.onCloseMenu(), 'btn')]),
     ]);
@@ -602,13 +665,20 @@ export class Screens {
           h('div', { class: 'shop-desc', text: m.place }),
           h('div', { class: 'contract-brief', text: m.briefing[0] }),
         ]),
-        h('div', { class: 'contract-best', text: id === 'gauntlet' ? (p.gauntlet[0] ? `Récord: ${p.gauntlet[0].waves}` : '—') : best ? `Mejor: ${best.rank}` : '—' }),
+        h('div', {
+          class: 'contract-best',
+          text: id === 'gauntlet' ? (p.gauntlet[0] ? `Récord: ${p.gauntlet[0].waves}` : '—') : best ? `Mejor: ${best.rank}` : '—',
+        }),
         action,
       ]);
     });
     return h('section', { class: 'screen screen-contracts', role: 'dialog', ariaLabel: 'Tablero de contratos' }, [
       h('h2', { class: 'screen-heading', text: 'CONTRATOS · RECEPCIÓN' }),
-      h('div', { class: 'coins' }, [h('span', { class: 'coin-icon', text: '◉' }), h('b', { class: 'coin-count', text: String(p.coins) }), ' Monedas Continental']),
+      h('div', { class: 'coins' }, [
+        h('span', { class: 'coin-icon', text: '◉' }),
+        h('b', { class: 'coin-count', text: String(p.coins) }),
+        ' Monedas Continental',
+      ]),
       h('div', { class: 'shop-list' }, rows),
       ...(p.gauntlet.length ? [h('div', { class: 'achv-title', text: 'Récords del Gauntlet' }), this.gauntletTable(p.gauntlet, 0)] : []),
       h('div', { class: 'menu' }, [button('Cerrar', () => this.cb.onCloseMenu(), 'btn')]),

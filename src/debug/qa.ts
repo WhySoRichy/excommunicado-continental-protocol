@@ -96,7 +96,17 @@ export interface QaApi {
   debugText(): string;
   setDebug(visible: boolean): void;
   runDebug(id: string): boolean;
-  info(): { calls: number; triangles: number; programs: number; geometries: number; textures: number; pixelRatio: number; dynamicScale: number; preset: string; steps: number };
+  info(): {
+    calls: number;
+    triangles: number;
+    programs: number;
+    geometries: number;
+    textures: number;
+    pixelRatio: number;
+    dynamicScale: number;
+    preset: string;
+    steps: number;
+  };
   state(): string;
   level(): string;
   playArena(): void;
@@ -174,7 +184,15 @@ export interface QaApi {
   /** Mata a un enemigo en silencio (sin ruido ni alerta): prepara escenarios. */
   killEnemy(id: string): boolean;
   /** Ajustes actuales y estado derivado (cámara, render, audio). */
-  settings(): { settings: Settings; cameraFov: number; mouseSens: number; brightness: string; preset: string; uiScale: string; volumes: { master: number; music: number } };
+  settings(): {
+    settings: Settings;
+    cameraFov: number;
+    mouseSens: number;
+    brightness: string;
+    preset: string;
+    uiScale: string;
+    volumes: { master: number; music: number };
+  };
   setSettings(patch: Partial<Settings>): void;
   /** "Saltar tutorial" del contrato en curso. */
   skipTutorial(): void;
@@ -594,7 +612,8 @@ export function installQa(game: Game): void {
       e.applyHit(9999, 'body', s.player.feet, 1, true);
       return true;
     },
-    civilians: () => (game.session?.civilians?.list ?? []).map((c) => ({ id: c.id, alive: c.alive, state: c.state, x: c.feet.x, z: c.feet.z, health: c.vitals.health })),
+    civilians: () =>
+      (game.session?.civilians?.list ?? []).map((c) => ({ id: c.id, alive: c.alive, state: c.state, x: c.feet.x, z: c.feet.z, health: c.vitals.health })),
   };
   window.__EXCOM__ = api;
 }

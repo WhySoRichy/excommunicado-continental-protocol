@@ -50,7 +50,11 @@ function checkLevel(level: LevelData): void {
       expect(n, `objetivo ${o.id}`).toBeGreaterThanOrEqual(0);
       expect(g.comp[n], `objetivo ${o.id} alcanzable`).toBe(main);
     }
-    for (const t of o.targets ?? []) expect(level.interactables.some((i) => i.id === t), `objetivo ${o.id}: interactivo ${t}`).toBe(true);
+    for (const t of o.targets ?? [])
+      expect(
+        level.interactables.some((i) => i.id === t),
+        `objetivo ${o.id}: interactivo ${t}`,
+      ).toBe(true);
   }
 }
 

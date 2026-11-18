@@ -34,9 +34,7 @@ export function pointInBox(p: Vec3, b: BoxDef, inflate = 0): boolean {
   const r = -(b.rotY ?? 0);
   const lx = dx * Math.cos(r) + dz * Math.sin(r);
   const lz = -dx * Math.sin(r) + dz * Math.cos(r);
-  return (
-    Math.abs(lx) <= b.s[0] / 2 + inflate && Math.abs(dy) <= b.s[1] / 2 + inflate && Math.abs(lz) <= b.s[2] / 2 + inflate
-  );
+  return Math.abs(lx) <= b.s[0] / 2 + inflate && Math.abs(dy) <= b.s[1] / 2 + inflate && Math.abs(lz) <= b.s[2] / 2 + inflate;
 }
 
 /** ¿Un cuerpo de pie en `feet` choca con alguna caja sólida? Muestrea pies, cintura y cabeza. */

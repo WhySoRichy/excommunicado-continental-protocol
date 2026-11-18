@@ -295,7 +295,12 @@ export class Enemy {
     this.faceTargetT = Math.max(0, this.faceTargetT - dt);
     if (c.fire || c.telegraph > 0) this.faceTargetT = 0.6;
     // Corriendo mira hacia donde va (velocidad completa); al disparar o quieto, encara al objetivo.
-    const engaged = this.brain.state === 'combat' || this.brain.state === 'cover' || this.brain.state === 'flank' || this.brain.state === 'suspicious' || this.brain.state === 'search';
+    const engaged =
+      this.brain.state === 'combat' ||
+      this.brain.state === 'cover' ||
+      this.brain.state === 'flank' ||
+      this.brain.state === 'suspicious' ||
+      this.brain.state === 'search';
     it.aim = c.hasLook && engaged && (!c.hasMove || !c.run || this.faceTargetT > 0);
     it.camYaw = lookYaw;
     this.mover.setPosture(c.crouch ? 'crouch' : 'stand');

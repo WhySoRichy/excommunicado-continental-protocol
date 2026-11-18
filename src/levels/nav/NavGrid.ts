@@ -530,7 +530,9 @@ function makeSolid(ob: OrientedBox): Solid {
   for (const sx of [-1, 1]) {
     for (const sy of [-1, 1]) {
       for (const sz of [-1, 1]) {
-        _p.set(ob.half.x * sx, ob.half.y * sy, ob.half.z * sz).applyQuaternion(ob.quat).add(ob.center);
+        _p.set(ob.half.x * sx, ob.half.y * sy, ob.half.z * sz)
+          .applyQuaternion(ob.quat)
+          .add(ob.center);
         minX = Math.min(minX, _p.x);
         maxX = Math.max(maxX, _p.x);
         minZ = Math.min(minZ, _p.z);
