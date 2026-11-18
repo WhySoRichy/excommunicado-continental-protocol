@@ -1,0 +1,27 @@
+# Actualizaciones de dependencias: una revisión al mes, agrupadas para que sean pocos pull requests.
+# La CI prueba cada uno; nada se publica hasta que se fusiona en main.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    # package.json fija versiones exactas: se suben también ahí, no solo en el lockfile.
+    versioning-strategy: increase
+    commit-message:
+      prefix: chore(deps)
+    groups:
+      juego:
+        dependency-type: production
+      herramientas:
+        dependency-type: development
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: ci(deps)
+    groups:
+      acciones:
+        patterns: ['*']

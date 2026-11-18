@@ -38,7 +38,8 @@ La primera vez que se ejecuten las e2e: `npx playwright install chromium firefox
 3. **Lo que se ve o se juega se comprueba jugando.** Las e2e usan la API de pruebas `window.__EXCOM__` (se activa con `?qa=1` en desarrollo y en el build de pruebas; definida en `src/debug/qa.ts`). Permite avanzar paso a paso, teletransportar, pulsar acciones y leer el estado. Para cambios visuales, sacar capturas y mirarlas.
 4. **Antes de cada commit:** `npm run lint` (linter, formato y código sin uso; `npm run format` corrige el formato), `npm run build`, `npm test` y `npm run test:e2e` en verde. Para reproducir el entorno de GitHub Actions (render por software, muy pocos FPS): `CI=1 npm run test:e2e`.
 5. **Commits** convencionales y en español (`feat:`, `fix:`, `perf:`, `test:`, `docs:`, `chore:`), con un cuerpo que explique el porqué.
-6. **Documentación al día:** si cambia una mecánica, actualizar `DISENO.md`; si cambia una decisión técnica, `ARQUITECTURA.md`; al terminar algo del roadmap, moverlo a "Estado actual".
+6. **Dependencias:** Dependabot abre cada mes pull requests agrupados (juego, herramientas y acciones de la CI). La CI los prueba; se fusionan si pasan y, si algo cambia de comportamiento, se revisa como cualquier otro cambio.
+7. **Documentación al día:** si cambia una mecánica, actualizar `DISENO.md`; si cambia una decisión técnica, `ARQUITECTURA.md`; al terminar algo del roadmap, moverlo a "Estado actual".
 
 ## Herramientas propias
 
