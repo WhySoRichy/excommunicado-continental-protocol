@@ -176,8 +176,10 @@ Para quien quiera revisar o modificar el código:
 | `npm run dev` | Servidor de desarrollo en http://localhost:5173 con recarga instantánea al guardar cambios. Muestra botones de prueba en el título (arena de pruebas y simulacro directo) |
 | `npm run build` | Comprobación estricta de tipos y build de producción en la carpeta `dist/` |
 | `npm run preview` | Sirve `dist/` en http://localhost:4173 |
+| `npm run build:qa` | Build de pruebas en la carpeta `dist-qa/`: el mismo juego, más la API de pruebas y los comandos de depuración del panel F3 |
+| `npm run preview:qa` | Sirve `dist-qa/` en http://localhost:4173 |
 | `npm test` | Pruebas unitarias (Vitest), unos segundos |
-| `npm run test:e2e` | Pruebas del juego completo en Chromium (Playwright), entre 3 y 5 minutos |
+| `npm run test:e2e` | Genera el build de pruebas y ejecuta sobre él las pruebas del juego completo en Chromium (Playwright), entre 3 y 5 minutos |
 | `npm run qa` | Build + pruebas unitarias + pruebas e2e |
 | `npm run media` | Regenera las capturas y el GIF del README (necesita ffmpeg instalado) |
 
@@ -187,13 +189,13 @@ Antes de la primera ejecución de `npm run test:e2e` hay que descargar el navega
 npx playwright install chromium
 ```
 
-Parámetros de URL que sirven en desarrollo y en producción:
+Parámetros de URL:
 
 | Parámetro | Efecto |
 |---|---|
 | `?preset=low`, `?preset=medium` o `?preset=high` | Fuerza una calidad gráfica |
 | `?level=arena` | Carga la arena de pruebas de movimiento |
-| `?qa=1` | Activa la API de pruebas (`window.__EXCOM__`) y permite jugar sin capturar el ratón |
+| `?qa=1` | Solo en desarrollo y en el build de pruebas: activa la API de pruebas (`window.__EXCOM__`) y los comandos de depuración del F3, y permite jugar sin capturar el ratón. La versión publicada no los incluye |
 
 > La carpeta `dist/` no funciona abriendo `index.html` con doble clic: el navegador bloquea los módulos y el wasm cargados desde `file://`. Hay que servirla con `npm run preview` o con cualquier servidor web.
 
