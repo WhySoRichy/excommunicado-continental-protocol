@@ -125,8 +125,8 @@ Los detalles, decisiones técnicas y convenciones están en [docs/ARQUITECTURA.m
 
 | | |
 |---|---|
-| **168 pruebas unitarias** (Vitest) | Cinemática inversa de piernas y brazos del rig, daño, estilo, rango (incluida una prueba de coherencia con 500 partidas al azar), economía, IA de los enemigos, navegación de cada nivel, guardado, reasignación de teclas, oleadas, música y superficie bajo los pies |
-| **51 pruebas e2e** (Playwright) | El juego real, compilado como en producción más la API de pruebas: movimiento sin atravesar paredes ni atascarse (también con picos de lag), combate contra varios enemigos, los cuatro contratos y el Gauntlet de principio a fin, tutorial, ajustes persistentes, mando, claridad visual, mezcla de audio, rendimiento (también que cambiar de nivel no deje recursos en la GPU) y robustez ante un nivel que no se descarga. También comprueban que la versión publicada no incluya la API de pruebas ni los trucos de depuración, y que lleve su política de seguridad de contenido |
+| **169 pruebas unitarias** (Vitest) | Cinemática inversa de piernas y brazos del rig, daño, estilo, rango (incluida una prueba de coherencia con 500 partidas al azar), economía, IA de los enemigos, navegación de cada nivel, guardado, reasignación de teclas, oleadas, música y superficie bajo los pies |
+| **52 pruebas e2e** (Playwright) | El juego real, compilado como en producción más la API de pruebas: movimiento sin atravesar paredes ni atascarse (también con picos de lag), combate contra varios enemigos, los cuatro contratos y el Gauntlet de principio a fin, tutorial, ajustes persistentes, mando, claridad visual, mezcla de audio, rendimiento (también que cambiar de nivel no deje recursos en la GPU) y robustez ante un nivel que no se descarga. También comprueban que la versión publicada no incluya la API de pruebas ni los trucos de depuración, y que lleve su política de seguridad de contenido. Una prueba de humo comprueba además el juego en Firefox |
 | **CI** | Cada push a `main` pasa el linter, audita las dependencias, ejecuta las pruebas y publica el juego en GitHub Pages |
 
 ### Rendimiento

@@ -48,8 +48,8 @@ jobs:
       - name: Build de producción (typecheck + Vite)
         run: npm run build
 
-      - name: Instalar Chromium para Playwright
-        run: npx playwright install --with-deps chromium
+      - name: Instalar Chromium y Firefox para Playwright
+        run: npx playwright install --with-deps chromium firefox
 
       - name: Tests e2e (Playwright sobre el build de pruebas)
         run: npm run test:e2e

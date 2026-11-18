@@ -179,13 +179,13 @@ Para quien quiera revisar o modificar el código:
 | `npm run build:qa` | Build de pruebas en la carpeta `dist-qa/`: el mismo juego, más la API de pruebas y los comandos de depuración del panel F3 |
 | `npm run preview:qa` | Sirve `dist-qa/` en http://localhost:4173 |
 | `npm test` | Pruebas unitarias (Vitest), unos segundos |
-| `npm run test:e2e` | Genera el build de pruebas y ejecuta sobre él las pruebas del juego completo en Chromium (Playwright), entre 3 y 5 minutos |
+| `npm run test:e2e` | Genera el build de pruebas y ejecuta sobre él las pruebas del juego completo en Chromium, más una prueba de humo en Firefox (Playwright), entre 3 y 5 minutos |
 | `npm run qa` | Build + pruebas unitarias + pruebas e2e |
 | `npm run lint` | Linter (oxlint, con información de tipos), comprobación del formato y búsqueda de código sin uso (knip) |
 | `npm run format` | Aplica el formato del proyecto (Prettier) |
 | `npm run media` | Regenera las capturas y el GIF del README (necesita ffmpeg instalado) |
 
-Antes de la primera ejecución de `npm run test:e2e` hay que descargar el navegador de pruebas:
+Antes de la primera ejecución de `npm run test:e2e` hay que descargar los navegadores de prueba:
 
 ```bash
 npx playwright install chromium
@@ -249,7 +249,7 @@ Conéctalo y pulsa cualquier botón con la pestaña del juego en primer plano: l
 En la pantalla de título elige **Nueva partida** y confirma. Los ajustes (sensibilidad, teclas, calidad) se conservan; para restablecerlos, Ajustes → **Restablecer**.
 
 **`npm run test:e2e` dice "Executable doesn't exist"**
-Falta el navegador de pruebas: ejecuta `npx playwright install chromium`.
+Falta el navegador de pruebas: ejecuta `npx playwright install chromium firefox`.
 
 ## 11. Actualizar y desinstalar
 

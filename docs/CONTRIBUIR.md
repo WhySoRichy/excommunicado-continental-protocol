@@ -10,7 +10,7 @@ npm run dev          # http://localhost:5173 con herramientas de prueba
 npm run qa           # build + pruebas unitarias + pruebas e2e
 ```
 
-La primera vez que se ejecuten las e2e: `npx playwright install chromium`. Requisitos y problemas frecuentes en [INSTALACION.md](../INSTALACION.md).
+La primera vez que se ejecuten las e2e: `npx playwright install chromium firefox`. Requisitos y problemas frecuentes en [INSTALACION.md](../INSTALACION.md).
 
 ## Mapa rápido
 

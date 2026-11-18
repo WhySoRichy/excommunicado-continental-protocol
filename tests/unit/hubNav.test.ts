@@ -1,11 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { hub } from '../../src/levels/data/hub';
-import { docks } from '../../src/levels/data/docks';
-import { nightclub } from '../../src/levels/data/nightclub';
-import { rooftop } from '../../src/levels/data/rooftop';
-import { practice } from '../../src/levels/data/practice';
 import { NavGrid } from '../../src/levels/nav/NavGrid';
-import type { LevelData } from '../../src/levels/types';
+import { LEVEL_IDS, loadLevelData } from '../../src/levels/registry';
+import type { LevelData, LevelId } from '../../src/levels/types';
 
 /**
  * Conectividad de los niveles del hub: todo lo que importa (interactivos, checkpoints
@@ -58,26 +55,21 @@ function checkLevel(level: LevelData): void {
   }
 }
 
-describe('navegación de los niveles jugables', () => {
-  it('El Continental: NPCs, placa, ascensor y vestíbulos de las oleadas conectados', () => {
-    checkLevel(hub);
-  });
+/** Qué comprueba el test en cada nivel; un nivel nuevo entra solo al registrarse en `LEVEL_IDS`. */
+const WHAT: Partial<Record<LevelId, string>> = {
+  hub: 'NPCs, placa, ascensor y vestíbulos de las oleadas',
+  practice: 'ascensor de vuelta y enemigos del simulacro',
+  nightclub: 'objetivos, civiles, alarma y refuerzos',
+  docks: 'cargamentos, bodega, pasarela y bote',
+  rooftop: 'las tres azoteas, el Juez y la tirolina',
+};
 
-  it('Campo de práctica: ascensor de vuelta y enemigos del simulacro conectados', () => {
-    checkLevel(practice);
-  });
-
-  it('Club Kairos: objetivos, civiles, alarma y refuerzos conectados', () => {
-    checkLevel(nightclub);
-  });
-
-  it('Muelle 9: cargamentos, bodega, pasarela y bote conectados', () => {
-    checkLevel(docks);
-  });
-
-  it('Torre Meridian: las tres azoteas, el Juez y la tirolina conectados', () => {
-    checkLevel(rooftop);
-  });
+describe('navegación de todos los niveles del registro', () => {
+  for (const id of LEVEL_IDS) {
+    it(`${id}: ${WHAT[id] ?? 'interactivos, checkpoints, enemigos, civiles y objetivos'} conectados con el spawn`, async () => {
+      checkLevel(await loadLevelData(id));
+    });
+  }
 
   it('los NPC tienen cuerpo invisible y los interactivos de tipo npc apuntan a él', () => {
     for (const it of hub.interactables.filter((i) => i.kind === 'npc')) {

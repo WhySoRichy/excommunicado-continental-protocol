@@ -196,6 +196,7 @@ Qué cubren los e2e, a grandes rasgos:
 - **Contenido:** los cuatro contratos y el Gauntlet se completan de principio a fin; fallar por marcadores o por tiempo; el tutorial paso a paso.
 - **Claridad:** luminancia en cada checkpoint de cada nivel; objetivo y baliza siempre visibles; los avisos muestran la tecla real asignada; consola sin errores.
 - **Audio:** la mezcla se mide en la salida real (la música queda de fondo, los disparos destacan, sin saturación).
+- **Firefox:** una prueba de humo (arranque, escena visible, moverse y disparar, consola limpia y sin bloqueos de la CSP); el resto de la suite corre en Chromium.
 
 ## 10. Rendimiento
 

@@ -23,12 +23,22 @@ export default defineConfig({
     baseURL: 'http://localhost:4173',
     viewport: { width: 1280, height: 720 },
     trace: 'off',
-    launchOptions: { args: gpuArgs },
   },
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 720 }, channel: 'chromium' },
+      testIgnore: /firefox.spec.ts/,
+      use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 720 }, channel: 'chromium', launchOptions: { args: gpuArgs } },
+    },
+    // Prueba de humo en Firefox: ya hubo un fallo exclusivo de este navegador (el audio posicional).
+    {
+      name: 'firefox',
+      testMatch: /firefox.spec.ts/,
+      use: {
+        ...devices['Desktop Firefox'],
+        viewport: { width: 1280, height: 720 },
+        launchOptions: { firefoxUserPrefs: { 'media.autoplay.default': 0, 'webgl.force-enabled': true } },
+      },
     },
   ],
   webServer: {
