@@ -26,10 +26,27 @@ export interface CombatIntent {
   focusPressed: boolean;
   select: WeaponId | null;
   cycle: number;
+  /**
+   * Rayo de apuntado del jugador: desde dónde mira y hacia dónde (unitario). En local lo da su cámara; en red llegará
+   * con su intención. El combate no lee ninguna cámara (docs/ESCALABILIDAD.md).
+   */
+  readonly aimFrom: Vector3;
+  readonly aimDir: Vector3;
 }
 
 export function emptyCombatIntent(): CombatIntent {
-  return { fireHeld: false, firePressed: false, aim: false, reloadPressed: false, takedownPressed: false, focusPressed: false, select: null, cycle: 0 };
+  return {
+    fireHeld: false,
+    firePressed: false,
+    aim: false,
+    reloadPressed: false,
+    takedownPressed: false,
+    focusPressed: false,
+    select: null,
+    cycle: 0,
+    aimFrom: new Vector3(),
+    aimDir: new Vector3(0, 0, -1),
+  };
 }
 
 export interface CombatCtx {
@@ -107,6 +124,9 @@ export class PlayerCombat {
   focus = 40;
   focusActive = false;
   takedown: TakedownState | null = null;
+  /** Último rayo de apuntado recibido en la intención (lo usan la mira, el disparo y el takedown). */
+  private readonly aimFrom = new Vector3();
+  private readonly aimDir = new Vector3(0, 0, -1);
   /** Segundos que le quedan al forcejeo del takedown y al tajo del cuchillo. */
   private grabT = 0;
   private slashT = 0;
@@ -247,6 +267,8 @@ export class PlayerCombat {
   // =============================================================== paso fijo
   fixedUpdate(dt: number, it: CombatIntent, ctx: CombatCtx): void {
     this.time += dt;
+    this.aimFrom.copy(it.aimFrom);
+    if (it.aimDir.lengthSq() > 1e-6) this.aimDir.copy(it.aimDir);
     this.sinceDamage += dt;
     this.sinceDodge += dt;
     this.sinceCover += dt;
@@ -370,9 +392,8 @@ export class PlayerCombat {
 
   /** Punto apuntado: rayo desde la cámara que empieza a la profundidad del jugador (nunca dispara hacia atrás). */
   private aimPoint(ctx: CombatCtx, range: number, out: Vector3): Vector3 {
-    const cam = ctx.camera;
-    _cam.copy(cam.position);
-    _fwd.copy(cam.forward);
+    _cam.copy(this.aimFrom);
+    _fwd.copy(this.aimDir);
     this.muzzleOf(ctx.player, true, _muzzle);
     const depth = Math.max(0, _tmp.subVectors(_muzzle, _cam).dot(_fwd));
     _origin.copy(_cam).addScaledVector(_fwd, depth);
@@ -550,8 +571,10 @@ export class PlayerCombat {
   takedownCandidate(ctx: CombatCtx): Enemy | null {
     const p = ctx.player;
     if (p.state !== 'ground' && p.state !== 'cover') return null;
-    const fx = -Math.sin(ctx.camera.yaw);
-    const fz = -Math.cos(ctx.camera.yaw);
+    // Hacia dónde apunta, en horizontal.
+    const flat = Math.hypot(this.aimDir.x, this.aimDir.z) || 1;
+    const fx = this.aimDir.x / flat;
+    const fz = this.aimDir.z / flat;
     let best: Enemy | null = null;
     let bestD = TD_RANGE;
     for (const e of ctx.enemies.enemies) {

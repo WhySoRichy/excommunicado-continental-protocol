@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { EnemyManager } from '../../src/combat/EnemyManager';
 import { Pickups } from '../../src/combat/Pickups';
 import { type CombatCtx, emptyCombatIntent, PlayerCombat } from '../../src/combat/PlayerCombat';
-import { type CombatCamera, NO_VFX, SILENT_AUDIO } from '../../src/combat/ports';
+import { NO_VFX, SILENT_AUDIO, STILL_CAMERA } from '../../src/combat/ports';
 import { FIXED_DT } from '../../src/core/Loop';
 import { Rng } from '../../src/core/rng';
 import type { PlayerTarget } from '../../src/entities/Enemy';
@@ -15,30 +15,13 @@ import { loadRapier, PhysicsWorld, type Rapier } from '../../src/physics/Physics
 
 /**
  * Simulación sin pantalla (fase 1 de docs/ESCALABILIDAD.md): física, jugador, combate e IA en Node, sin audio, sin
- * efectos y sin cámara de verdad. Es lo que necesitará un servidor de partidas; si alguien vuelve a hacer que el combate
+ * efectos y sin cámara: el apuntado llega en la intención del jugador. Es lo que necesitará un servidor de partidas; si alguien vuelve a hacer que el combate
  * dependa de la vista, esta prueba deja de compilar o de funcionar.
  */
 let R: Rapier;
 beforeAll(async () => {
   R = await loadRapier();
 });
-
-/** Cámara mínima: detrás de la cabeza del jugador, mirando a un punto. */
-function aimCamera(): CombatCamera & { lookAt(from: Vector3, to: Vector3): void } {
-  const position = new Vector3();
-  const forward = new Vector3(0, 0, -1);
-  return {
-    yaw: 0,
-    position,
-    forward,
-    kick() {},
-    addTrauma() {},
-    lookAt(from, to) {
-      position.copy(from);
-      forward.subVectors(to, from).normalize();
-    },
-  };
-}
 
 describe('simulación sin pantalla', () => {
   it('un enemigo ataca al jugador y el jugador lo abate, sin vista ni audio', () => {
@@ -49,7 +32,6 @@ describe('simulación sin pantalla', () => {
     const player = new PlayerController(physics, new Vector3(0, 0.02, 9.5), 0);
     const combat = new PlayerCombat(new Set());
     let shotsAtPlayer = 0;
-    const camera = aimCamera();
     const enemies = new EnemyManager({
       level: arena,
       physics,
@@ -64,7 +46,17 @@ describe('simulación sin pantalla', () => {
         if (hit) combat.takeHit(enemy, dmg, ctx);
       },
     });
-    const ctx: CombatCtx = { physics, camera, player, enemies, civilians: null, vfx: NO_VFX, audio: SILENT_AUDIO, rng, pickups: new Pickups(new Scene()) };
+    const ctx: CombatCtx = {
+      physics,
+      camera: STILL_CAMERA,
+      player,
+      enemies,
+      civilians: null,
+      vfx: NO_VFX,
+      audio: SILENT_AUDIO,
+      rng,
+      pickups: new Pickups(new Scene()),
+    };
     const target: PlayerTarget = {
       feet: player.feet,
       head: new Vector3(),
@@ -89,7 +81,9 @@ describe('simulación sin pantalla', () => {
       fire.firePressed = i > 180 && i % 12 === 0;
       head.set(player.feet.x, player.feet.y + 1.7, player.feet.z + 2.4);
       chest.set(enemy.feet.x, enemy.feet.y + enemy.height * 0.62, enemy.feet.z);
-      camera.lookAt(head, chest);
+      // El apuntado llega en la intención, como llegará el de un jugador remoto.
+      fire.aimFrom.copy(head);
+      fire.aimDir.subVectors(chest, head).normalize();
       player.fixedUpdate(FIXED_DT, move);
       combat.fixedUpdate(FIXED_DT, fire, ctx);
       target.head.set(player.feet.x, player.feet.y + 1.6, player.feet.z);

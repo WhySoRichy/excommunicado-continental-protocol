@@ -1031,6 +1031,9 @@ export class Game {
       }
     }
     const ci = controlling ? this.buildCombatIntent() : this.idleCIntent;
+    // El rayo de apuntado sale de la cámara del jugador local.
+    ci.aimFrom.copy(this.camera.position);
+    ci.aimDir.copy(this.camera.forward);
     if (s.infiniteAmmo) s.combat.weapon.mag = Math.max(s.combat.weapon.mag, 1);
     s.combat.fixedUpdate(dt, ci, s.ctx);
     const tE = this.profiling ? performance.now() : 0;

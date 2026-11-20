@@ -1,4 +1,3 @@
-import type { Vector3 } from 'three';
 import type { Vec3Like } from '../physics/Physics';
 
 /**
@@ -40,17 +39,16 @@ export interface CombatVfx {
 }
 
 /**
- * La cámara del jugador vista desde el combate: hacia dónde apunta (lectura) y su respuesta física al disparo y a los
- * golpes (retroceso y sacudida). La lectura pasará a la intención del jugador para que la simulación no dependa de
- * ninguna cámara (fase 1 de docs/ESCALABILIDAD.md).
+ * La respuesta de la cámara del jugador al disparo y a los golpes (retroceso y sacudida). Hacia dónde apunta no sale de
+ * aquí: llega en su intención (`CombatIntent.aimFrom` y `aimDir`).
  */
 export interface CombatCamera {
-  readonly yaw: number;
-  readonly position: Vector3;
-  readonly forward: Vector3;
   kick(pitchRad: number, yawRad: number): void;
   addTrauma(v: number): void;
 }
+
+/** Cámara que no reacciona: para simular sin pantalla. */
+export const STILL_CAMERA: CombatCamera = { kick() {}, addTrauma() {} };
 
 /** Puertos que no hacen nada: para simular sin pantalla. */
 export const SILENT_AUDIO: CombatAudio = {

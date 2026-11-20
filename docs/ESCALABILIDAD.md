@@ -45,10 +45,11 @@ Hecho:
 - **Regla de lint** (`no-restricted-imports` en `.oxlintrc.json`): las carpetas de simulación no pueden importar render, interfaz, audio ni la cámara.
 - **Prueba sin pantalla** (`tests/unit/headless.test.ts`): en Node, un enemigo detecta al jugador, le dispara y el jugador lo abate. Destapó que el enemigo dibujaba su icono de alerta en un canvas al nacer.
 - **`Enemy` partido en estado y vista.** `Enemy` es solo simulación y entra en la regla de lint; `EnemyView` (personaje animado, icono de alerta y láser) lee su estado sin cambiarlo y `EnemyViews` crea y suelta las vistas según aparecen o se retiran enemigos. De paso, tres cosas de la simulación que avanzaban al dibujar pasaron al paso fijo: el reloj de la proyección del takedown, la sacudida al recibir un impacto y la posición del láser.
+- **El apuntado llega en la intención.** `CombatIntent` trae el rayo de apuntado (`aimFrom` y `aimDir`); el combate ya no lee ninguna cámara y su puerto de cámara solo recibe el retroceso y la sacudida. Cada jugador, también uno remoto, trae su propio apuntado.
 
 Pendiente:
 - Partir igual `Civilian` (crea su rig) y `Pickups` (crea sus mallas).
-- El rayo de apuntado tiene que llegar en `CombatIntent`: hoy el combate lo lee de la cámara a través de su puerto.
+
 - Los directores reciben la `LevelSession` entera, que incluye la escena.
 - Ampliar la prueba sin pantalla a una oleada completa del Gauntlet.
 
