@@ -16,7 +16,7 @@ El juego va a seguir creciendo en cuatro direcciones a la vez: gráficos, conten
 
 | Problema | Dato | Qué bloquea |
 |---|---|---|
-| Simulación y vista mezcladas | 11 módulos de simulación importan render, audio, interfaz o cámara. `Enemy` crea su rig, su icono y su láser; `PlayerCombat` lee la cámara y llama a efectos y sonido; `MissionDirector` y `HubDirector` escriben en el HUD | Un servidor sin pantalla, el multijugador y cambiar la presentación sin tocar reglas |
+| Simulación y vista mezcladas | Al empezar la fase 1, 11 módulos de simulación importaban render, audio, interfaz o cámara. Tras los puertos quedan las entidades que crean su propia vista (`Enemy`, `Civilian`, `Pickups`) y los directores, que reciben la sesión entera | Un servidor sin pantalla, el multijugador y cambiar la presentación sin tocar reglas |
 | Un solo jugador cableado | `LevelSession` guarda un `player`, un `combat` y un único `PlayerTarget`; los enemigos reciben ese objetivo | Cualquier modo con más de un jugador |
 | Módulos que concentran demasiado | `Game.ts` 1.330 líneas, `PlayerController.ts` 1.035, `CharacterRig.ts` 1.018 (su `update` ronda las 550) | Que dos frentes avancen a la vez sin pisarse |
 | Textos dentro del código | Cadenas en español repartidas por más de diez módulos de juego (armas, estilo, logros, diálogos) | Traducir y revisar textos sin tocar lógica |
@@ -40,11 +40,16 @@ El juego va a seguir creciendo en cuatro direcciones a la vez: gráficos, conten
 Cada fase deja el juego publicado y en verde; ninguna exige terminar la siguiente.
 
 ### Fase 1 · Frontera entre simulación y vista (prerrequisito del resto)
-- Bus de eventos de juego: la simulación publica y la vista se suscribe. Desaparecen las llamadas directas a efectos, sonido y HUD desde combate, enemigos y directores.
-- `Enemy` se parte en estado (simulación) y vista (rig, icono, láser).
-- El rayo de apuntado llega en `CombatIntent` en lugar de leerse de la cámara.
-- Regla de lint que impide a las carpetas de simulación importar render, interfaz, audio o cámara.
-- Prueba sin pantalla: una oleada completa del Gauntlet simulada en Node.
+Hecho:
+- **Puertos.** Combate, enemigos y directores avisan a través de interfaces propias (`src/combat/ports.ts` y `src/missions/ports.ts`: sonido, efectos, sacudida de cámara y HUD) y ya no importan `AudioEngine`, `Vfx`, `CameraRig` ni `Hud`, que declaran `implements`. Sin pantalla se usan los puertos mudos (`SILENT_AUDIO`, `NO_VFX`); para la red bastará uno que registre los avisos.
+- **Regla de lint** (`no-restricted-imports` en `.oxlintrc.json`): las carpetas de simulación no pueden importar render, interfaz, audio ni la cámara.
+- **Prueba sin pantalla** (`tests/unit/headless.test.ts`): en Node, un enemigo detecta al jugador, le dispara y el jugador lo abate. Destapó que el enemigo dibujaba su icono de alerta en un canvas al nacer; ahora se crea al mostrarse.
+
+Pendiente:
+- Partir las entidades en estado y vista: `Enemy` y `Civilian` crean su rig (y el enemigo, su icono y su láser), y `Pickups` sus mallas.
+- El rayo de apuntado tiene que llegar en `CombatIntent`: hoy el combate lo lee de la cámara a través de su puerto.
+- Los directores reciben la `LevelSession` entera, que incluye la escena.
+- Ampliar la prueba sin pantalla a una oleada completa del Gauntlet.
 
 ### Fase 2 · Varios jugadores en la simulación (aún en local)
 - Registro de jugadores con id; cada uno con su controlador, su combate y su intención.

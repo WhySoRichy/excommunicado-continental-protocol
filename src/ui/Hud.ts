@@ -1,5 +1,6 @@
 import { h, keycap, setText, setVisible } from './dom';
 import { buildIntel, type IntelView } from './Intel';
+import type { MissionHud } from '../missions/ports';
 
 export interface PromptSpec {
   key: string;
@@ -62,7 +63,7 @@ function sameFeed(a: ReadonlyArray<{ text: string; points: number }>, b: Readonl
   return true;
 }
 
-export class Hud {
+export class Hud implements MissionHud {
   readonly root: HTMLDivElement;
   private readonly crosshair: HTMLDivElement;
   private readonly hitmark: HTMLDivElement;

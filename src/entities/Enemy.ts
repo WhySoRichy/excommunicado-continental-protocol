@@ -1,6 +1,6 @@
 import type { Collider } from '@dimforge/rapier3d-compat';
 import { AdditiveBlending, BoxGeometry, Color, Mesh, MeshBasicMaterial, type Scene, Sprite, Vector3 } from 'three';
-import type { AudioEngine, ShotSound } from '../audio/AudioEngine';
+import type { CombatAudio, CombatVfx, ShotSound } from '../combat/ports';
 import { applyDamage, type DamageResult, type HitZone, makeVitals, restoreVitals, type Vitals } from '../combat/damage';
 import { FIXED_DT } from '../core/Loop';
 import { clamp, damp, wrapAngle } from '../core/math';
@@ -8,7 +8,7 @@ import type { Rng } from '../core/rng';
 import type { NavGrid } from '../levels/nav/NavGrid';
 import type { EnemySpawnDef } from '../levels/types';
 import { Groups, type PhysicsWorld, QueryGroups } from '../physics/Physics';
-import { alertIconMaterial, type Vfx } from '../render/vfx';
+import { alertIconMaterial } from '../render/vfx';
 import { type AiState, EnemyBrain, emptyCommand, emptyPerception, type Tactics } from './ai/EnemyBrain';
 import { ENEMY_TYPES, type EnemyTypeDef } from './ai/enemyTypes';
 import { CharacterRig, idlePose, type RigPose } from './CharacterRig';
@@ -30,8 +30,8 @@ export interface PlayerTarget {
 export interface EnemyWorld {
   physics: PhysicsWorld;
   nav: NavGrid;
-  vfx: Vfx;
-  audio: AudioEngine;
+  vfx: CombatVfx;
+  audio: CombatAudio;
   rng: Rng;
   scene: Scene;
   tactics: Tactics;
@@ -165,7 +165,9 @@ export class Enemy {
     });
     this.baseRim = new Color(this.def.color);
     w.scene.add(this.rig.root);
-    this.icon = new Sprite(alertIconMaterial('suspicious'));
+    // El material (con su textura dibujada en canvas) se le pone al mostrarlo en `renderUpdate`: la simulación de un
+    // enemigo no debe tocar el DOM (así corre sin pantalla, ver tests/unit/headless.test.ts).
+    this.icon = new Sprite();
     this.icon.scale.set(0.45, 0.45, 0.45);
     this.icon.visible = false;
     this.icon.renderOrder = 20;

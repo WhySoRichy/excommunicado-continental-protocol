@@ -1,6 +1,6 @@
 import type { Collider } from '@dimforge/rapier3d-compat';
 import { type Scene, Vector3 } from 'three';
-import type { AudioEngine } from '../audio/AudioEngine';
+
 import type { Rng } from '../core/rng';
 import type { Tactics } from '../entities/ai/EnemyBrain';
 import { Enemy, type EnemyWorld, type PlayerTarget } from '../entities/Enemy';
@@ -8,7 +8,7 @@ import { boxToOriented } from '../levels/levelPhysics';
 import type { NavGrid } from '../levels/nav/NavGrid';
 import type { EnemySpawnDef, EnemyType, LevelData } from '../levels/types';
 import { type PhysicsWorld, QueryGroups } from '../physics/Physics';
-import type { Vfx } from '../render/vfx';
+import type { CombatAudio, CombatVfx } from './ports';
 
 interface CoverPoint {
   pos: Vector3;
@@ -20,8 +20,8 @@ export interface EnemyManagerDeps {
   level: LevelData;
   physics: PhysicsWorld;
   nav: NavGrid;
-  vfx: Vfx;
-  audio: AudioEngine;
+  vfx: CombatVfx;
+  audio: CombatAudio;
   rng: Rng;
   scene: Scene;
   accuracyMult: number;

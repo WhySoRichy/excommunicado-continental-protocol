@@ -35,6 +35,39 @@
       }
     },
     {
+      // Frontera entre simulación y vista (docs/ESCALABILIDAD.md): la simulación avisa por sus puertos
+      // (src/combat/ports.ts, src/missions/ports.ts) y nunca importa render, interfaz, audio ni la cámara.
+      "files": [
+        "src/combat/**",
+        "src/missions/**",
+        "src/hub/**",
+        "src/entities/ai/**",
+        "src/entities/PlayerController.ts",
+        "src/physics/**",
+        "src/levels/nav/**",
+        "src/levels/data/**",
+        "src/core/**"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**/render/*", "**/ui/*", "**/audio/*", "**/game/CameraRig"],
+                "message": "La simulación no importa la vista: usa los puertos de src/combat/ports.ts o src/missions/ports.ts (docs/ESCALABILIDAD.md)."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      // Pendiente de partir en estado y vista (fase 1): crea sus propias mallas.
+      "files": ["src/combat/Pickups.ts"],
+      "rules": { "no-restricted-imports": "off" }
+    },
+    {
       "files": ["scripts/**", "tests/**", "*.config.ts"],
       "env": { "node": true }
     }

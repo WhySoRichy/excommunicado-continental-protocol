@@ -26,6 +26,7 @@ import {
 } from 'three';
 import type { Vec3Like } from '../physics/Physics';
 import { type TracerSpan, tracerSpan } from './tracerPath';
+import type { CombatVfx, ImpactKind } from '../combat/ports';
 
 /**
  * Efectos visuales con POOLS de tamaño fijo (cero asignaciones por frame, R7):
@@ -57,9 +58,7 @@ const _e = new Euler();
 const _span: TracerSpan = { head: 0, tail: 0, done: false };
 const HIDE = new Matrix4().makeScale(0, 0, 0);
 
-export type ImpactKind = 'spark' | 'blood' | 'dust';
-
-export class Vfx {
+export class Vfx implements CombatVfx {
   private readonly tracers: InstancedMesh;
   private readonly tracerLife = new Float32Array(MAX_TRACERS);
   private readonly tracerColor: Color[] = [];

@@ -4,6 +4,7 @@ import type { Rng } from '../core/rng';
 import type { PhysicsWorld } from '../physics/Physics';
 import { QueryGroups } from '../physics/Physics';
 import type { Posture } from '../entities/PlayerController';
+import type { CombatCamera } from '../combat/ports';
 
 export interface CameraSettings {
   /** Sensibilidad del ratón (rad por píxel). */
@@ -61,7 +62,7 @@ export interface CameraFrameInput {
  * 1) cabeza → hombro, 2) hombro → posición deseada, 3) cabeza → cámara final (línea directa).
  * Si algo tapa se acerca AL INSTANTE; al despejarse se aleja suavemente. Nunca entra en geometría.
  */
-export class CameraRig {
+export class CameraRig implements CombatCamera {
   yaw = 0;
   pitch = -0.12;
   settings: CameraSettings = { ...DEFAULT_CAMERA };

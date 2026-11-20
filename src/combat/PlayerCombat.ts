@@ -1,20 +1,21 @@
 import { Vector3 } from 'three';
-import type { AudioEngine } from '../audio/AudioEngine';
+
 import { DEG2RAD } from '../core/math';
 import type { Rng } from '../core/rng';
 import type { CivilianManager } from '../entities/Civilian';
 import type { Enemy } from '../entities/Enemy';
 import type { PlayerController } from '../entities/PlayerController';
-import type { CameraRig } from '../game/CameraRig';
+
 import type { PickupKind } from '../levels/types';
 import { createRayHit, type PhysicsWorld, QueryGroups } from '../physics/Physics';
-import type { Vfx } from '../render/vfx';
+
 import { applyDamage, falloff, heal, makeVitals, restoreVitals, tickVitals, type Vitals, zoneFromHeight } from './damage';
 import type { EnemyManager } from './EnemyManager';
 import type { Pickups } from './Pickups';
 import { STYLE_LABELS, type StyleAction, StyleMeter } from './StyleMeter';
 import { WeaponState } from './WeaponState';
 import { applyUpgrades, loadoutFor, SLOT_GROUPS, suitArmor, type UpgradeId, type WeaponId, WEAPONS } from './weapons';
+import type { CombatAudio, CombatCamera, CombatVfx } from './ports';
 
 export interface CombatIntent {
   fireHeld: boolean;
@@ -33,12 +34,12 @@ export function emptyCombatIntent(): CombatIntent {
 
 export interface CombatCtx {
   physics: PhysicsWorld;
-  camera: CameraRig;
+  camera: CombatCamera;
   player: PlayerController;
   enemies: EnemyManager;
   civilians: CivilianManager | null;
-  vfx: Vfx;
-  audio: AudioEngine;
+  vfx: CombatVfx;
+  audio: CombatAudio;
   rng: Rng;
   pickups: Pickups;
 }
@@ -226,7 +227,7 @@ export class PlayerCombat {
   }
 
   /** Tiempo real (no escalado): drenaje del Foco y decaimiento de feedback. */
-  frameUpdate(realDt: number, audio: AudioEngine): void {
+  frameUpdate(realDt: number, audio: CombatAudio): void {
     if (this.focusActive) {
       this.focus -= FOCUS_DRAIN * realDt;
       if (this.focus <= 0) {

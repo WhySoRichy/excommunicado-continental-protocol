@@ -2,6 +2,8 @@ import type { Surface } from '../levels/surface';
 import type { AmbienceKind, MusicMood } from '../levels/types';
 import { MusicPlayer } from './MusicPlayer';
 import type { Vec3Like } from '../physics/Physics';
+import type { CombatAudio, ShotSound } from '../combat/ports';
+import type { MissionAudio } from '../missions/ports';
 
 /**
  * Audio 100 % procedural (Web Audio): ningún archivo con copyright, carga instantánea.
@@ -15,8 +17,6 @@ export interface AudioVolumes {
   ui: number;
 }
 
-export type ShotSound = 'carbine' | 'pistol' | 'pistolSilenced' | 'revolver' | 'dmr' | 'shotgun' | 'enemyPistol' | 'enemySmg' | 'enemyRifle' | 'enemyShotgun';
-
 /** Ganancia del bus de música respecto a su volumen y atenuación en menús. */
 const MUSIC_BUS = 0.8;
 
@@ -24,7 +24,7 @@ const MUSIC_BUS = 0.8;
 export type MeterBus = 'master' | 'music';
 const MUSIC_DUCK = 0.4;
 
-export class AudioEngine {
+export class AudioEngine implements CombatAudio, MissionAudio {
   ctx: AudioContext | null = null;
   private master!: GainNode;
   private sfxBus!: GainNode;

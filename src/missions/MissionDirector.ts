@@ -1,5 +1,5 @@
 import { Vector3 } from 'three';
-import type { AudioEngine } from '../audio/AudioEngine';
+
 import type { Action } from '../core/actions';
 import { heal } from '../combat/damage';
 import { computeRank, type MissionStats, type RankResult } from '../combat/rank';
@@ -9,7 +9,7 @@ import { type GauntletEntry, recordBest, recordGauntlet, type Profile } from '..
 import type { Enemy } from '../entities/Enemy';
 import type { LevelSession } from '../game/LevelSession';
 import type { CheckpointDef, EnemyType, MissionBlock, ObjectiveDef, Vec3 } from '../levels/types';
-import type { Hud } from '../ui/Hud';
+import type { MissionAudio, MissionHud } from './ports';
 import { evaluateAchievements, type MissionRunSummary, type UnlockedAchievement } from './achievements';
 import { GAUNTLET_BREAK, GAUNTLET_HEAL, GAUNTLET_SPAWN_CLEARANCE, GAUNTLET_SPAWN_INTERVAL, gauntletSpawnPoints, gauntletWave, waveQueue } from './gauntlet';
 import { copyCounters, emptyCounters, formatObjective, SKILL_GOAL, type SkillCounters, skillProgress, skillTally } from './tutorial';
@@ -42,8 +42,8 @@ export interface MissionDirectorDeps {
   label?: (a: Action) => string;
   /** Cambios de hombro de la cámara hechos por el jugador (tutorial). */
   shoulderSwaps?: () => number;
-  hud: Hud;
-  audio: AudioEngine;
+  hud: MissionHud;
+  audio: MissionAudio;
   profile: Profile;
   save(): void;
   onFinished(outcome: MissionOutcome): void;

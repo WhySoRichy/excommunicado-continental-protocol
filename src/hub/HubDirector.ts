@@ -1,8 +1,8 @@
 import { Color } from 'three';
-import type { AudioEngine } from '../audio/AudioEngine';
+
 import type { Profile } from '../core/Save';
 import type { LevelSession } from '../game/LevelSession';
-import type { Hud } from '../ui/Hud';
+import type { MissionAudio, MissionHud } from '../missions/ports';
 import { DIALOGUE, type Dialogue, HUB_TEXT } from './dialogue';
 import { EXCOM_ACHIEVEMENT } from '../missions/achievements';
 import { applyExcommunicadoFine } from './economy';
@@ -10,8 +10,8 @@ import { EXCOM_WAVES, ExcommunicadoRules, type RuleEvent } from './Excommunicado
 
 export interface HubDirectorDeps {
   session: LevelSession;
-  hud: Hud;
-  audio: AudioEngine;
+  hud: MissionHud;
+  audio: MissionAudio;
   profile: Profile;
   /** Persiste el perfil (multa, banderas). */
   save(): void;
