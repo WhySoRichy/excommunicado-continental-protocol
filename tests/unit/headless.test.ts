@@ -1,4 +1,4 @@
-import { Scene, Vector3 } from 'three';
+import { Vector3 } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { EnemyManager } from '../../src/combat/EnemyManager';
 import { Pickups } from '../../src/combat/Pickups';
@@ -55,7 +55,7 @@ describe('simulación sin pantalla', () => {
       vfx: NO_VFX,
       audio: SILENT_AUDIO,
       rng,
-      pickups: new Pickups(new Scene()),
+      pickups: new Pickups(),
     };
     const target: PlayerTarget = {
       feet: player.feet,

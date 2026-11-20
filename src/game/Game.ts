@@ -454,6 +454,7 @@ export class Game {
       session: s,
       hud: this.hud,
       audio: this.audio,
+      alarm: s.alarm,
       profile: this.profile,
       save: () => this.saveNow(),
       dialog: (d) => this.openMenu(() => this.screens.showDialog(d)),
@@ -837,10 +838,11 @@ export class Game {
     if (s && inWorld) {
       this.updatePlayerView(alpha, realDt, scaledDt);
       s.enemyViews.update(s.enemies.enemies, alpha, scaledDt);
-      s.civilians?.renderUpdate(alpha, scaledDt);
+      s.civilianViews?.update(alpha, scaledDt);
+      s.pickupViews.update(s.pickups.items, scaledDt);
       s.vfx.update(scaledDt);
       s.renderNpcs(scaledDt);
-      this.director?.frameUpdate(scaledDt);
+      s.alarm.update(scaledDt);
       if (controlling) this.updateBeacon();
     } else if (this.fsm.state === 'title' || this.fsm.state === 'boot') {
       this.updateAttractCamera(realDt);
@@ -1245,7 +1247,7 @@ export class Game {
       s.enemyViews.update(s.enemies.enemies, 1, FIXED_DT);
       s.vfx.update(FIXED_DT);
       s.combat.frameUpdate(FIXED_DT, this.audio);
-      this.director?.frameUpdate(FIXED_DT);
+      s.alarm.update(FIXED_DT);
       if (this.fsm.controlling || this.fsm.state === 'dead') {
         this.updateHud(FIXED_DT);
         this.updateBeacon();

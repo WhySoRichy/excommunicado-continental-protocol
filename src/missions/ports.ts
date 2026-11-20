@@ -1,3 +1,7 @@
+import type { EnemyManager } from '../combat/EnemyManager';
+import type { PlayerCombat } from '../combat/PlayerCombat';
+import type { PlayerController } from '../entities/PlayerController';
+import type { LevelData } from '../levels/types';
 import type { Vec3Like } from '../physics/Physics';
 
 /**
@@ -9,6 +13,22 @@ export interface MissionHud {
   setObjective(text: string): void;
   setZone(text: string): void;
   setCombatVisible(v: boolean): void;
+}
+
+/**
+ * Lo que los directores necesitan de la partida: los datos del nivel y la simulación (jugador, combate, enemigos).
+ * La `LevelSession` lo cumple, pero los directores no ven su escena ni su vista.
+ */
+export interface MissionWorld {
+  readonly data: LevelData;
+  readonly player: PlayerController;
+  readonly combat: PlayerCombat;
+  readonly enemies: EnemyManager;
+}
+
+/** La alarma del Continental: el director decide cuándo suena; cómo se ve (luces rojas que laten) es cosa de la vista. */
+export interface AlarmPort {
+  set(on: boolean): void;
 }
 
 export interface MissionAudio {

@@ -3,12 +3,15 @@ import type { AudioEngine } from '../audio/AudioEngine';
 import { EnemyManager } from '../combat/EnemyManager';
 import { EnemyViews } from '../entities/EnemyView';
 import { Pickups } from '../combat/Pickups';
+import { LevelAlarm } from '../render/LevelAlarm';
+import { PickupViews } from '../render/PickupViews';
 import { type CombatCtx, PlayerCombat } from '../combat/PlayerCombat';
 import { loadoutFor, type UpgradeId } from '../combat/weapons';
 import type { Rng } from '../core/rng';
 import type { Enemy, PlayerTarget } from '../entities/Enemy';
 import { CharacterRig, PLAYER_LOOK } from '../entities/CharacterRig';
 import { CivilianManager } from '../entities/Civilian';
+import { CivilianViews } from '../entities/CivilianView';
 import { Npc, NPC_LOOKS } from '../entities/Npc';
 import { PlayerController } from '../entities/PlayerController';
 import { buildLevel, type LevelRuntime } from '../levels/LevelBuilder';
@@ -42,11 +45,15 @@ export interface SessionDeps {
 export class LevelSession {
   readonly physics: PhysicsWorld;
   readonly level: LevelRuntime;
+  /** Cómo se ve la alarma del Continental (la activa el director del vestíbulo por su puerto). */
+  readonly alarm: LevelAlarm;
   readonly nav: NavGrid;
   readonly player: PlayerController;
   readonly playerRig: CharacterRig;
   readonly vfx: Vfx;
   readonly pickups: Pickups;
+  /** Lo que se ve de los objetos recogibles; `pickups` no sabe que existe. */
+  readonly pickupViews: PickupViews;
   readonly enemies: EnemyManager;
   /** Lo que se ve de los enemigos; la simulación (`enemies`) no sabe que existe. */
   readonly enemyViews: EnemyViews;
@@ -55,6 +62,8 @@ export class LevelSession {
   readonly target: PlayerTarget;
   readonly npcs: Npc[] = [];
   readonly civilians: CivilianManager | null;
+  /** Lo que se ve de los civiles; la simulación (`civilians`) no sabe que existe. */
+  readonly civilianViews: CivilianViews | null;
   /** God mode de debug (el daño se ignora). */
   god = false;
   infiniteAmmo = false;
@@ -66,6 +75,7 @@ export class LevelSession {
     const scene = deps.scene;
     this.physics = new PhysicsWorld(deps.R);
     this.level = buildLevel(data, scene, this.physics, { shadowMapSize: deps.quality.shadowMapSize });
+    this.alarm = new LevelAlarm(this.level);
     this.physics.step();
     this.nav = NavGrid.build(data);
     const s = data.spawn.pos;
@@ -75,7 +85,8 @@ export class LevelSession {
 
     scene.add(this.playerRig.root);
     this.vfx = new Vfx(scene, deps.quality.particles);
-    this.pickups = new Pickups(scene);
+    this.pickups = new Pickups();
+    this.pickupViews = new PickupViews(scene);
     for (const p of data.pickups) this.pickups.add(p.kind, new Vector3(p.pos[0], p.pos[1], p.pos[2]));
     this.combat = new PlayerCombat(deps.upgrades, loadoutFor(deps.upgrades));
     this.enemies = new EnemyManager({
@@ -92,7 +103,8 @@ export class LevelSession {
       },
       onEnemyAlert: (e) => deps.onEnemyAlert?.(e),
     });
-    this.civilians = data.civilians.length > 0 ? new CivilianManager(data.civilians, this.physics, this.nav, scene, deps.rng) : null;
+    this.civilians = data.civilians.length > 0 ? new CivilianManager(data.civilians, this.physics, this.nav, deps.rng) : null;
+    this.civilianViews = this.civilians ? new CivilianViews(this.civilians.list, scene) : null;
     if (this.civilians) this.civilians.onHurt = (_c, killed) => deps.onCivilianHurt?.(killed);
     this.ctx = {
       physics: this.physics,
@@ -178,9 +190,11 @@ export class LevelSession {
 
   dispose(): void {
     for (const n of this.npcs) n.dispose();
+    this.civilianViews?.dispose();
     this.civilians?.dispose();
     this.enemyViews.dispose();
     this.enemies.dispose();
+    this.pickupViews.dispose();
     this.pickups.dispose();
     this.vfx.dispose();
     this.playerRig.dispose();

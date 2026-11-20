@@ -1,58 +1,38 @@
 import type { Collider } from '@dimforge/rapier3d-compat';
-import { type Scene, Vector3 } from 'three';
+import { Vector3 } from 'three';
 import { applyDamage, makeVitals, type Vitals } from '../combat/damage';
-import { FIXED_DT } from '../core/Loop';
 import type { Rng } from '../core/rng';
 import type { NavGrid } from '../levels/nav/NavGrid';
 import type { CivilianDef } from '../levels/types';
 import { Groups, type PhysicsWorld } from '../physics/Physics';
-import { CharacterRig, type HairStyle, idlePose, type RigColors, type RigPose } from './CharacterRig';
 import { emptyIntent, PlayerController, yawFromDir } from './PlayerController';
 
-/** Rim verde azulado: los civiles se distinguen de los enemigos a simple vista. */
-export const CIVILIAN_COLOR = 0x5ee6c8;
 const FLEE_SPEED = 0.95;
 const PANIC_RADIUS = 14;
-
-const OUTFITS: ReadonlyArray<{ colors: RigColors; hair: HairStyle }> = [
-  {
-    colors: { jacket: 0xb33a5a, shirt: 0xf0e6e0, tie: 0xb33a5a, pants: 0x2b2b30, shoes: 0x111, skin: 0xd9b08c, hair: 0x3b2a1e, accent: 0xff2e88 },
-    hair: 'long',
-  },
-  {
-    colors: { jacket: 0x2d6cb5, shirt: 0xf5f5f5, tie: 0x2d6cb5, pants: 0x1f2a3a, shoes: 0x111, skin: 0x8c5a3c, hair: 0x1a1512, accent: 0x19e3ff },
-    hair: 'short',
-  },
-  {
-    colors: { jacket: 0xe8c04a, shirt: 0x141414, tie: 0xe8c04a, pants: 0x3a3a3a, shoes: 0x111, skin: 0xf0c8a8, hair: 0xc9a46a, accent: 0xffd23f },
-    hair: 'long',
-  },
-  {
-    colors: { jacket: 0x6a3cff, shirt: 0xe9e9f2, tie: 0x6a3cff, pants: 0x202030, shoes: 0x111, skin: 0xb98a6a, hair: 0x2a1e18, accent: 0x7a3cff },
-    hair: 'cap',
-  },
-];
 
 type CivState = 'calm' | 'flee' | 'hide' | 'dead';
 
 /**
- * Civil: no lleva armas, no bloquea al jugador ni a los enemigos (grupo CIVILIAN) y huye
- * del ruido. Herirlo o matarlo penaliza el rango (lo cuenta el director de misión).
+ * Civil, solo simulación: no lleva armas, no bloquea al jugador ni a los enemigos (grupo CIVILIAN) y huye del ruido.
+ * Herirlo o matarlo penaliza el rango (lo cuenta el director de misión). Lo que se ve es `CivilianView`.
  */
 export class Civilian {
   readonly id: string;
+  /** Orden en el nivel: elige su ropa en la vista. */
+  readonly index: number;
   readonly mover: PlayerController;
-  readonly rig: CharacterRig;
   readonly vitals: Vitals = makeVitals({ maxHealth: 60 });
+  readonly behavior: CivilianDef['behavior'];
+  /**
+   * Fase inicial de su baile. Se sortea aquí, con el azar de la partida, aunque solo la use la vista: sacarlo de la
+   * simulación cambiaría toda la secuencia de azar posterior.
+   */
+  readonly dancePhase0: number;
   state: CivState = 'calm';
   private readonly home: Vector3;
   private readonly goal = new Vector3();
   private readonly intent = emptyIntent();
-  private readonly pose: RigPose = idlePose();
-  private dancePhase: number;
   private hideTimer = 0;
-  /** Segundos de juego desde la muerte (para la animación de caída). */
-  private deadFor = 0;
   private stuckT = 0;
   private readonly progressFrom = new Vector3();
 
@@ -60,22 +40,16 @@ export class Civilian {
     def: CivilianDef,
     private readonly physics: PhysicsWorld,
     private readonly nav: NavGrid,
-    scene: Scene,
     private readonly rng: Rng,
     index: number,
   ) {
     this.id = def.id;
+    this.index = index;
     this.home = new Vector3(def.pos[0], def.pos[1], def.pos[2]);
     this.mover = new PlayerController(physics, new Vector3(def.pos[0], def.pos[1] + 0.02, def.pos[2]), def.yaw, Groups.CIVILIAN);
-    const outfit = OUTFITS[index % OUTFITS.length]!;
-    // Material compartido por todos los civiles (los colores van por vértice; el rim no cambia).
-    this.rig = new CharacterRig('civ', { colors: outfit.colors, rimColor: CIVILIAN_COLOR, rimStrength: 0.7, hair: outfit.hair, weapon: 'none' });
-    scene.add(this.rig.root);
-    this.dancePhase = rng.range(0, Math.PI * 2);
+    this.dancePhase0 = rng.range(0, Math.PI * 2);
     this.behavior = def.behavior;
   }
-
-  private readonly behavior: CivilianDef['behavior'];
 
   get alive(): boolean {
     return !this.vitals.dead;
@@ -134,7 +108,6 @@ export class Civilian {
       this.state = 'dead';
       this.mover.kill();
       this.mover.collider.setEnabled(false);
-      this.deadFor = 0;
     } else this.panic(this.feet);
     return { killed: r.killed, dealt: r.dealt };
   }
@@ -182,30 +155,8 @@ export class Civilian {
     this.mover.fixedUpdate(dt, it);
   }
 
-  renderUpdate(alpha: number, dt: number): void {
-    const m = this.mover;
-    m.renderFeet(alpha, this.rig.root.position);
-    this.rig.root.rotation.y = m.renderYaw(alpha);
-    const pose = this.pose;
-    pose.speed = m.stepSpeed(FIXED_DT);
-    pose.state = this.alive ? m.state : 'dead';
-    pose.posture = m.posture;
-    pose.grounded = m.grounded;
-    pose.aim = 0;
-    if (!this.alive) this.deadFor += dt;
-    pose.stateTime = this.alive ? m.stateTime : this.deadFor;
-    pose.death = 2;
-    this.rig.update(pose, dt);
-    if (this.alive && this.state === 'calm' && this.behavior === 'dance') {
-      this.dancePhase += dt * 6.5;
-      this.rig.root.position.y += Math.abs(Math.sin(this.dancePhase)) * 0.08;
-      this.rig.root.rotation.y += Math.sin(this.dancePhase * 0.5) * 0.35;
-    }
-  }
-
+  /** Suelta su cuerpo físico (la vista se suelta aparte, en `CivilianViews`). */
   dispose(): void {
-    this.rig.dispose();
-    // El material es compartido (caché de CharacterRig): no se libera con cada civil.
     this.physics.removeCharacter(this.mover.char);
   }
 }
@@ -215,9 +166,9 @@ export class CivilianManager {
   private readonly byHandle = new Map<number, Civilian>();
   onHurt: ((c: Civilian, killed: boolean) => void) | null = null;
 
-  constructor(defs: readonly CivilianDef[], physics: PhysicsWorld, nav: NavGrid, scene: Scene, rng: Rng) {
+  constructor(defs: readonly CivilianDef[], physics: PhysicsWorld, nav: NavGrid, rng: Rng) {
     defs.forEach((d, i) => {
-      const c = new Civilian(d, physics, nav, scene, rng, i);
+      const c = new Civilian(d, physics, nav, rng, i);
       this.list.push(c);
       this.byHandle.set(c.collider.handle, c);
     });
@@ -240,10 +191,6 @@ export class CivilianManager {
 
   fixedUpdate(dt: number): void {
     for (const c of this.list) c.fixedUpdate(dt);
-  }
-
-  renderUpdate(alpha: number, dt: number): void {
-    for (const c of this.list) c.renderUpdate(alpha, dt);
   }
 
   get aliveCount(): number {

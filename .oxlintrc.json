@@ -44,6 +44,7 @@
         "src/entities/ai/**",
         "src/entities/PlayerController.ts",
         "src/entities/Enemy.ts",
+        "src/entities/Civilian.ts",
         "src/physics/**",
         "src/levels/nav/**",
         "src/levels/data/**",
@@ -63,11 +64,7 @@
         ]
       }
     },
-    {
-      // Pendiente de partir en estado y vista (fase 1): crea sus propias mallas.
-      "files": ["src/combat/Pickups.ts"],
-      "rules": { "no-restricted-imports": "off" }
-    },
+
     {
       "files": ["scripts/**", "tests/**", "*.config.ts"],
       "env": { "node": true }

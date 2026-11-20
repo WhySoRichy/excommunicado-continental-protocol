@@ -1,5 +1,5 @@
 import type { EnemyType } from '../../levels/types';
-import type { HairStyle, RigColors, WeaponModel } from '../CharacterRig';
+import type { HairStyle, RigColors, WeaponModel } from '../rig/types';
 
 /** Tipos de enemigo (DISENO §4.2): color + icono propios para que se distingan siempre. */
 export interface EnemyWeaponDef {

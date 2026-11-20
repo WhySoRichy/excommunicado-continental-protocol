@@ -7,9 +7,9 @@ import { markersPerContract } from '../combat/weapons';
 import { addCoins, contractReward, gauntletReward } from '../hub/economy';
 import { type GauntletEntry, recordBest, recordGauntlet, type Profile } from '../core/Save';
 import type { Enemy } from '../entities/Enemy';
-import type { LevelSession } from '../game/LevelSession';
+
 import type { CheckpointDef, EnemyType, MissionBlock, ObjectiveDef, Vec3 } from '../levels/types';
-import type { MissionAudio, MissionHud } from './ports';
+import type { MissionAudio, MissionHud, MissionWorld } from './ports';
 import { evaluateAchievements, type MissionRunSummary, type UnlockedAchievement } from './achievements';
 import { GAUNTLET_BREAK, GAUNTLET_HEAL, GAUNTLET_SPAWN_CLEARANCE, GAUNTLET_SPAWN_INTERVAL, gauntletSpawnPoints, gauntletWave, waveQueue } from './gauntlet';
 import { copyCounters, emptyCounters, formatObjective, SKILL_GOAL, type SkillCounters, skillProgress, skillTally } from './tutorial';
@@ -35,7 +35,7 @@ export interface MissionOutcome {
 }
 
 export interface MissionDirectorDeps {
-  session: LevelSession;
+  session: MissionWorld;
   /** Guion que no vive en los datos del nivel (Gauntlet sobre el hub). */
   block?: MissionBlock;
   /** Etiqueta de la tecla asignada a una acción (textos del tutorial). */

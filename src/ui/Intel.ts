@@ -1,5 +1,5 @@
 import { ENEMY_TYPES } from '../entities/ai/enemyTypes';
-import { CIVILIAN_COLOR } from '../entities/Civilian';
+import { CIVILIAN_COLOR } from '../entities/CivilianView';
 import type { EnemyType } from '../levels/types';
 import { h } from './dom';
 
