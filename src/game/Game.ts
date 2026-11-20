@@ -1039,7 +1039,7 @@ export class Game {
     if (s.infiniteAmmo) s.combat.weapon.mag = Math.max(s.combat.weapon.mag, 1);
     s.combat.fixedUpdate(dt, ci, s.ctx);
     const tE = this.profiling ? performance.now() : 0;
-    s.enemies.fixedUpdate(dt, s.updateTarget(dt));
+    s.enemies.fixedUpdate(dt, s.updateTargets(dt));
     const tC = this.profiling ? performance.now() : 0;
     s.civilians?.fixedUpdate(dt);
     const tP = this.profiling ? performance.now() : 0;

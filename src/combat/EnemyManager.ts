@@ -26,7 +26,7 @@ export interface EnemyManagerDeps {
 
   accuracyMult: number;
   damageMult: number;
-  onShotAtPlayer: (enemy: Enemy, hit: boolean, damage: number) => void;
+  onShotAtPlayer: (enemy: Enemy, target: PlayerTarget, hit: boolean, damage: number) => void;
   onEnemyAlert?(enemy: Enemy): void;
 }
 
@@ -125,12 +125,13 @@ export class EnemyManager implements Tactics {
     for (const e of this.enemies) if (e.alive) e.brain.alert(at);
   }
 
-  fixedUpdate(dt: number, target: PlayerTarget): void {
+  /** Un paso de todos los enemigos; cada uno elige a quién atacar entre `targets` (uno por jugador). */
+  fixedUpdate(dt: number, targets: readonly PlayerTarget[]): void {
     for (const e of this.enemies) {
       this.currentId = e.id;
       const wasAlert = e.state === 'combat' || e.state === 'cover' || e.state === 'flank';
-      e.fixedUpdate(dt, target);
-      if (e.cmd.shout) this.shout(e, target.feet);
+      e.fixedUpdate(dt, targets);
+      if (e.cmd.shout && e.target) this.shout(e, e.target.feet);
       const isAlert = e.state === 'combat' || e.state === 'cover' || e.state === 'flank';
       if (!wasAlert && isAlert && e.alive) {
         this.deps.audio.alert(e.feet);

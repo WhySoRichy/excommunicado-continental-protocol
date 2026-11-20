@@ -3,6 +3,7 @@ import type { AudioEngine } from '../audio/AudioEngine';
 import { EnemyManager } from '../combat/EnemyManager';
 import { EnemyViews } from '../entities/EnemyView';
 import { Pickups } from '../combat/Pickups';
+import { makePlayerTarget, updatePlayerTarget } from '../combat/playerTarget';
 import { LevelAlarm } from '../render/LevelAlarm';
 import { PickupViews } from '../render/PickupViews';
 import { type CombatCtx, PlayerCombat } from '../combat/PlayerCombat';
@@ -60,6 +61,8 @@ export class LevelSession {
   readonly combat: PlayerCombat;
   readonly ctx: CombatCtx;
   readonly target: PlayerTarget;
+  /** Un objetivo por jugador, en el orden de sus plazas (los enemigos eligen entre ellos). */
+  readonly targets: readonly PlayerTarget[];
   readonly npcs: Npc[] = [];
   readonly civilians: CivilianManager | null;
   /** Lo que se ve de los civiles; la simulación (`civilians`) no sabe que existe. */
@@ -98,7 +101,7 @@ export class LevelSession {
       rng: deps.rng,
       accuracyMult: deps.accuracyMult,
       damageMult: deps.damageMult,
-      onShotAtPlayer: (enemy, hit, dmg) => {
+      onShotAtPlayer: (enemy, _target, hit, dmg) => {
         if (hit && !this.god) this.combat.takeHit(enemy, dmg, this.ctx);
       },
       onEnemyAlert: (e) => deps.onEnemyAlert?.(e),
@@ -117,16 +120,8 @@ export class LevelSession {
       rng: deps.rng,
       pickups: this.pickups,
     };
-    this.target = {
-      feet: this.player.feet,
-      head: new Vector3(),
-      chest: new Vector3(),
-      crouched: false,
-      speed: 0,
-      invulnerable: false,
-      alive: true,
-      collider: this.player.collider,
-    };
+    this.target = makePlayerTarget(0, this.player);
+    this.targets = [this.target];
     for (const it of data.interactables) {
       if (it.kind !== 'npc') continue;
       const look = NPC_LOOKS[it.id as keyof typeof NPC_LOOKS];
@@ -142,18 +137,10 @@ export class LevelSession {
     this.physics.step();
   }
 
-  /** Actualiza la instantánea del jugador que leen los enemigos (sin asignaciones). */
-  updateTarget(dt: number): PlayerTarget {
-    const p = this.player;
-    const t = this.target;
-    const crouch = p.posture === 'crouch';
-    t.head.set(p.feet.x, p.feet.y + (crouch ? 1.0 : 1.6), p.feet.z);
-    t.chest.set(p.feet.x, p.feet.y + (crouch ? 0.7 : 1.15), p.feet.z);
-    t.crouched = crouch;
-    t.speed = p.stepSpeed(dt);
-    t.invulnerable = p.invulnerable || this.god;
-    t.alive = !this.combat.dead;
-    return t;
+  /** Actualiza la instantánea de cada jugador que leen los enemigos (sin asignaciones). Hoy, solo el local. */
+  updateTargets(dt: number): readonly PlayerTarget[] {
+    updatePlayerTarget(this.target, this.player, this.combat, dt, this.god);
+    return this.targets;
   }
 
   /** Interactivo más cercano al alcance y delante del jugador (según el yaw de la cámara). */

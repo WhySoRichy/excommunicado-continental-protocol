@@ -14,8 +14,10 @@ import { ENEMY_TYPES, type EnemyTypeDef } from './ai/enemyTypes';
 
 import { emptyIntent, PlayerController, yawFromDir } from './PlayerController';
 
-/** Lo que el enemigo necesita saber del jugador en cada paso. */
+/** Lo que el enemigo necesita saber de un jugador en cada paso. */
 export interface PlayerTarget {
+  /** Plaza del jugador en la partida (0 = el jugador local). */
+  readonly id: number;
   feet: Vector3;
   head: Vector3;
   chest: Vector3;
@@ -36,8 +38,28 @@ export interface EnemyWorld {
   /** Multiplicadores de dificultad. */
   accuracyMult: number;
   damageMult: number;
-  /** Llamado cuando un disparo enemigo impacta (o falla) al jugador. */
-  onShotAtPlayer(enemy: Enemy, hit: boolean, damage: number): void;
+  /** Llamado cuando un disparo enemigo impacta (o falla) a un jugador. */
+  onShotAtPlayer(enemy: Enemy, target: PlayerTarget, hit: boolean, damage: number): void;
+}
+
+/** Para cambiar de objetivo, otro jugador tiene que estar claramente más cerca: así no duda entre dos. */
+const RETARGET_RATIO = 0.6;
+/** Tras recibir un disparo se queda con quien se lo hizo este tiempo (s), aunque otro esté más cerca. */
+const PROVOKED_LOCK = 3;
+
+/** El jugador vivo más cercano a un punto (o null si no queda ninguno). */
+function nearestAlive(targets: readonly PlayerTarget[], to: Vector3): PlayerTarget | null {
+  let best: PlayerTarget | null = null;
+  let bestD = Number.POSITIVE_INFINITY;
+  for (const t of targets) {
+    if (!t.alive) continue;
+    const d = t.feet.distanceToSquared(to);
+    if (d < bestD) {
+      bestD = d;
+      best = t;
+    }
+  }
+  return best;
 }
 
 const ENEMY_SHOT_SOUND: Record<string, ShotSound> = {
@@ -125,6 +147,12 @@ export class Enemy {
   targetRise = 1.2;
   /** Punto al que apunta el láser mientras telegrafía el disparo. */
   readonly telegraphAt = new Vector3();
+  /** A quién ataca (uno de los jugadores); null hasta el primer paso. */
+  private focus: PlayerTarget | null = null;
+  /** Le acaban de herir: en el siguiente paso se vuelve hacia quien le disparó. */
+  private provoked = false;
+  /** Segundos que le quedan sin cambiar de objetivo por distancia. */
+  private lockT = 0;
 
   constructor(def: EnemySpawnDef, w: EnemyWorld, index: number) {
     this.id = def.id;
@@ -138,6 +166,11 @@ export class Enemy {
     this.mover = new PlayerController(w.physics, new Vector3(def.pos[0], def.pos[1] + 0.02, def.pos[2]), def.yaw, Groups.ENEMY);
     this.vitals = makeVitals({ maxHealth: this.def.health, maxHeavyArmor: this.def.heavyArmor });
     this.perceiveTimer = (index % 6) * FIXED_DT;
+  }
+
+  /** El jugador al que ataca. */
+  get target(): PlayerTarget | null {
+    return this.focus;
   }
 
   /** ¿Apunta ahora mismo? (su postura de apuntado). */
@@ -172,7 +205,7 @@ export class Enemy {
   }
 
   // ======================================================== simulación
-  fixedUpdate(dt: number, target: PlayerTarget): void {
+  fixedUpdate(dt: number, targets: readonly PlayerTarget[]): void {
     this.hitFlash = Math.max(0, this.hitFlash - dt);
     this.recoilVis = Math.max(0, this.recoilVis - dt * 6);
     this.flinch = Math.max(0, this.flinch - dt * 4.5);
@@ -183,6 +216,11 @@ export class Enemy {
         this.deadSim += dt;
         this.mover.fixedUpdate(dt, this.intent);
       }
+      return;
+    }
+    const target = this.chooseTarget(targets, dt);
+    if (!target) {
+      this.mover.fixedUpdate(dt, this.intent);
       return;
     }
     this.perceive(dt, target);
@@ -202,6 +240,35 @@ export class Enemy {
     this.trackProgress(dt);
     if (this.cmd.fire && target.alive) this.shoot(target);
     this.updateTelegraph(dt, target);
+  }
+
+  /**
+   * Elige a quién atacar entre los jugadores: sigue con el mismo mientras viva y no haya otro claramente más cerca. Si
+   * le acaban de herir, se vuelve hacia el jugador más cercano al origen del disparo y no lo suelta en un rato (si no,
+   * la regla de la distancia lo devolvería enseguida al más cercano y dudaría entre los dos).
+   */
+  private chooseTarget(targets: readonly PlayerTarget[], dt: number): PlayerTarget | null {
+    if (targets.length <= 1) {
+      this.provoked = false;
+      this.focus = targets[0] ?? null;
+      return this.focus;
+    }
+    this.lockT = Math.max(0, this.lockT - dt);
+    if (this.provoked) {
+      this.provoked = false;
+      const attacker = nearestAlive(targets, this.perception.damageFrom);
+      if (attacker) {
+        this.focus = attacker;
+        this.lockT = PROVOKED_LOCK;
+      }
+    }
+    const f = this.mover.feet;
+    const best = nearestAlive(targets, f);
+    const cur = this.focus && this.focus.alive && targets.includes(this.focus) ? this.focus : null;
+    if (!cur) this.focus = best ?? targets[0]!;
+    else if (this.lockT <= 0 && best && best !== cur && best.feet.distanceToSquared(f) < cur.feet.distanceToSquared(f) * RETARGET_RATIO * RETARGET_RATIO)
+      this.focus = best;
+    return this.focus;
   }
 
   /** Percepción (raycasts a 10 Hz, escalonados entre enemigos). */
@@ -413,7 +480,7 @@ export class Enemy {
     this.w.vfx.muzzle(_muzzle, _dir, false);
     this.w.audio.shot(ENEMY_SHOT_SOUND[wd.model] ?? 'enemyPistol', _muzzle);
     this.recoilVis = 1;
-    this.w.onShotAtPlayer(this, anyHit, dmg);
+    this.w.onShotAtPlayer(this, t, anyHit, dmg);
   }
 
   /** Telégrafo del tirador: fija dónde apunta el láser y pita cada vez más deprisa. */
@@ -441,6 +508,7 @@ export class Enemy {
     this.lastHitWasHead = zone === 'head';
     this.perception.damaged = true;
     this.perception.damageFrom.copy(from);
+    this.provoked = true;
     // Dirección del impacto respecto a la cara (el personaje mira a −Z girado por yaw).
     const dx = from.x - this.mover.feet.x;
     const dz = from.z - this.mover.feet.z;
