@@ -1,6 +1,6 @@
 # Roadmap
 
-Qué se puede mejorar y en qué orden. Cada bloque está pensado para una sesión de trabajo: tiene un objetivo claro y una forma de comprobar que quedó bien. El estado actual del juego está descrito en [DISENO.md](DISENO.md) y la parte técnica en [ARQUITECTURA.md](ARQUITECTURA.md).
+Qué se puede mejorar y en qué orden. Cada bloque está pensado para una sesión de trabajo: tiene un objetivo claro y una forma de comprobar que quedó bien. El estado actual del juego está descrito en [DISENO.md](DISENO.md) y la parte técnica en [ARQUITECTURA.md](ARQUITECTURA.md). Cómo tiene que crecer el código (simulación separada de la vista, varios jugadores, contenido y gráficos) y en qué fases está en [ESCALABILIDAD.md](ESCALABILIDAD.md): los bloques de este roadmap deben respetarlo.
 
 ## Estado actual
 

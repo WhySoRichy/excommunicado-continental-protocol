@@ -34,12 +34,13 @@ La primera vez que se ejecuten las e2e: `npx playwright install chromium firefox
 ## Forma de trabajar
 
 1. **Entender antes de cambiar.** Leer el archivo y sus tests. Las reglas del proyecto (bucle sin asignaciones, niveles como datos, una sola máquina de estados, arreglar la causa y no el síntoma) están en [ARQUITECTURA.md](ARQUITECTURA.md#7-convenciones-de-código).
-2. **La lógica pura va con test unitario.** Si algo se puede decidir sin three ni DOM, va en un archivo aparte con su test en `tests/unit/`.
-3. **Lo que se ve o se juega se comprueba jugando.** Las e2e usan la API de pruebas `window.__EXCOM__` (se activa con `?qa=1` en desarrollo y en el build de pruebas; definida en `src/debug/qa.ts`). Permite avanzar paso a paso, teletransportar, pulsar acciones y leer el estado. Para cambios visuales, sacar capturas y mirarlas.
-4. **Antes de cada commit:** `npm run lint` (linter, formato y código sin uso; `npm run format` corrige el formato), `npm run build`, `npm test` y `npm run test:e2e` en verde. Para reproducir el entorno de GitHub Actions (render por software, muy pocos FPS): `CI=1 npm run test:e2e`.
-5. **Commits** convencionales y en español (`feat:`, `fix:`, `perf:`, `test:`, `docs:`, `chore:`), con un cuerpo que explique el porqué.
-6. **Dependencias:** Dependabot abre cada mes pull requests agrupados (juego, herramientas y acciones de la CI). La CI los prueba; se fusionan si pasan y, si algo cambia de comportamiento, se revisa como cualquier otro cambio.
-7. **Documentación al día:** si cambia una mecánica, actualizar `DISENO.md`; si cambia una decisión técnica, `ARQUITECTURA.md`; al terminar algo del roadmap, moverlo a "Estado actual".
+2. **Antes de añadir un sistema, leer [ESCALABILIDAD.md](ESCALABILIDAD.md).** La simulación no dibuja, no suena ni lee la cámara; todo lo nuevo lleva id estable, validación y presupuesto.
+3. **La lógica pura va con test unitario.** Si algo se puede decidir sin three ni DOM, va en un archivo aparte con su test en `tests/unit/`.
+4. **Lo que se ve o se juega se comprueba jugando.** Las e2e usan la API de pruebas `window.__EXCOM__` (se activa con `?qa=1` en desarrollo y en el build de pruebas; definida en `src/debug/qa.ts`). Permite avanzar paso a paso, teletransportar, pulsar acciones y leer el estado. Para cambios visuales, sacar capturas y mirarlas.
+5. **Antes de cada commit:** `npm run lint` (linter, formato y código sin uso; `npm run format` corrige el formato), `npm run build`, `npm test` y `npm run test:e2e` en verde. Para reproducir el entorno de GitHub Actions (render por software, muy pocos FPS): `CI=1 npm run test:e2e`.
+6. **Commits** convencionales y en español (`feat:`, `fix:`, `perf:`, `test:`, `docs:`, `chore:`), con un cuerpo que explique el porqué.
+7. **Dependencias:** Dependabot abre cada mes pull requests agrupados (juego, herramientas y acciones de la CI). La CI los prueba; se fusionan si pasan y, si algo cambia de comportamiento, se revisa como cualquier otro cambio. Si uno falla, se reproduce en local instalando esas versiones: si la culpa es de una prueba frágil, se arregla la prueba y la actualización se aplica desde aquí (Dependabot cierra su PR al ver las versiones ya al día).
+8. **Documentación al día:** si cambia una mecánica, actualizar `DISENO.md`; si cambia una decisión técnica, `ARQUITECTURA.md`; al terminar algo del roadmap, moverlo a "Estado actual".
 
 ## Herramientas propias
 
@@ -73,8 +74,8 @@ La primera vez que se ejecuten las e2e: `npx playwright install chromium firefox
 - **Un `await` sin camino de error.** Una carga que fallaba dejaba el juego en `loading` para siempre. Todo flujo asíncrono que cambie de estado necesita su salida (`Game.tryLoadSession`).
 - **Suavizar con `damp` lo que cambia de golpe.** Un suavizado de primer orden sigue al objetivo, pero su velocidad salta en el mismo fotograma en que el objetivo cambia: al agacharse, apuntar o arrancar, todo el cuerpo daba un tirón. Los pesos de mezcla del rig van con un muelle crítico (`spring` en `rigMath.ts`) y la API de pruebas mide la aceleración de cada articulación con `rigMotion()`; una e2e de movimiento la acota.
 - **Empujar al personaje contra el suelo.** En el suelo se le daba una velocidad vertical de −1 m/s "para que no flotara". Con los pies dentro del margen de separación de la KCC, Rapier daba por bloqueados pasos sueltos en llano y al correr se perdía uno de cada 20 o 30: tirones del cuerpo y de la cámara que no se veían en ninguna captura. Lo pega `snapToGround`; las pruebas "sin tirones en llano" de `playerMovement.test.ts` lo vigilan.
-- **Niveles:** escalones de más de 0,32 m o muebles sin `noWalk` rompen la navegación de los enemigos. Los tests de navegación lo detectan.
 - **Medir por fotogramas lo que no depende de ellos.** El medidor de audio leía 46 ms de sonido en cada fotograma: en la CI, a unos 3 FPS, dos segundos eran seis muestras sueltas y la prueba de mezcla fallaba por azar (lo destapó una actualización de Playwright). Ahora cada lectura abarca unos 0,7 s y la música se mide en su propio bus, sin restar dos medidas tomadas en momentos distintos.
+- **Niveles:** escalones de más de 0,32 m o muebles sin `noWalk` rompen la navegación de los enemigos. Los tests de navegación lo detectan.
 
 ## Despliegue
 
