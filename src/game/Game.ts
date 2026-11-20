@@ -1038,6 +1038,8 @@ export class Game {
     ci.aimDir.copy(this.camera.forward);
     if (s.infiniteAmmo) s.combat.weapon.mag = Math.max(s.combat.weapon.mag, 1);
     s.combat.fixedUpdate(dt, ci, s.ctx);
+    // El resto de jugadores (si los hay) se simulan con lo que pide su intención.
+    s.roster.step(dt);
     const tE = this.profiling ? performance.now() : 0;
     s.enemies.fixedUpdate(dt, s.updateTargets(dt));
     const tC = this.profiling ? performance.now() : 0;

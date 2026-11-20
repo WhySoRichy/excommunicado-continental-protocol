@@ -56,10 +56,11 @@ Resultado: ningún módulo de simulación importa ya render, interfaz, audio, c�
 Hecho:
 - **Los enemigos eligen objetivo entre los jugadores.** Cada jugador tiene su `PlayerTarget` con un id (`combat/playerTarget.ts` lo crea y lo actualiza) y `EnemyManager` recibe la lista. Cada enemigo sigue con el mismo mientras viva y no haya otro claramente más cerca (al 60 % de la distancia); si le hieren, se vuelve hacia el jugador más cercano al origen del disparo y no lo suelta en 3 s, para no dudar entre dos. El aviso de disparo dice a qué jugador iba.
 - **Prueba sin pantalla con dos jugadores**: el enemigo elige al más cercano, solo le dispara a él y, cuando el lejano le hiere, se vuelve hacia este. Sin el bloqueo de 3 s la prueba falla.
+- **Registro de jugadores** (`combat/PlayerRoster.ts`): cada jugador ocupa una plaza con su id, su controlador, su combate, su objetivo, su contexto de combate y sus intenciones. El registro actualiza los objetivos, lleva cada disparo enemigo al combate del jugador alcanzado y simula a los que no son el local. La sesión lo usa con el jugador local en la plaza 0, y las pruebas sin pantalla usan el mismo código; una de ellas comprueba que el daño va solo al jugador atacado.
 
 Pendiente:
-- Registro de jugadores en la sesión: cada uno con su id, su controlador, su combate y su intención (hoy la sesión tiene uno solo).
-- Las reglas de misión con varios jugadores (quién recoge, cuándo se pierde) y la cámara y el HUD solo para el jugador local.
+- Las reglas de misión con varios jugadores (quién recoge, cuándo se pierde, reaparición) y una vista para los jugadores que no son el local; la cámara y el HUD siguen siendo solo del local.
+- Algunos avisos del combate son de primera persona (marcadores de impacto, recarga, Foco): con jugadores remotos solo deben sonar para el local.
 
 ### Fase 3 · Multijugador en red
 - Anfitrión con autoridad sobre WebRTC: el anfitrión simula y los invitados envían sus intenciones. El lockstep queda descartado porque la coma flotante no es idéntica entre navegadores.

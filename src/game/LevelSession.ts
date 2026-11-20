@@ -3,7 +3,7 @@ import type { AudioEngine } from '../audio/AudioEngine';
 import { EnemyManager } from '../combat/EnemyManager';
 import { EnemyViews } from '../entities/EnemyView';
 import { Pickups } from '../combat/Pickups';
-import { makePlayerTarget, updatePlayerTarget } from '../combat/playerTarget';
+import { PlayerRoster, type PlayerSlot } from '../combat/PlayerRoster';
 import { LevelAlarm } from '../render/LevelAlarm';
 import { PickupViews } from '../render/PickupViews';
 import { type CombatCtx, PlayerCombat } from '../combat/PlayerCombat';
@@ -61,14 +61,13 @@ export class LevelSession {
   readonly combat: PlayerCombat;
   readonly ctx: CombatCtx;
   readonly target: PlayerTarget;
-  /** Un objetivo por jugador, en el orden de sus plazas (los enemigos eligen entre ellos). */
-  readonly targets: readonly PlayerTarget[];
   readonly npcs: Npc[] = [];
   readonly civilians: CivilianManager | null;
   /** Lo que se ve de los civiles; la simulación (`civilians`) no sabe que existe. */
   readonly civilianViews: CivilianViews | null;
-  /** God mode de debug (el daño se ignora). */
-  god = false;
+  /** Los jugadores de la partida; el local es la plaza 0 (`player`, `combat`, `target` y `ctx` son los suyos). */
+  readonly roster: PlayerRoster;
+  readonly local: PlayerSlot;
   infiniteAmmo = false;
 
   constructor(
@@ -101,27 +100,24 @@ export class LevelSession {
       rng: deps.rng,
       accuracyMult: deps.accuracyMult,
       damageMult: deps.damageMult,
-      onShotAtPlayer: (enemy, _target, hit, dmg) => {
-        if (hit && !this.god) this.combat.takeHit(enemy, dmg, this.ctx);
-      },
+      onShotAtPlayer: (enemy, target, hit, dmg) => this.roster.shotAt(enemy, target, hit, dmg),
       onEnemyAlert: (e) => deps.onEnemyAlert?.(e),
     });
     this.civilians = data.civilians.length > 0 ? new CivilianManager(data.civilians, this.physics, this.nav, deps.rng) : null;
     this.civilianViews = this.civilians ? new CivilianViews(this.civilians.list, scene) : null;
     if (this.civilians) this.civilians.onHurt = (_c, killed) => deps.onCivilianHurt?.(killed);
-    this.ctx = {
+    this.roster = new PlayerRoster({
       physics: this.physics,
-      camera: deps.camera,
-      player: this.player,
       enemies: this.enemies,
       civilians: this.civilians,
       vfx: this.vfx,
       audio: deps.audio,
       rng: deps.rng,
       pickups: this.pickups,
-    };
-    this.target = makePlayerTarget(0, this.player);
-    this.targets = [this.target];
+    });
+    this.local = this.roster.add(this.player, this.combat, deps.camera);
+    this.ctx = this.local.ctx;
+    this.target = this.local.target;
     for (const it of data.interactables) {
       if (it.kind !== 'npc') continue;
       const look = NPC_LOOKS[it.id as keyof typeof NPC_LOOKS];
@@ -137,10 +133,18 @@ export class LevelSession {
     this.physics.step();
   }
 
-  /** Actualiza la instantánea de cada jugador que leen los enemigos (sin asignaciones). Hoy, solo el local. */
+  /** God mode de debug: los disparos enemigos no hacen daño. */
+  get god(): boolean {
+    return this.roster.god;
+  }
+
+  set god(on: boolean) {
+    this.roster.god = on;
+  }
+
+  /** Actualiza lo que los enemigos ven de cada jugador (sin asignaciones). */
   updateTargets(dt: number): readonly PlayerTarget[] {
-    updatePlayerTarget(this.target, this.player, this.combat, dt, this.god);
-    return this.targets;
+    return this.roster.updateTargets(dt);
   }
 
   /** Interactivo más cercano al alcance y delante del jugador (según el yaw de la cámara). */
@@ -185,7 +189,7 @@ export class LevelSession {
     this.pickups.dispose();
     this.vfx.dispose();
     this.playerRig.dispose();
-    this.player.dispose();
+    this.roster.dispose();
     this.level.dispose();
     this.physics.dispose();
     void this.deps;
