@@ -57,7 +57,6 @@ describe('simulación sin pantalla', () => {
       vfx: NO_VFX,
       audio: SILENT_AUDIO,
       rng,
-      scene: new Scene(),
       accuracyMult: 1,
       damageMult: 1,
       onShotAtPlayer: (enemy, hit, dmg) => {

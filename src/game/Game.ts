@@ -836,7 +836,7 @@ export class Game {
     const inWorld = controlling || this.fsm.state === 'paused' || this.fsm.state === 'dead' || this.fsm.state === 'hubMenu';
     if (s && inWorld) {
       this.updatePlayerView(alpha, realDt, scaledDt);
-      s.enemies.renderUpdate(alpha, scaledDt);
+      s.enemyViews.update(s.enemies.enemies, alpha, scaledDt);
       s.civilians?.renderUpdate(alpha, scaledDt);
       s.vfx.update(scaledDt);
       s.renderNpcs(scaledDt);
@@ -1239,7 +1239,7 @@ export class Game {
       this.camera.look(0, 0, 0, 0, FIXED_DT);
       this.fixedUpdate(FIXED_DT);
       this.updatePlayerView(1, FIXED_DT, FIXED_DT);
-      s.enemies.renderUpdate(1, FIXED_DT);
+      s.enemyViews.update(s.enemies.enemies, 1, FIXED_DT);
       s.vfx.update(FIXED_DT);
       s.combat.frameUpdate(FIXED_DT, this.audio);
       this.director?.frameUpdate(FIXED_DT);

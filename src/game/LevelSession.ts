@@ -1,6 +1,7 @@
 import { type Scene, Vector3 } from 'three';
 import type { AudioEngine } from '../audio/AudioEngine';
 import { EnemyManager } from '../combat/EnemyManager';
+import { EnemyViews } from '../entities/EnemyView';
 import { Pickups } from '../combat/Pickups';
 import { type CombatCtx, PlayerCombat } from '../combat/PlayerCombat';
 import { loadoutFor, type UpgradeId } from '../combat/weapons';
@@ -47,6 +48,8 @@ export class LevelSession {
   readonly vfx: Vfx;
   readonly pickups: Pickups;
   readonly enemies: EnemyManager;
+  /** Lo que se ve de los enemigos; la simulación (`enemies`) no sabe que existe. */
+  readonly enemyViews: EnemyViews;
   readonly combat: PlayerCombat;
   readonly ctx: CombatCtx;
   readonly target: PlayerTarget;
@@ -82,7 +85,6 @@ export class LevelSession {
       vfx: this.vfx,
       audio: deps.audio,
       rng: deps.rng,
-      scene,
       accuracyMult: deps.accuracyMult,
       damageMult: deps.damageMult,
       onShotAtPlayer: (enemy, hit, dmg) => {
@@ -122,6 +124,9 @@ export class LevelSession {
       this.npcs.push(new Npc({ id: it.id, pos: new Vector3(it.pos[0], it.pos[1], it.pos[2]), yaw, ...look }, scene));
     }
     this.enemies.spawnInitial();
+    // Vistas creadas ya, antes de precompilar los shaders del nivel (no en mitad de la partida).
+    this.enemyViews = new EnemyViews(scene);
+    this.enemyViews.sync(this.enemies.enemies);
     this.physics.step();
   }
 
@@ -174,6 +179,7 @@ export class LevelSession {
   dispose(): void {
     for (const n of this.npcs) n.dispose();
     this.civilians?.dispose();
+    this.enemyViews.dispose();
     this.enemies.dispose();
     this.pickups.dispose();
     this.vfx.dispose();

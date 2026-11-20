@@ -20,7 +20,8 @@ La primera vez que se ejecuten las e2e: `npx playwright install chromium firefox
 | Animaciones | `src/entities/CharacterRig.ts` (huesos y poses) y `rigMath.ts` |
 | Aspecto de personajes y armas | `src/entities/rig/`: `body.ts` (torso, cabeza, pelo, prendas, miembros), `weapons.ts` (modelos y agarre), `geometry.ts` (primitivas), `skeleton.ts` (medidas) y `types.ts` |
 | Armas, daño, estilo, rango | `src/combat/` |
-| IA de los enemigos | `src/entities/ai/EnemyBrain.ts`, `src/entities/Enemy.ts`, `src/combat/EnemyManager.ts` |
+| IA de los enemigos | `src/entities/ai/EnemyBrain.ts`, `src/entities/Enemy.ts` (simulación), `src/combat/EnemyManager.ts` |
+| Cómo se ven los enemigos (animación, icono de alerta, láser) | `src/entities/EnemyView.ts`: lee el estado de `Enemy` y nunca lo cambia |
 | Un nivel o uno nuevo | `src/levels/data/` (y registrarlo en `src/levels/registry.ts`) |
 | Objetivos de un contrato | bloque `mission` del nivel; las reglas en `src/missions/objectives.ts` y su aplicación en `MissionDirector.ts` |
 | HUD, aviso contextual e Intel (qué se muestra) | `src/game/hudModel.ts`; cómo se dibuja, en `src/ui/` |

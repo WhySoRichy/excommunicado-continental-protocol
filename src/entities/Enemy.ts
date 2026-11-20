@@ -1,19 +1,18 @@
 import type { Collider } from '@dimforge/rapier3d-compat';
-import { AdditiveBlending, BoxGeometry, Color, Mesh, MeshBasicMaterial, type Scene, Sprite, Vector3 } from 'three';
+import { Vector3 } from 'three';
 import type { CombatAudio, CombatVfx, ShotSound } from '../combat/ports';
 import { applyDamage, type DamageResult, type HitZone, makeVitals, restoreVitals, type Vitals } from '../combat/damage';
 import { FIXED_DT } from '../core/Loop';
-import { clamp, damp, wrapAngle } from '../core/math';
+import { clamp, wrapAngle } from '../core/math';
 import type { Rng } from '../core/rng';
 import type { NavGrid } from '../levels/nav/NavGrid';
 import type { EnemySpawnDef } from '../levels/types';
 import { Groups, type PhysicsWorld, QueryGroups } from '../physics/Physics';
-import { alertIconMaterial } from '../render/vfx';
+
 import { type AiState, EnemyBrain, emptyCommand, emptyPerception, type Tactics } from './ai/EnemyBrain';
 import { ENEMY_TYPES, type EnemyTypeDef } from './ai/enemyTypes';
-import { CharacterRig, idlePose, type RigPose } from './CharacterRig';
+
 import { emptyIntent, PlayerController, yawFromDir } from './PlayerController';
-import { type BodyYaw, bodyYaw, type LookAngles, lookAngles, updateBodyYaw } from './rigMath';
 
 /** Lo que el enemigo necesita saber del jugador en cada paso. */
 export interface PlayerTarget {
@@ -33,7 +32,6 @@ export interface EnemyWorld {
   vfx: CombatVfx;
   audio: CombatAudio;
   rng: Rng;
-  scene: Scene;
   tactics: Tactics;
   /** Multiplicadores de dificultad. */
   accuracyMult: number;
@@ -58,45 +56,34 @@ const STUCK_MIN_PROGRESS = 0.3;
 const STUCK_REPLANS = 2;
 
 const _v = new Vector3();
-const _w = new Vector3();
+
 const _eye = new Vector3();
 const _muzzle = new Vector3();
 const _dir = new Vector3();
 const _hitPt = new Vector3();
 /** Lo que tarda el agarre del takedown en tumbar al enemigo (s). */
-const THROW_DELAY = 0.1;
+export const THROW_DELAY = 0.1;
 /** Tiempo tras la muerte en el que el cuerpo termina de caer; después ni se simula ni se anima (s). */
-const CORPSE_SETTLE = 3;
-/** Grosor del rim en reposo: por debajo del umbral del bloom, para que solo brillen el impacto y el telégrafo. */
-const RIM_BASE = 0.8;
-/**
- * Haz del láser: se afila hacia el extremo del objetivo (+Z tras `lookAt`), que es el que
- * queda junto a la cámara; con grosor constante se veía como una banda.
- */
-const laserGeo = new BoxGeometry(1, 1, 1);
-{
-  const p = laserGeo.getAttribute('position');
-  for (let i = 0; i < p.count; i++) if (p.getZ(i) > 0) p.setXY(i, p.getX(i) * 0.3, p.getY(i) * 0.3);
-}
-const RED = new Color(0xff2233);
+export const CORPSE_SETTLE = 3;
 
+/**
+ * Un enemigo, solo simulación: percepción, IA, movimiento, disparo y daño. Lo que se ve (personaje animado, icono de
+ * alerta, láser) es `EnemyView`, que lee este estado sin cambiarlo; así el enemigo corre igual sin pantalla.
+ */
 export class Enemy {
   readonly id: string;
   readonly def: EnemyTypeDef;
   readonly spawnDef: EnemySpawnDef;
   readonly brain: EnemyBrain;
   readonly mover: PlayerController;
-  readonly rig: CharacterRig;
   readonly vitals: Vitals;
+  /** Orden de aparición: escalona la percepción entre enemigos y desfasa su animación. */
+  readonly index: number;
   readonly perception = emptyPerception();
   readonly cmd = emptyCommand();
   readonly home = new Vector3();
   private readonly w: EnemyWorld;
   private readonly intent = emptyIntent();
-  private readonly pose: RigPose = idlePose();
-  private readonly icon: Sprite;
-  private readonly laser: Mesh | null;
-  private readonly laserMat: MeshBasicMaterial | null;
   private path: number[] = [];
   private pathIdx = 0;
   private readonly pathGoal = new Vector3();
@@ -110,79 +97,57 @@ export class Enemy {
   private aimIn = 0;
   private lastSee = false;
   private lastShoot = false;
-  private hitFlash = 0;
   private laserBeepT = 0;
-  private recoilVis = 0;
   private faceTargetT = 0;
-  private readonly baseRim: Color;
   /** Diagnóstico QA: tiempo continuo con orden de moverse y sin avanzar. */
   noProgressTime = 0;
   maxNoProgress = 0;
   stuckEvents = 0;
   /** Último atacante conocido (para la causa de muerte del jugador). */
   lastHitWasHead = false;
-  /** Segundos de juego desde la muerte (para la animación de caída). */
-  private deadFor = 0;
   /** Segundos de simulación desde la muerte (hasta que el cuerpo se asienta). */
   private deadSim = 0;
-  /** Sacudida visual al recibir un impacto (0..1) y lado del que vino. */
-  private flinch = 0;
-  private flinchSide = 0;
-  private deathStyle: 0 | 1 | 2 = 0;
+  // Estado que la vista muestra (lo lee `EnemyView`; solo lo cambia la simulación).
+  /** Destello del rim al recibir un impacto (s que quedan). */
+  hitFlash = 0;
+  /** Retroceso del arma al disparar, 0..1 (decae). */
+  recoilVis = 0;
+  /** Sacudida al recibir un impacto (0..1) y lado del que vino. */
+  flinch = 0;
+  flinchSide = 0;
+  /** Forma de caer al morir: 0 de bruces, 1 de espaldas, 2 desplomado de lado. */
+  deathStyle: 0 | 1 | 2 = 0;
+  /** Al morir proyectado en un takedown, lo que ya llevaba de caída (s). */
+  deathFallStart = 0;
   /** Tiempo desde que el jugador lo agarró en un takedown (s); −1 si no lo están proyectando. */
-  private thrownT = -1;
+  thrownT = -1;
   /** Altura del pecho del objetivo sobre sus pies (se mira y se apunta ahí). */
-  private targetRise = 1.2;
-  /** Reloj de la vigilancia de guardia (mirar a un lado y a otro), desfasado entre enemigos. */
-  private glance: number;
-  private readonly look: LookAngles = { yaw: 0, pitch: 0 };
-  /** Inclinación suavizada hacia lo que mira (rad). */
-  private pitchS = 0;
-  /** Giro visual del cuerpo (con muelle sobre el de la simulación). */
-  private readonly visualYaw: BodyYaw = bodyYaw();
+  targetRise = 1.2;
+  /** Punto al que apunta el láser mientras telegrafía el disparo. */
+  readonly telegraphAt = new Vector3();
 
   constructor(def: EnemySpawnDef, w: EnemyWorld, index: number) {
     this.id = def.id;
     this.spawnDef = def;
     this.def = ENEMY_TYPES[def.type];
     this.w = w;
+    this.index = index;
     this.home.set(def.pos[0], def.pos[1], def.pos[2]);
-    this.glance = index * 2.3;
     const patrol = (def.patrol ?? []).map((p) => new Vector3(p[0], p[1], p[2]));
     this.brain = new EnemyBrain(this.def, patrol, this.home, !!def.stationary, w.rng);
     this.mover = new PlayerController(w.physics, new Vector3(def.pos[0], def.pos[1] + 0.02, def.pos[2]), def.yaw, Groups.ENEMY);
     this.vitals = makeVitals({ maxHealth: this.def.health, maxHeavyArmor: this.def.heavyArmor });
-    // Material propio por enemigo (mismo programa): el destello de impacto es individual.
-    this.rig = new CharacterRig(`enemy:${def.id}`, {
-      colors: this.def.colors,
-      rimColor: this.def.color,
-      rimStrength: RIM_BASE,
-      hair: this.def.hair,
-      bulk: this.def.bulk,
-      vest: this.def.vest,
-      weapon: this.def.weapon.model,
-      uniqueMaterial: true,
-    });
-    this.baseRim = new Color(this.def.color);
-    w.scene.add(this.rig.root);
-    // El material (con su textura dibujada en canvas) se le pone al mostrarlo en `renderUpdate`: la simulación de un
-    // enemigo no debe tocar el DOM (así corre sin pantalla, ver tests/unit/headless.test.ts).
-    this.icon = new Sprite();
-    this.icon.scale.set(0.45, 0.45, 0.45);
-    this.icon.visible = false;
-    this.icon.renderOrder = 20;
-    w.scene.add(this.icon);
-    if (this.def.weapon.telegraph > 0 && this.def.type === 'marksman') {
-      this.laserMat = new MeshBasicMaterial({ color: RED, blending: AdditiveBlending, transparent: true, depthWrite: false, toneMapped: false });
-      this.laser = new Mesh(laserGeo, this.laserMat);
-      this.laser.visible = false;
-      this.laser.frustumCulled = false;
-      w.scene.add(this.laser);
-    } else {
-      this.laser = null;
-      this.laserMat = null;
-    }
     this.perceiveTimer = (index % 6) * FIXED_DT;
+  }
+
+  /** ¿Apunta ahora mismo? (su postura de apuntado). */
+  get aiming(): boolean {
+    return this.intent.aim;
+  }
+
+  /** El tirador avisa con un láser antes de disparar. */
+  get hasLaser(): boolean {
+    return this.def.weapon.telegraph > 0 && this.def.type === 'marksman';
   }
 
   get alive(): boolean {
@@ -210,6 +175,8 @@ export class Enemy {
   fixedUpdate(dt: number, target: PlayerTarget): void {
     this.hitFlash = Math.max(0, this.hitFlash - dt);
     this.recoilVis = Math.max(0, this.recoilVis - dt * 6);
+    this.flinch = Math.max(0, this.flinch - dt * 4.5);
+    if (this.alive && this.thrownT >= 0) this.thrownT += dt;
     if (!this.alive) {
       // El cuerpo cae y se asienta; después ya no hace falta moverlo.
       if (this.deadSim < CORPSE_SETTLE) {
@@ -286,7 +253,8 @@ export class Enemy {
     this.perception.allyAlertPos.copy(pos);
   }
 
-  private muzzlePos(out: Vector3): Vector3 {
+  /** Boca del arma (de ahí salen sus disparos y el láser). */
+  muzzlePos(out: Vector3): Vector3 {
     const f = this.mover.feet;
     const y = this.mover.yaw;
     const fx = -Math.sin(y);
@@ -448,28 +416,19 @@ export class Enemy {
     this.w.onShotAtPlayer(this, anyHit, dmg);
   }
 
+  /** Telégrafo del tirador: fija dónde apunta el láser y pita cada vez más deprisa. */
   private updateTelegraph(dt: number, t: PlayerTarget): void {
+    if (!this.hasLaser) return;
     const k = this.cmd.telegraph;
-    if (this.laser && this.laserMat) {
-      if (k > 0.01 && this.alive) {
-        this.muzzlePos(_muzzle);
-        _w.copy(t.chest);
-        _dir.subVectors(_w, _muzzle);
-        const len = _dir.length();
-        this.laser.position.addVectors(_muzzle, _w).multiplyScalar(0.5);
-        this.laser.lookAt(_w);
-        this.laser.scale.set(0.02 + k * 0.02, 0.02 + k * 0.02, len);
-        this.laserMat.color.copy(RED).multiplyScalar(0.6 + k * 1.6);
-        this.laser.visible = true;
-        this.laserBeepT -= dt;
-        if (this.laserBeepT <= 0) {
-          this.laserBeepT = 0.32 - k * 0.24;
-          this.w.audio.laserBeep(k, _muzzle);
-        }
-      } else {
-        this.laser.visible = false;
-        this.laserBeepT = 0;
+    if (k > 0.01 && this.alive) {
+      this.telegraphAt.copy(t.chest);
+      this.laserBeepT -= dt;
+      if (this.laserBeepT <= 0) {
+        this.laserBeepT = 0.32 - k * 0.24;
+        this.w.audio.laserBeep(k, this.muzzlePos(_muzzle));
       }
+    } else {
+      this.laserBeepT = 0;
     }
   }
 
@@ -502,12 +461,10 @@ export class Enemy {
     this.brain.kill();
     this.mover.kill();
     // Si lo estaban proyectando, la caída sigue donde iba en vez de empezar de pie.
-    this.deadFor = this.thrownT >= 0 ? Math.max(0, this.thrownT - THROW_DELAY) : 0;
+    this.deathFallStart = this.thrownT >= 0 ? Math.max(0, this.thrownT - THROW_DELAY) : 0;
     this.thrownT = -1;
     // El cuerpo deja de bloquear y de recibir disparos.
     this.mover.collider.setEnabled(false);
-    this.icon.visible = false;
-    if (this.laser) this.laser.visible = false;
   }
 
   stun(): void {
@@ -540,96 +497,8 @@ export class Enemy {
     this.aimIn = 0;
   }
 
-  // ======================================================== render
-  /**
-   * Mirada e inclinación al apuntar: la cabeza sigue al objetivo (al pecho, aunque esté más alto o más bajo)
-   * y el arma se inclina hacia él. De guardia y sin nada que mirar, vigila a un lado y a otro.
-   */
-  private updateLook(disabled: boolean, dt: number): void {
-    const pose = this.pose;
-    let pitch = 0;
-    pose.look = 0;
-    if (this.alive && !disabled) {
-      const c = this.cmd;
-      const r = this.rig.root;
-      if (c.hasLook) {
-        const eye = r.position.y + (this.mover.posture === 'crouch' ? 0.95 : 1.45);
-        const l = lookAngles(r.position.x, eye, r.position.z, r.rotation.y, c.lookAt.x, c.lookAt.y + this.targetRise, c.lookAt.z, this.look);
-        pose.lookYaw = l.yaw;
-        pose.look = 1;
-        pitch = clamp(l.pitch, -0.9, 0.9);
-      } else if (this.brain.state === 'patrol') {
-        this.glance += dt;
-        // Más amplio parado que caminando.
-        pose.lookYaw = 0.75 * Math.sin(this.glance * 0.42) * (1 - clamp(pose.speed / 2.5, 0, 0.6));
-        pose.look = 1;
-      }
-    }
-    // La inclinación (cabeza siempre; el arma, al apuntar) se suaviza para que no salte al dejar de mirar.
-    this.pitchS = damp(this.pitchS, pitch, 6, dt);
-    pose.aimPitch = this.pitchS;
-    pose.lookPitch = 0;
-  }
-
-  renderUpdate(alpha: number, dt: number): void {
-    // Un cuerpo ya asentado no se anima más: conserva su última pose.
-    if (!this.alive && this.deadFor > CORPSE_SETTLE) return;
-    const m = this.mover;
-    m.renderFeet(alpha, this.rig.root.position);
-    const yaw = updateBodyYaw(this.visualYaw, m.renderYaw(alpha), this.intent.aim, dt);
-    this.rig.root.rotation.y = yaw;
-    const pose = this.pose;
-    pose.speed = m.stepSpeed(FIXED_DT);
-    const vx = m.feet.x - m.prevFeet.x;
-    const vz = m.feet.z - m.prevFeet.z;
-    pose.moveAngle = Math.hypot(vx, vz) > 1e-4 ? Math.atan2(-vx, -vz) - yaw : 0;
-    const stunned = this.alive && this.brain.state === 'stunned';
-    const thrown = this.alive && this.thrownT >= 0;
-    if (thrown) this.thrownT += dt;
-    pose.state = this.alive && !thrown ? (stunned ? 'locked' : m.state) : 'dead';
-    pose.kneel = stunned && !thrown ? 1 : 0;
-    pose.posture = m.posture;
-    pose.grounded = m.grounded;
-    pose.aim = this.intent.aim ? 1 : 0;
-    this.updateLook(stunned || thrown, dt);
-    if (!this.alive) this.deadFor += dt;
-    pose.stateTime = thrown ? Math.max(0, this.thrownT - THROW_DELAY) : this.alive ? m.stateTime : this.deadFor;
-    pose.recoil = this.recoilVis;
-    pose.melee = 0;
-    this.flinch = Math.max(0, this.flinch - dt * 4.5);
-    pose.flinch = this.flinch * this.flinch;
-    pose.flinchSide = this.flinchSide;
-    pose.death = thrown ? 1 : this.deathStyle;
-    this.rig.update(pose, dt);
-    // Feedback de impacto y telégrafo del blindado/jefe: el rim se enciende.
-    const rim = this.rig.rim;
-    if (this.hitFlash > 0) {
-      rim.rimColor.value.setRGB(1, 1, 1);
-      rim.rimStrength.value = 2.4;
-    } else if (this.cmd.telegraph > 0 && !this.laser && this.alive) {
-      rim.rimColor.value.copy(this.baseRim).lerp(RED, this.cmd.telegraph);
-      rim.rimStrength.value = RIM_BASE + this.cmd.telegraph * 1.6;
-    } else {
-      rim.rimColor.value.copy(this.baseRim);
-      rim.rimStrength.value = this.alive ? RIM_BASE : 0.25;
-    }
-    // Icono de alerta (? / !) sobre la cabeza.
-    if (this.alive && this.cmd.icon !== 'none') {
-      this.icon.visible = true;
-      this.icon.material = alertIconMaterial(this.cmd.icon === 'alert' ? 'alert' : 'suspicious');
-      this.icon.position.set(this.rig.root.position.x, this.rig.root.position.y + (m.posture === 'crouch' ? 1.55 : 2.2), this.rig.root.position.z);
-      const s = this.cmd.icon === 'alert' ? 0.5 : 0.32 + this.cmd.detection * 0.16;
-      this.icon.scale.set(s, s, s);
-    } else {
-      this.icon.visible = false;
-    }
-  }
-
+  /** Suelta su cuerpo físico (la vista se suelta aparte, en `EnemyViews`). */
   dispose(): void {
-    this.rig.dispose();
-    this.w.scene.remove(this.icon);
-    if (this.laser) this.w.scene.remove(this.laser);
-    this.laserMat?.dispose();
     this.w.physics.removeCharacter(this.mover.char);
   }
 }

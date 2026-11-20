@@ -43,6 +43,7 @@
         "src/hub/**",
         "src/entities/ai/**",
         "src/entities/PlayerController.ts",
+        "src/entities/Enemy.ts",
         "src/physics/**",
         "src/levels/nav/**",
         "src/levels/data/**",

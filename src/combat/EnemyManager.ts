@@ -1,5 +1,5 @@
 import type { Collider } from '@dimforge/rapier3d-compat';
-import { type Scene, Vector3 } from 'three';
+import { Vector3 } from 'three';
 
 import type { Rng } from '../core/rng';
 import type { Tactics } from '../entities/ai/EnemyBrain';
@@ -23,7 +23,7 @@ export interface EnemyManagerDeps {
   vfx: CombatVfx;
   audio: CombatAudio;
   rng: Rng;
-  scene: Scene;
+
   accuracyMult: number;
   damageMult: number;
   onShotAtPlayer: (enemy: Enemy, hit: boolean, damage: number) => void;
@@ -56,7 +56,7 @@ export class EnemyManager implements Tactics {
       vfx: deps.vfx,
       audio: deps.audio,
       rng: deps.rng,
-      scene: deps.scene,
+
       tactics: this,
       accuracyMult: deps.accuracyMult,
       damageMult: deps.damageMult,
@@ -148,10 +148,6 @@ export class EnemyManager implements Tactics {
       if (e === from || !e.alive) continue;
       if (e.feet.distanceToSquared(from.feet) <= r2) e.allyAlert(playerPos);
     }
-  }
-
-  renderUpdate(alpha: number, dt: number): void {
-    for (const e of this.enemies) e.renderUpdate(alpha, dt);
   }
 
   /** Retira a todos los enemigos (vivos y caídos): fin del Excomunicado. */
