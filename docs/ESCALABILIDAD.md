@@ -39,8 +39,7 @@ El juego va a seguir creciendo en cuatro direcciones a la vez: gráficos, conten
 
 Cada fase deja el juego publicado y en verde; ninguna exige terminar la siguiente.
 
-### Fase 1 · Frontera entre simulación y vista (prerrequisito del resto)
-Hecho:
+### Fase 1 · Frontera entre simulación y vista (prerrequisito del resto) · completada
 - **Puertos.** Combate, enemigos y directores avisan a través de interfaces propias (`src/combat/ports.ts` y `src/missions/ports.ts`: sonido, efectos, sacudida de cámara y HUD) y ya no importan `AudioEngine`, `Vfx`, `CameraRig` ni `Hud`, que declaran `implements`. Sin pantalla se usan los puertos mudos (`SILENT_AUDIO`, `NO_VFX`); para la red bastará uno que registre los avisos.
 - **Regla de lint** (`no-restricted-imports` en `.oxlintrc.json`): las carpetas de simulación no pueden importar render, interfaz, audio ni la cámara.
 - **Prueba sin pantalla** (`tests/unit/headless.test.ts`): en Node, un enemigo detecta al jugador, le dispara y el jugador lo abate. Destapó que el enemigo dibujaba su icono de alerta en un canvas al nacer.
@@ -51,8 +50,7 @@ Hecho:
 
 Resultado: ningún módulo de simulación importa ya render, interfaz, audio, cámara ni la clase del rig; la regla de lint lo vigila en combate, misiones, vestíbulo, IA, física, navegación, datos de nivel, núcleo, `PlayerController`, `Enemy` y `Civilian`.
 
-Pendiente:
-- Ampliar la prueba sin pantalla a una oleada completa del Gauntlet (ahora es un combate contra un enemigo).
+- **Gauntlet sin pantalla.** Una segunda prueba monta en Node el director de misión real sobre el vestíbulo: lanza las oleadas, los enemigos atacan y se superan tres.
 
 ### Fase 2 · Varios jugadores en la simulación (aún en local)
 - Registro de jugadores con id; cada uno con su controlador, su combate y su intención.

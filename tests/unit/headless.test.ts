@@ -5,12 +5,16 @@ import { Pickups } from '../../src/combat/Pickups';
 import { type CombatCtx, emptyCombatIntent, PlayerCombat } from '../../src/combat/PlayerCombat';
 import { NO_VFX, SILENT_AUDIO, STILL_CAMERA } from '../../src/combat/ports';
 import { FIXED_DT } from '../../src/core/Loop';
+import { newProfile } from '../../src/core/Save';
 import { Rng } from '../../src/core/rng';
 import type { PlayerTarget } from '../../src/entities/Enemy';
 import { emptyIntent, PlayerController } from '../../src/entities/PlayerController';
 import { arena } from '../../src/levels/data/arena';
+import { hub } from '../../src/levels/data/hub';
 import { buildLevelPhysics } from '../../src/levels/levelPhysics';
 import { NavGrid } from '../../src/levels/nav/NavGrid';
+import { GAUNTLET_BLOCK } from '../../src/missions/gauntlet';
+import { MissionDirector, type MissionOutcome } from '../../src/missions/MissionDirector';
 import { loadRapier, PhysicsWorld, type Rapier } from '../../src/physics/Physics';
 
 /**
@@ -97,5 +101,69 @@ describe('simulación sin pantalla', () => {
     expect(combat.vitals.health + combat.vitals.armor, 'y le hace daño').toBeLessThan(100 + combat.vitals.maxArmor);
     expect(combat.stats.shotsFired).toBeGreaterThan(0);
     expect(enemy.alive, 'el jugador lo abate').toBe(false);
+  });
+});
+
+describe('Gauntlet sin pantalla', () => {
+  it('el director de misión real lanza oleadas, los enemigos atacan y se superan tres oleadas', () => {
+    const physics = new PhysicsWorld(R);
+    buildLevelPhysics(hub, physics);
+    physics.step();
+    const rng = new Rng(11);
+    const sp = hub.spawn.pos;
+    const player = new PlayerController(physics, new Vector3(sp[0], sp[1] + 0.02, sp[2]), hub.spawn.yaw);
+    const combat = new PlayerCombat(new Set());
+    let shotsAtPlayer = 0;
+    const enemies = new EnemyManager({
+      level: hub,
+      physics,
+      nav: NavGrid.build(hub),
+      vfx: NO_VFX,
+      audio: SILENT_AUDIO,
+      rng,
+      accuracyMult: 1,
+      damageMult: 1,
+      // Jugador invulnerable: aquí se prueba que la partida avanza, no que se sobreviva.
+      onShotAtPlayer: () => shotsAtPlayer++,
+    });
+    enemies.spawnInitial();
+    let outcome: MissionOutcome | null = null;
+    const mission = new MissionDirector({
+      session: { data: hub, player, combat, enemies },
+      block: GAUNTLET_BLOCK,
+      hud: { showToast() {}, setObjective() {}, setZone() {}, setCombatVisible() {} },
+      audio: { ui() {}, alert() {}, siren() {} },
+      profile: newProfile(0),
+      save() {},
+      onFinished: (o) => (outcome = o),
+    });
+    const ctx: CombatCtx = { physics, camera: STILL_CAMERA, player, enemies, civilians: null, vfx: NO_VFX, audio: SILENT_AUDIO, rng, pickups: new Pickups() };
+    const target: PlayerTarget = {
+      feet: player.feet,
+      head: new Vector3(),
+      chest: new Vector3(),
+      crouched: false,
+      speed: 0,
+      invulnerable: false,
+      alive: true,
+      collider: player.collider,
+    };
+    const idle = emptyIntent();
+    const noFire = emptyCombatIntent();
+    for (let i = 0; i < 60 * 60 && mission.gauntletWaves < 3; i++) {
+      // Un jugador perfecto: abate a un enemigo vivo cada segundo y medio (tiempo de sobra para que ataquen).
+      if (i % 90 === 89) enemies.enemies.find((e) => e.alive)?.applyHit(9999, 'body', player.feet, 1, true);
+      player.fixedUpdate(FIXED_DT, idle);
+      combat.fixedUpdate(FIXED_DT, noFire, ctx);
+      target.head.set(player.feet.x, player.feet.y + 1.6, player.feet.z);
+      target.chest.set(player.feet.x, player.feet.y + 1.15, player.feet.z);
+      enemies.fixedUpdate(FIXED_DT, target);
+      mission.fixedUpdate(FIXED_DT);
+      physics.step();
+    }
+
+    expect(mission.gauntletWaves, 'oleadas superadas').toBeGreaterThanOrEqual(3);
+    expect(shotsAtPlayer, 'los enemigos de las oleadas atacan').toBeGreaterThan(0);
+    expect(outcome, 'la partida sigue en curso').toBeNull();
   });
 });
