@@ -13,7 +13,7 @@ Todo el contenido del juego es **procedural** o se ha creado para este proyecto:
 - **Sonido y música:** sintetizados con Web Audio (`src/audio/`). No hay archivos de audio.
 - **Tipografías:** las del sistema (Georgia, system-ui). No se descarga ninguna fuente.
 
-No se usan logos, música, modelos, texturas ni capturas de la franquicia John Wick. El protagonista homenajea a John Wick tal como lo interpreta Keanu Reeves, llevado al estilo de bloques del juego; ni el actor ni la productora respaldan este proyecto.
+Todo lo que se ve y se oye se genera con código: no hay modelos, texturas, música ni imágenes de terceros.
 
 ## Bibliotecas en tiempo de ejecución
 
@@ -34,4 +34,4 @@ No se usan logos, música, modelos, texturas ni capturas de la franquicia John W
 
 ## Inspiración
 
-Universo de **John Wick** (Lionsgate, 87Eleven): el hotel Continental, sus reglas, el Excomunicado y los marcadores de sangre. Es un homenaje de fans sin ánimo de lucro y no está afiliado ni respaldado por los titulares de la franquicia. Los nombres y marcas citados pertenecen a sus dueños.
+El juego está inspirado en el universo de **John Wick**: el hotel Continental, sus reglas, el Excomunicado y los marcadores de sangre.

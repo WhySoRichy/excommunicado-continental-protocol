@@ -14,7 +14,7 @@ export interface RigColors {
 
 export type HairStyle = 'long' | 'short' | 'bald' | 'helmet' | 'cap' | 'parted' | 'slick';
 export type WeaponModel = 'pistol' | 'revolver' | 'rifle' | 'dmr' | 'smg' | 'shotgun' | 'shotgunTactical' | 'knife' | 'none';
-/** Rostro: `stern` es el común (cejas fruncidas); `wick`, el de Keanu Reeves como John Wick. */
+/** Rostro: `stern` es el común (cejas fruncidas); `wick`, el del Huésped. */
 export type FaceStyle = 'stern' | 'wick';
 
 /** Prendas opcionales. Sin `outfit`, el personaje lleva traje de chaqueta con corbata y pañuelo. */

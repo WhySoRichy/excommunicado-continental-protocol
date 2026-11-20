@@ -110,7 +110,7 @@ export function headGeometry(o: RigOptions): BufferGeometry {
   const dark = 0x0c0d10;
   const jawColor = o.beard ? shade(c.hair, 1.1) : c.skin;
   const wick = o.face === 'wick';
-  // Rostro de Keanu Reeves como John Wick, por bloques: cara alargada, pómulos altos, cejas rectas y
+  // Rostro del Huésped, inspirado en John Wick, por bloques: cara alargada, pómulos altos, cejas rectas y
   // gruesas que caen hacia fuera, ojos rasgados con el párpado caído y nariz larga y recta.
   const wickFace = (): BufferGeometry[] => [
     cprism(0.148, 0.17, 0.178, 0.198, 0.12, c.skin, 0, 0.875 + hy, 0), // cráneo

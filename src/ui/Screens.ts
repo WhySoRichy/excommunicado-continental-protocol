@@ -366,7 +366,7 @@ export class Screens {
         h('div', { class: 'title-sub', text: 'CONTINENTAL PROTOCOL' }),
       ]),
       h('div', { class: 'menu' }, menu),
-      h('p', { class: 'fan-note', text: 'Proyecto de fans sin fines de lucro. No afiliado ni respaldado por los titulares de la franquicia John Wick.' }),
+      h('p', { class: 'fan-note', text: 'Inspirado en el universo de John Wick.' }),
     ]);
   }
 

@@ -1003,7 +1003,7 @@ export const PLAYER_COLORS: RigColors = {
 };
 
 /**
- * Aspecto del Huésped: John Wick con los rasgos de Keanu Reeves, por bloques. Traje negro de tres
+ * Aspecto del Huésped, inspirado en John Wick, por bloques. Traje negro de tres
  * piezas sin pañuelo, media melena con raya al medio y barba corta.
  */
 export const PLAYER_LOOK: RigOptions = {

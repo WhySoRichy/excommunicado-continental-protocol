@@ -94,7 +94,7 @@ export class Npc {
   }
 }
 
-/** Paletas de los NPC del Continental (personajes propios, sin parecido con actores). */
+/** Paletas de los NPC del Continental. */
 export const NPC_LOOKS: Record<'charon' | 'sommelier' | 'winston', Pick<NpcDef, 'name' | 'colors' | 'hair' | 'vest' | 'bulk' | 'outfit'>> = {
   charon: {
     name: 'Charon · Conserje',

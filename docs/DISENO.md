@@ -1,6 +1,6 @@
 # Diseño del juego
 
-**EXCOMMUNICADO: CONTINENTAL PROTOCOL** es un juego de acción en tercera persona para el navegador. Proyecto de fans sin fines de lucro, no afiliado ni respaldado por los titulares de la franquicia John Wick. Modelos, música y texturas son propios y procedurales.
+**EXCOMMUNICADO: CONTINENTAL PROTOCOL** es un juego de acción en tercera persona para el navegador. Inspirado en el universo de John Wick. Modelos, música y texturas son propios y procedurales.
 
 La parte técnica está en [ARQUITECTURA.md](ARQUITECTURA.md).
 
@@ -247,7 +247,7 @@ Hay cinco subnotas de 0 a 100: **tiempo** (frente al par), **precisión** (impac
   - Piso de luz ambiental en todos los niveles y suelos y paredes de valores medios.
   - Neón emisivo y cobertura con bordes claros.
 - **Personajes por bloques:** prismas facetados con sombreado plano y rasgos mínimos.
-  - El Huésped es John Wick tal como lo interpreta Keanu Reeves, llevado al estilo de bloques: cara alargada, pómulos altos, cejas rectas, ojos de párpado caído, media melena con raya al medio y barba corta. Viste traje negro de tres piezas con camisa y corbata negras.
+  - El Huésped, inspirado en John Wick, llevado al estilo de bloques: cara alargada, pómulos altos, cejas rectas, ojos de párpado caído, media melena con raya al medio y barba corta. Viste traje negro de tres piezas con camisa y corbata negras.
   - El Sommelier trabaja sin chaqueta: camisa blanca, chaleco burdeos, pajarita, delantal largo, catavinos de plata y bigote encerado.
 - **Armas reconocibles por la silueta:** pistola con compensador, carabina con visor y empuñadura delantera, subfusil de culata plegable, escopeta de corredera con madera y cartuchos al costado, y cuchillo táctico. Los enemigos llevan además un rifle de tirador con mira y bípode, una escopeta táctica y, el Juez, un revólver. El color de cada tipo de enemigo marca un detalle de su arma.
 - **Proyectiles:** las trazadoras viajan como balas desde la boca del arma hasta el impacto, el fogonazo tiene forma de estrella y los casquillos de latón rebotan en el suelo.
