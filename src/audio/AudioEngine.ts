@@ -19,6 +19,9 @@ export type ShotSound = 'carbine' | 'pistol' | 'pistolSilenced' | 'revolver' | '
 
 /** Ganancia del bus de música respecto a su volumen y atenuación en menús. */
 const MUSIC_BUS = 0.8;
+
+/** Dónde mide `meter`: la mezcla final o solo la música. */
+export type MeterBus = 'master' | 'music';
 const MUSIC_DUCK = 0.4;
 
 export class AudioEngine {
@@ -40,9 +43,10 @@ export class AudioEngine {
   private pendingMood: MusicMood | null = null;
   private pendingIntensity = 0;
   private musicDucked = false;
-  /** Medidor de la salida final (QA y gate de mezcla). */
-  private analyser: AnalyserNode | null = null;
-  private meterBuf: Float32Array<ArrayBuffer> | null = null;
+  /** Salida final (tras el compresor): de ahí miden las pruebas la mezcla. */
+  private mixOut: DynamicsCompressorNode | null = null;
+  /** Medidores de las pruebas, creados al pedir la primera medida (el juego no los usa). */
+  private readonly meters = new Map<MeterBus, { analyser: AnalyserNode; buf: Float32Array<ArrayBuffer> }>();
 
   get ready(): boolean {
     return this.ctx !== null && this.ctx.state === 'running';
@@ -71,10 +75,7 @@ export class AudioEngine {
     this.master.connect(this.lowpass);
     this.lowpass.connect(comp);
     comp.connect(ctx.destination);
-    this.analyser = ctx.createAnalyser();
-    this.analyser.fftSize = 2048;
-    this.meterBuf = new Float32Array(this.analyser.fftSize);
-    comp.connect(this.analyser);
+    this.mixOut = comp;
     this.sfxBus = ctx.createGain();
     this.musicBus = ctx.createGain();
     this.uiBus = ctx.createGain();
@@ -135,12 +136,23 @@ export class AudioEngine {
     return { mood: this.music?.currentMood ?? this.pendingMood, intensity: this.music?.currentIntensity ?? 0 };
   }
 
-  /** RMS y pico de la salida final ahora mismo (0..1+). */
-  meter(): { rms: number; peak: number } {
-    const a = this.analyser;
-    const buf = this.meterBuf;
-    if (!a || !buf || !this.ready) return { rms: 0, peak: 0 };
-    a.getFloatTimeDomainData(buf);
+  /**
+   * RMS y pico (0..1+) del último trozo de audio de la salida final o del bus de música. Cada lectura abarca unos
+   * 0,7 s: aunque el juego vaya a pocos fotogramas por segundo (en la CI, unos 3), las lecturas cubren todo el intervalo
+   * medido. Con trozos de 46 ms, dos segundos daban seis muestras sueltas y la medida dependía del azar.
+   */
+  meter(bus: MeterBus = 'master'): { rms: number; peak: number } {
+    if (!this.ctx || !this.mixOut || !this.ready) return { rms: 0, peak: 0 };
+    let m = this.meters.get(bus);
+    if (!m) {
+      const analyser = this.ctx.createAnalyser();
+      analyser.fftSize = 32768;
+      (bus === 'music' ? this.musicBus : this.mixOut).connect(analyser);
+      m = { analyser, buf: new Float32Array(analyser.fftSize) };
+      this.meters.set(bus, m);
+    }
+    const buf = m.buf;
+    m.analyser.getFloatTimeDomainData(buf);
     let sum = 0;
     let peak = 0;
     for (let i = 0; i < buf.length; i++) {

@@ -1,4 +1,5 @@
 import { DirectionalLight, type Material, Vector3 } from 'three';
+import type { MeterBus } from '../audio/AudioEngine';
 import type { UpgradeId } from '../combat/weapons';
 import type { Action } from '../core/actions';
 import { FIXED_DT } from '../core/Loop';
@@ -211,8 +212,11 @@ export interface QaApi {
   cpuProfile(seconds: number): Promise<Record<string, number>>;
   /** Objetos renderizables visibles agrupados por material/tipo y totales del grafo de escena. */
   sceneStats(): { objects: number; autoUpdate: number; renderables: Record<string, number> };
-  /** Mide la salida de audio durante `seconds` de frames reales. */
-  audioMeter(seconds: number): Promise<{ running: boolean; rmsMean: number; rmsMax: number; peakMax: number; mood: string | null; intensity: number }>;
+  /** Mide durante `seconds` reales la mezcla final o solo la música (`bus`). */
+  audioMeter(
+    seconds: number,
+    bus?: MeterBus,
+  ): Promise<{ running: boolean; rmsMean: number; rmsMax: number; peakMax: number; mood: string | null; intensity: number }>;
 }
 
 export interface MissionSnapshot {
@@ -606,7 +610,7 @@ export function installQa(game: Game): void {
         };
         requestAnimationFrame(tick);
       }),
-    audioMeter: (seconds) =>
+    audioMeter: (seconds, bus = 'master') =>
       new Promise((resolve) => {
         const a = game.audio;
         const end = performance.now() + seconds * 1000;
@@ -615,7 +619,7 @@ export function installQa(game: Game): void {
         let rmsMax = 0;
         let peakMax = 0;
         const tick = (): void => {
-          const m = a.meter();
+          const m = a.meter(bus);
           sum += m.rms;
           n++;
           rmsMax = Math.max(rmsMax, m.rms);

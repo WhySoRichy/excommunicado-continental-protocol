@@ -74,6 +74,7 @@ La primera vez que se ejecuten las e2e: `npx playwright install chromium firefox
 - **Suavizar con `damp` lo que cambia de golpe.** Un suavizado de primer orden sigue al objetivo, pero su velocidad salta en el mismo fotograma en que el objetivo cambia: al agacharse, apuntar o arrancar, todo el cuerpo daba un tirón. Los pesos de mezcla del rig van con un muelle crítico (`spring` en `rigMath.ts`) y la API de pruebas mide la aceleración de cada articulación con `rigMotion()`; una e2e de movimiento la acota.
 - **Empujar al personaje contra el suelo.** En el suelo se le daba una velocidad vertical de −1 m/s "para que no flotara". Con los pies dentro del margen de separación de la KCC, Rapier daba por bloqueados pasos sueltos en llano y al correr se perdía uno de cada 20 o 30: tirones del cuerpo y de la cámara que no se veían en ninguna captura. Lo pega `snapToGround`; las pruebas "sin tirones en llano" de `playerMovement.test.ts` lo vigilan.
 - **Niveles:** escalones de más de 0,32 m o muebles sin `noWalk` rompen la navegación de los enemigos. Los tests de navegación lo detectan.
+- **Medir por fotogramas lo que no depende de ellos.** El medidor de audio leía 46 ms de sonido en cada fotograma: en la CI, a unos 3 FPS, dos segundos eran seis muestras sueltas y la prueba de mezcla fallaba por azar (lo destapó una actualización de Playwright). Ahora cada lectura abarca unos 0,7 s y la música se mide en su propio bus, sin restar dos medidas tomadas en momentos distintos.
 
 ## Despliegue
 

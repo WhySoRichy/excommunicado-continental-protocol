@@ -61,10 +61,13 @@ test.describe('Fase 5 · UX', () => {
     const hub = await page.evaluate(() => window.__EXCOM__!.audioMeter(2));
     expect(hub.running).toBe(true);
     expect(hub.mood).toBe('hub');
-    // Sin música (pero con ambiente) se oye menos: el volumen de música funciona.
+    // La música se mide en su propio bus. Antes se restaban dos medidas de la mezcla tomadas en momentos distintos y,
+    // con pocos fotogramas (la CI va a unos 3 FPS), la resta era casi ruido.
+    const music = await page.evaluate(() => window.__EXCOM__!.audioMeter(2, 'music'));
+    // Con el volumen de música a cero, su bus calla: el ajuste funciona.
     await page.evaluate(() => window.__EXCOM__!.setSettings({ music: 0 }));
     await page.evaluate(() => window.__EXCOM__!.audioMeter(1));
-    const noMusic = await page.evaluate(() => window.__EXCOM__!.audioMeter(2));
+    const noMusic = await page.evaluate(() => window.__EXCOM__!.audioMeter(1, 'music'));
     await page.evaluate(() => window.__EXCOM__!.setSettings({ music: 0.55 }));
 
     // Arena con enemigos alerta (god mode): la intensidad sube y cambian las capas.
@@ -91,16 +94,15 @@ test.describe('Fase 5 · UX', () => {
       return meter;
     });
     console.log(
-      `[mezcla] hub rms=${hub.rmsMean.toFixed(4)} pico=${hub.peakMax.toFixed(3)} · sin música rms=${noMusic.rmsMean.toFixed(4)} · arena calma k=${calm.intensity.toFixed(2)} rms=${calm.rmsMean.toFixed(4)} · combate k=${fight.intensity.toFixed(2)} rms=${fight.rmsMean.toFixed(4)} · disparos pico=${shots.peakMax.toFixed(3)}`,
+      `[mezcla] hub rms=${hub.rmsMean.toFixed(4)} pico=${hub.peakMax.toFixed(3)} · música rms=${music.rmsMean.toFixed(4)} · sin música rms=${noMusic.rmsMean.toFixed(5)} · arena calma k=${calm.intensity.toFixed(2)} rms=${calm.rmsMean.toFixed(4)} · combate k=${fight.intensity.toFixed(2)} rms=${fight.rmsMean.toFixed(4)} · disparos pico=${shots.peakMax.toFixed(3)}`,
     );
     expect(hub.rmsMean).toBeGreaterThan(0.004);
     expect(hub.rmsMean).toBeLessThan(0.2);
     expect(hub.peakMax).toBeLessThan(1);
-    // Energía de la música sola (la salida es música + ambiente): audible pero de fondo.
-    const musicRms = Math.sqrt(Math.max(0, hub.rmsMean ** 2 - noMusic.rmsMean ** 2));
-    console.log(`[mezcla] música sola en el hub ≈ ${musicRms.toFixed(4)} rms`);
-    expect(musicRms).toBeGreaterThan(0.012);
-    expect(musicRms).toBeLessThan(0.12);
+    // Música audible pero de fondo; sin volumen, callada.
+    expect(music.rmsMean).toBeGreaterThan(0.006);
+    expect(music.rmsMean).toBeLessThan(hub.rmsMean);
+    expect(noMusic.rmsMean).toBeLessThan(music.rmsMean * 0.05);
     expect(calm.mood).toBe('practice');
     expect(fight.intensity).toBeGreaterThan(calm.intensity);
     expect(fight.intensity).toBeGreaterThanOrEqual(0.55);
