@@ -123,7 +123,7 @@ src/
   render/     renderer, materiales, efectos y resolución dinámica
 ```
 
-Los detalles, decisiones técnicas y convenciones están en [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md). Para retomar o ampliar el proyecto: [guía de desarrollo](docs/CONTRIBUIR.md), [roadmap](docs/ROADMAP.md) y [plan de escalabilidad](docs/ESCALABILIDAD.md).
+Los detalles, decisiones técnicas y convenciones están en [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md). Hacia dónde va el juego y qué promete a quien lo juega (nada de pagar por ventaja): [visión](docs/VISION.md). Para retomar o ampliar el proyecto: [guía de desarrollo](docs/CONTRIBUIR.md), [roadmap](docs/ROADMAP.md) y [plan de escalabilidad](docs/ESCALABILIDAD.md).
 
 ## Pruebas y calidad
 
