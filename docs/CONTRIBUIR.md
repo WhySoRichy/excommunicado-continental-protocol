@@ -24,7 +24,9 @@ La primera vez que se ejecuten las e2e: `npx playwright install chromium firefox
 | Cómo se ven los enemigos (animación, icono de alerta, láser) | `src/entities/EnemyView.ts`: lee el estado de `Enemy` y nunca lo cambia |
 | Varios jugadores (plazas, objetivos de los enemigos, reaparición) | `src/combat/PlayerRoster.ts`; cómo se ven los que no son el local, `src/entities/PlayerViews.ts` |
 | Cooperativo en red (protocolo, anfitrión, invitado, compensación de latencia) | `src/net/` (simulación: corre sin pantalla); en el juego, `src/game/Coop.ts` y sus pantallas, `src/ui/coopScreens.ts` |
-| Transportes del cooperativo (WebRTC con códigos, otra pestaña) | `src/net/transport/` |
+| Transportes del cooperativo (servicio de salas, WebRTC, otra pestaña) | `src/net/transport/`; el protocolo del servicio, `src/net/lobbyProtocol.ts` |
+| Servicio de salas (Cloudflare) | `server/salas/`: `core.ts` (la lógica, sin Cloudflare) y `worker.ts` (Worker y Durable Object). Se despliega con `.github/workflows/salas.yml`; en local, `npx wrangler dev` en esa carpeta |
+| Pantallas del cooperativo y lo que hacen sus botones | `src/ui/coopScreens.ts` y `src/game/coopScreenApi.ts` |
 | Textos nuevos | `src/text/`: el catálogo (el primero, el del cooperativo) |
 | Un nivel o uno nuevo | `src/levels/data/` (y registrarlo en `src/levels/registry.ts`) |
 | Objetivos de un contrato | bloque `mission` del nivel; las reglas en `src/missions/objectives.ts` y su aplicación en `MissionDirector.ts` |
@@ -83,6 +85,9 @@ La primera vez que se ejecuten las e2e: `npx playwright install chromium firefox
 - **Mover un collider y consultar en el mismo paso.** Los rayos y solapes de Rapier usan el árbol de colliders que refresca `world.step()`: lo que se movió después todavía no está ahí. Por eso la compensación de latencia no rebobina los cuerpos de la física, sino que prueba cada cápsula a mano (`net/lagComp.ts`).
 - **La pestaña oculta no tiene fotogramas.** El navegador para `requestAnimationFrame` y frena los temporizadores de la página. Lo que deba seguir corriendo, como el anfitrión de una partida en red, necesita otro reloj: el de un worker (`game/HiddenTicker.ts`).
 - **Una prueba de red que pasa a la primera.** Las del cooperativo se comprobaron rompiendo a propósito la semilla de la dispersión y la comprobación de plausibilidad: fallaron como debían. Una prueba que nunca se ha visto fallar no demuestra nada.
+- **Estado de un Durable Object en memoria.** Con la hibernación, el objeto sale de la memoria entre mensajes: lo que haya en sus campos se pierde. El servicio de salas guarda todo en el adjunto de cada conexión (`serializeAttachment`) y encuentra las conexiones por etiquetas.
+- **Lo que deja `wrangler dev` al pararlo.** Su runtime (`workerd`) se queda vivo y bloquea `.wrangler/`. Hay que cerrar el árbol de procesos de wrangler; `.wrangler/` está en `.gitignore`.
+- **Una conexión nueva fuera del origen.** La política de seguridad de contenido (`vite.config.ts`) solo permite conectar con el propio origen y el servicio de salas: otra dirección necesita su entrada en `connect-src`, o el navegador la bloquea sin más.
 - **Niveles:** escalones de más de 0,32 m o muebles sin `noWalk` rompen la navegación de los enemigos. Los tests de navegación lo detectan.
 
 ## Despliegue

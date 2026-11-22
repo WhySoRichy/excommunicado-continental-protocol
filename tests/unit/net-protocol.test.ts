@@ -107,8 +107,11 @@ describe('protocolo de red', () => {
   it('los mensajes fiables van y vuelven', () => {
     const hello = decodeGuestCtl(encodeGuestCtl({ t: 'hello', v: PROTOCOL, tables: TABLES_HASH, upgrades: ['extMag', 'suit2'] }));
     expect(hello).toEqual({ t: 'hello', v: PROTOCOL, tables: TABLES_HASH, upgrades: ['extMag', 'suit2'] });
+    const back = { t: 'hello' as const, v: PROTOCOL, tables: TABLES_HASH, upgrades: [], rejoin: { id: 2, token: 'abcdefghijkm2345' } };
+    expect(decodeGuestCtl(encodeGuestCtl(back)), 'con la plaza que tenía').toEqual(back);
+    expect(decodeGuestCtl(encodeGuestCtl({ ...back, rejoin: { id: 2, token: 'corta' } })), 'contraseña malformada').toBeNull();
     const msgs: HostCtl[] = [
-      { t: 'welcome', id: 2 },
+      { t: 'welcome', id: 2, token: 'abcdefghijkm2345' },
       { t: 'lobby', ids: [0, 2], level: null },
       { t: 'lobby', ids: [0, 1, 2], level: 'nightclub' },
       { t: 'start', level: 'docks', mission: 'docks' },

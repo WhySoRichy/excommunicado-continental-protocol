@@ -1,13 +1,19 @@
 import { defineConfig, type Plugin } from 'vite';
+import { DEFAULT_LOBBY_URL } from './src/net/lobbyUrl.ts';
+
+/** El servicio de salas del cooperativo: la única conexión del juego fuera de su origen (HTTPS y WebSocket). */
+const lobby = new URL(process.env.VITE_LOBBY_URL ?? DEFAULT_LOBBY_URL);
+const lobbyConnect = `${lobby.origin} ${lobby.protocol === 'https:' ? 'wss' : 'ws'}://${lobby.host}`;
 
 /**
  * Política de seguridad de contenido. GitHub Pages no permite cabeceras, así que va en un <meta> al principio
- * del <head>. Todo sale del propio origen; el wasm de Rapier viaja embebido y se instancia desde bytes
- * ('wasm-unsafe-eval'), y el CSS crítico de la pantalla de carga va en línea. Solo se aplica a los builds
- * (público y de pruebas): `npm run dev` necesita el cliente de recarga en caliente de Vite.
+ * del <head>. Todo sale del propio origen salvo el servicio de salas del cooperativo; el wasm de Rapier viaja
+ * embebido y se instancia desde bytes ('wasm-unsafe-eval'), y el CSS crítico de la pantalla de carga va en línea.
+ * Solo se aplica a los builds (público y de pruebas): `npm run dev` necesita el cliente de recarga en caliente de Vite.
  */
 const CSP = [
   "default-src 'self'",
+  `connect-src 'self' ${lobbyConnect}`,
   "script-src 'self' 'wasm-unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data:",

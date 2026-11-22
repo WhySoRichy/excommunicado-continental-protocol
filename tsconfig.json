@@ -1,6 +1,6 @@
 {
-  // Raíz de la solución: cada archivo pertenece a uno de los dos proyectos. Las herramientas
+  // Raíz de la solución: cada archivo pertenece a uno de los tres proyectos (juego, herramientas y servicio de salas). Las herramientas
   // (editor, oxlint, Vite) siguen estas referencias para usar las opciones correctas.
   "files": [],
-  "references": [{ "path": "./tsconfig.app.json" }, { "path": "./tsconfig.node.json" }]
+  "references": [{ "path": "./tsconfig.app.json" }, { "path": "./tsconfig.node.json" }, { "path": "./tsconfig.server.json" }]
 }

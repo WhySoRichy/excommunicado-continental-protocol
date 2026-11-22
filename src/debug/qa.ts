@@ -6,7 +6,8 @@ import { FIXED_DT } from '../core/Loop';
 import { deleteProfile, type Profile } from '../core/Save';
 import { addCoins } from '../hub/economy';
 import type { Game } from '../game/Game';
-import { Coop, coopScreenApi } from '../game/Coop';
+import { Coop } from '../game/Coop';
+import { coopScreenApi } from '../game/coopScreenApi';
 import { findLocalHost, joinLocal } from '../net/transport/broadcast';
 import { answerInvite } from '../net/transport/rtc';
 import type { QaInvariants } from '../game/invariants';
@@ -174,6 +175,12 @@ export interface QaApi {
   coopLeave(): void;
   /** Anfitrión: vuelve a la sala con todos. */
   coopLobby(): void;
+  /** Anfitrión: el código de su sala en el servicio (null mientras se abre o si no responde). */
+  coopRoom(): string | null;
+  /** Invitado: corta la conexión sin despedirse, como un corte de red. */
+  coopDrop(): void;
+  /** Anfitrión: coloca a un invitado (como al reaparecer). */
+  coopPlace(id: number, x: number, y: number, z: number, yaw: number): boolean;
   /** Todos los jugadores de la partida (el local, id 0). */
   players(): Array<{ id: number; local: boolean; x: number; y: number; z: number; health: number; armor: number; dead: boolean }>;
   setGod(on: boolean): void;
@@ -463,7 +470,13 @@ export function installQa(game: Game): void {
     coopJoinLocal: async () => {
       const room = await findLocalHost();
       if (!room) return false;
-      game.coop = Coop.createGuest(game, joinLocal(room));
+      game.coop = Coop.createGuest(game, joinLocal(room), {
+        reconnect: async () => {
+          const again = await findLocalHost();
+          if (!again) throw new Error('notfound');
+          return joinLocal(again);
+        },
+      });
       game.screens.show('coopLobby');
       return true;
     },
@@ -492,6 +505,9 @@ export function installQa(game: Game): void {
     coopAccept: (answer) => game.coop?.acceptAnswer(answer) ?? Promise.resolve(false),
     coopLeave: () => game.coopLeave(),
     coopLobby: () => game.coopBackToLobby(),
+    coopRoom: () => game.coop?.view().room.code ?? null,
+    coopDrop: () => game.coop?.guest?.disconnect(),
+    coopPlace: (id, x, y, z, yaw) => game.coop?.host?.placeGuest(id, new Vector3(x, y, z), yaw) ?? false,
     players: () =>
       (game.session?.players ?? []).map((p) => ({
         id: p.id,

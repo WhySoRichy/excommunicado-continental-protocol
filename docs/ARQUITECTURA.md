@@ -47,12 +47,14 @@ src/
   missions/   director de misión, tutorial, Gauntlet, logros, catálogo de contratos
   game/       Game (orquestador), sesión de nivel, cámara, cooperativo (Coop)
   net/        cooperativo en red: protocolo, anfitrión, invitado, interpolación, compensación de latencia
-    transport/  WebRTC con señalización por códigos y BroadcastChannel entre pestañas
+    transport/  servicio de salas, WebRTC (también con códigos a mano) y BroadcastChannel entre pestañas
   text/       catálogo de textos (el primero: el del cooperativo)
   ui/         HUD, pantallas (título, pausa, ajustes, tienda, sala...), Intel, estilos
   audio/      motor de audio, patrones y reproductor de música
   render/     renderer, materiales, texturas procedurales, VFX, resolución dinámica
   debug/      overlay F3 y API de QA (window.__EXCOM__ con ?qa=1; fuera del build público)
+server/
+  salas/      servicio de salas del cooperativo (Cloudflare Workers y Durable Objects)
 tests/
   unit/       Vitest: lógica pura
   e2e/        Playwright: el juego real sobre el build de pruebas

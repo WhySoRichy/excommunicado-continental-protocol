@@ -59,11 +59,13 @@ Título ─► Continental (hub) ─► Charon: contratos ─► Briefing ─►
 Cada contrato sigue el flujo **briefing** (3 líneas: objetivo, regla especial, rango objetivo) → ejecución → **resultados** con rango D/C/B/A/S y recompensa. Los contratos se desbloquean en orden: el tutorial desbloquea Kairos (y el Gauntlet), Kairos desbloquea Muelle 9 y Muelle 9 desbloquea Torre Meridian.
 
 ### 2.4 Cooperativo (hasta cuatro jugadores)
-- Uno abre la sala desde el título (Cooperativo → Crear partida) y elige la arena o un contrato que tenga desbloqueado. Los demás entran con un código: el anfitrión crea la invitación, el invitado devuelve una respuesta y el anfitrión la pega. En el mismo equipo basta otra pestaña.
+- Uno abre la sala desde el título (Cooperativo → Crear partida) y elige la arena o un contrato que tenga desbloqueado. La sala tiene un código de cinco letras: los demás entran escribiéndolo, desde «Buscar partida» si la sala es pública (lo es salvo que el anfitrión diga lo contrario) o, en el mismo equipo, desde otra pestaña. Si el servicio de salas no responde, queda la invitación manual: el anfitrión crea una invitación, el invitado devuelve una respuesta y el anfitrión la pega.
+- Los objetos de la misión (paneles, cargas, terminales) los puede usar cualquiera; hablar con los personajes del hotel, solo el anfitrión.
+- Quien se corta sin salir vuelve solo a su plaza durante un minuto, con su salud, su munición y su estilo.
 - Se juega sin briefing ni tutorial y la partida no se detiene: la pausa es un menú y el personaje se queda donde está.
 - Cada caída gasta un marcador de sangre del equipo y se reaparece sola a los 5 s en el último punto de control; sin marcadores, el contrato falla para todos. En el Gauntlet, que tiene una sola vida, la primera caída termina la partida.
 - Sin Foco ni pausas de impacto: la cámara lenta sería para todos.
-- Los objetivos de alcanzar una zona los cumple cualquiera; los objetos de la misión (terminales, paneles) los usa el anfitrión. El rango y los récords son del anfitrión; cada invitado cobra las monedas del contrato en su propia partida.
+- Los objetivos de alcanzar una zona los cumple cualquiera. El rango y los récords son del anfitrión; cada invitado cobra las monedas del contrato en su propia partida.
 - Los aliados llevan su nombre encima y el panel del equipo muestra la salud de cada uno y, al invitado, su latencia.
 
 ## 3. Movimiento y cámara (tercera persona, sobre el hombro)

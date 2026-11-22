@@ -14,3 +14,5 @@ desktop.ini
 .env.*
 docs/media/frames/
 qa-screenshots/
+# Estado local de wrangler dev (servicio de salas).
+.wrangler/

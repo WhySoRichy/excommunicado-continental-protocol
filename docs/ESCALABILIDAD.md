@@ -77,10 +77,15 @@ Cooperativo para hasta cuatro jugadores, sin servidor propio (título → Cooper
 - **En el juego** (`game/Coop.ts`, `ui/coopScreens.ts`). Sala con invitación por código, la arena o cualquier contrato desbloqueado, sin briefing ni tutorial; panel del equipo con la salud de cada uno y la latencia; nombres sobre los aliados; reaparición automática a los 5 s, gastando un marcador del equipo por caída; sin Foco ni pausas de impacto (el tiempo del mundo es de todos); la pausa no para el mundo; el anfitrión sigue simulando con la pestaña oculta (un worker marca el tiempo, `game/HiddenTicker.ts`); los invitados cobran las monedas del contrato en su propia partida guardada. Los textos van al primer catálogo (`src/text/coop.ts`).
 - **Pruebas.** Sin pantalla: protocolo, rayo contra cápsula, rebobinado y una partida entre anfitrión e invitado con latencia, variación y pérdida (movimiento, daño, baja confirmada, misma dispersión, rechazo de lo imposible, reaparición, salida y latidos). En el juego real (`tests/e2e/coop-net.spec.ts`): dos pestañas juegan juntas, también con la del anfitrión oculta; un contrato con los textos de la misión replicados y la vuelta a la sala; y una conexión WebRTC de verdad con sus códigos.
 
-Queda (el orden de los grandes bloques lo marca [VISION.md](VISION.md); el siguiente es justo este: un cooperativo jugable con gente, con un servicio de salas en el plan gratuito de Cloudflare):
-- Un servidor de retransmisión (TURN) opcional para las redes que no permiten la conexión directa (algunas de empresa y móviles).
-- Que los invitados usen los objetos de la misión (terminales, paneles, ascensores): ahora solo los usa el anfitrión.
-- Volver a entrar tras un corte conservando la plaza, y que la partida siga si se va el anfitrión.
+**Cooperativo jugable con gente** (el primer bloque de [VISION.md](VISION.md)), sobre la red de la fase 3:
+- **Servicio de salas** (`server/salas`, en el plan gratuito de Cloudflare): un Worker y un único Durable Object con todas las salas, con WebSockets que hibernan (mientras nadie escribe no consume nada). Da a cada sala un código de cinco letras, lista las públicas y pasa entre anfitrión e invitado las descripciones de la conexión; la partida sigue yendo directa entre los equipos. Solo atiende a los orígenes del juego y pone límites (salas por dirección, mensajes por conexión, tamaño de los mensajes). Su lógica (`core.ts`) no sabe de Cloudflare: la prueban las unitarias y la sirven también las e2e, con el `routeWebSocket` de Playwright, sin red. Se despliega solo con `.github/workflows/salas.yml`.
+- **Relé TURN:** el servicio pide a Cloudflare credenciales temporales (la clave no sale nunca del servidor) para las redes que no permiten la conexión directa. Sin servicio, el juego vuelve a la invitación manual con STUN.
+- **Objetos de la misión para todos:** el invitado ve los avisos de los objetos de la misión (no los de hablar ni el ascensor) y pide usarlos; el anfitrión comprueba que existan, sigan sin usar y estén a su alcance, y la lista de usados viaja con la instantánea.
+- **Volver tras un corte:** el anfitrión da a cada invitado una contraseña para su plaza; si se corta sin despedirse, se le guarda un minuto con su combate (salud, munición, estilo) y el invitado vuelve solo por el mismo camino por el que entró.
+- **La misión no se para** con el anfitrión en la pausa o caído: los demás siguen jugando.
+
+Queda:
+- Que la partida siga si se va el anfitrión (otro jugador tomaría el relevo).
 - Cámara de espectador mientras se espera para reaparecer.
 - Compensación de latencia también para el cuchillo y los takedowns, que ahora usan la posición actual.
 

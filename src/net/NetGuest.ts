@@ -32,6 +32,7 @@ import {
   type OwnerNet,
   PROTOCOL,
   type RejectReason,
+  type RejoinTicket,
   shotSeed,
   simKind,
   type Snapshot,
@@ -70,6 +71,8 @@ export interface GuestEvents {
 export interface GuestOptions {
   now(): number;
   upgrades: ReadonlySet<UpgradeId>;
+  /** Vuelve tras un corte: la plaza que tenía y su contraseña. */
+  rejoin?: RejoinTicket;
   events: GuestEvents;
   /** La cámara del jugador local (sacudidas de los impactos y el daño que confirma el anfitrión). */
   camera: CombatCamera;
@@ -101,6 +104,8 @@ export class NetGuest {
   id = 0;
   /** Ida y vuelta medida (ms). */
   rtt = 0;
+  /** Contraseña de su plaza (para volver tras un corte). */
+  private token = '';
   /** Lo último que dijo el anfitrión de la misión. */
   readonly mission: MissionNet = emptyMissionNet();
   readonly clock = new SnapshotClock();
@@ -134,7 +139,12 @@ export class NetGuest {
       else this.onSim(data);
     };
     link.onClose = () => this.end(false);
-    this.send({ t: 'hello', v: PROTOCOL, tables: TABLES_HASH, upgrades: [...opts.upgrades] });
+    this.send({ t: 'hello', v: PROTOCOL, tables: TABLES_HASH, upgrades: [...opts.upgrades], ...(opts.rejoin ? { rejoin: opts.rejoin } : {}) });
+  }
+
+  /** Lo que necesita para recuperar su plaza si se corta (null hasta tener plaza). */
+  get ticket(): RejoinTicket | null {
+    return this.id > 0 && this.token ? { id: this.id, token: this.token } : null;
   }
 
   get connected(): boolean {
@@ -160,6 +170,16 @@ export class NetGuest {
     this.world = null;
     this.level = null;
     this.snaps.length = 0;
+  }
+
+  /** Pide al anfitrión usar un objeto de la misión (él decide si está a su alcance). */
+  requestInteract(id: string): void {
+    this.send({ t: 'interact', id });
+  }
+
+  /** Corta la conexión sin despedirse, como un corte de red (para probar la vuelta tras un corte). */
+  disconnect(): void {
+    this.link.close();
   }
 
   /** Sale de la partida. */
@@ -247,6 +267,7 @@ export class NetGuest {
     switch (m.t) {
       case 'welcome':
         this.id = m.id;
+        this.token = m.token;
         ev.welcome?.(m.id);
         return;
       case 'reject':

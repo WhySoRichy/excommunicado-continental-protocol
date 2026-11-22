@@ -3,7 +3,7 @@ import { Vector3 } from 'three';
 import { AudioEngine } from '../audio/AudioEngine';
 import { type IntensityInput, musicIntensity } from '../audio/music';
 import { type CombatIntent, emptyCombatIntent, SWITCH_TIME } from '../combat/PlayerCombat';
-import { REMOTE_RESPAWN } from '../combat/PlayerRoster';
+import { type PlayerSlot, REMOTE_RESPAWN } from '../combat/PlayerRoster';
 import { STYLE_RANKS } from '../combat/StyleMeter';
 import type { UpgradeId } from '../combat/weapons';
 import type { Action } from '../core/actions';
@@ -51,7 +51,8 @@ import { Hud, type HudData, type TeamView } from '../ui/Hud';
 import { type ResultsView, Screens } from '../ui/Screens';
 import { COOP_TEXT, playerName } from '../text/coop';
 import { CameraRig, DEFAULT_CAMERA } from './CameraRig';
-import { Coop, type CoopMode, coopScreenApi } from './Coop';
+import type { Coop, CoopMode } from './Coop';
+import { coopScreenApi } from './coopScreenApi';
 import { HiddenTicker } from './HiddenTicker';
 import { buildIntelView, contextPrompt, fillHudData, type HudView, type PromptInput } from './hudModel';
 import { checkCameraInvariants, checkCombatInvariants, checkPlayerInvariants, type QaInvariants } from './invariants';
@@ -141,6 +142,10 @@ export class Game {
   private sessionCoop = false;
   /** Un nivel que pidió el anfitrión mientras se cargaba otro. */
   private coopPending: { level: LevelId; mission: MissionId | null } | null = null;
+  /** Invitado: objetos que pidió usar hace un momento (no se le vuelven a ofrecer mientras el anfitrión contesta). */
+  private readonly guestPending = new Map<string, number>();
+  /** Invitado: la lista de usados que dijo el anfitrión la última vez (para copiarla solo cuando cambia). */
+  private guestUsedRef: readonly string[] | null = null;
   /** Anfitrión con la pestaña oculta: la partida sigue para sus invitados. */
   private readonly hiddenTicker = new HiddenTicker((dt) => this.tickHidden(dt));
 
@@ -721,6 +726,15 @@ export class Game {
 
   /** Acción de un interactivo (E). */
   private interact(it: InteractableDef): void {
+    const guest = this.coop?.guest;
+    if (guest) {
+      // Invitado: se lo pide al anfitrión, que lo comprueba y lo ejecuta (la lista de usados vuelve con la instantánea).
+      guest.requestInteract(it.id);
+      this.guestPending.set(it.id, performance.now() + 1500);
+      this.nearInteractable = null;
+      this.audio.ui('click');
+      return;
+    }
     const p = this.profile;
     this.audio.ui('click');
     switch (it.action) {
@@ -1118,7 +1132,7 @@ export class Game {
     const tP = this.profiling ? performance.now() : 0;
     s.pickups.update(dt);
     this.director?.fixedUpdate(dt);
-    if (this.fsm.state === 'playing') this.mission?.fixedUpdate(dt);
+    if (this.missionRuns) this.mission?.fixedUpdate(dt);
     const tPh = this.profiling ? performance.now() : 0;
     s.physics.step();
     const host = this.coop?.host;
@@ -1144,12 +1158,27 @@ export class Game {
     this.input.endStep();
   }
 
-  /**
-   * Sin interacciones con un hub hostil (ni durante el Excomunicado ni durante el Gauntlet). En cooperativo, las de la
-   * misión las hace el anfitrión: el invitado no ve sus avisos.
-   */
+  /** Sin interacciones con un hub hostil: ni durante el Excomunicado ni durante el Gauntlet. */
   private get interactionsAllowed(): boolean {
-    return !this.director?.hostile && this.mission?.id !== 'gauntlet' && !this.coop?.isGuest;
+    return !this.director?.hostile && this.mission?.id !== 'gauntlet' && this.coop?.mission !== 'gauntlet';
+  }
+
+  /** La misión avanza en partida y, en cooperativo, también con la pausa abierta o caído: los demás siguen jugando. */
+  private get missionRuns(): boolean {
+    const st = this.fsm.state;
+    return st === 'playing' || (!!this.coop?.inMatch && (st === 'paused' || st === 'dead'));
+  }
+
+  /** Los objetos que no se ofrecen: los ya usados y, en un invitado, los que acaba de pedir al anfitrión. */
+  private blockedInteractables(): ReadonlySet<string> {
+    if (this.guestPending.size === 0) return this.usedInteractables;
+    const now = performance.now();
+    const out = new Set(this.usedInteractables);
+    for (const [id, until] of this.guestPending) {
+      if (until < now) this.guestPending.delete(id);
+      else out.add(id);
+    }
+    return out;
   }
 
   /** La simulación avanza: en los estados de juego y, en cooperativo, también con la pausa abierta. */
@@ -1241,7 +1270,14 @@ export class Game {
     const coop = this.coop!;
     coop.guestPostStep(ci);
     const net = coop.missionNet;
-    if (net) s.alarm.set(net.alarm);
+    if (net) {
+      s.alarm.set(net.alarm);
+      if (net.used !== this.guestUsedRef) {
+        this.guestUsedRef = net.used;
+        this.usedInteractables.clear();
+        for (const id of net.used) this.usedInteractables.add(id);
+      }
+    }
     s.physics.step();
     this.steps++;
     if (this.opts.qa) {
@@ -1266,6 +1302,23 @@ export class Game {
     mn.objective = m?.current?.kind ?? null;
     mn.hostile = !!this.director?.hostile || (m?.id === 'gauntlet' && m.gauntletBreak <= 0);
     mn.alarm = s.alarm.active;
+    if (mn.used.length !== this.usedInteractables.size) mn.used = [...this.usedInteractables];
+  }
+
+  /** Anfitrión: un invitado quiere usar un objeto de la misión. Solo si existe, sigue sin usar y lo tiene al alcance. */
+  coopGuestInteract(slot: PlayerSlot, id: string): void {
+    const s = this.session;
+    const m = this.mission;
+    if (!s || !m || !this.missionRuns || this.usedInteractables.has(id)) return;
+    const it = s.data.interactables.find((x) => x.id === id);
+    if (!it || !it.action.startsWith('mission:')) return;
+    const f = slot.controller.feet;
+    // El mismo alcance que en su pantalla, con margen por lo que tarda en llegar la petición.
+    if (Math.hypot(it.pos[0] - f.x, it.pos[2] - f.z) > it.radius + 1 || Math.abs(it.pos[1] - f.y) > 2) return;
+    m.onInteract(it.id);
+    this.usedInteractables.add(it.id);
+    if (this.nearInteractable === it) this.nearInteractable = null;
+    this.audio.ui('confirm');
   }
 
   /** El equipo para el HUD: cada jugador con su salud, y la latencia si se es invitado. */
@@ -1561,7 +1614,8 @@ export class Game {
     if (this.peekTimer <= 0) {
       this.peekTimer = 0.1;
       const prev = this.nearInteractable;
-      this.nearInteractable = this.fsm.controlling && this.interactionsAllowed ? s.nearestInteractable(this.camera.yaw, this.usedInteractables) : null;
+      this.nearInteractable =
+        this.fsm.controlling && this.interactionsAllowed ? s.nearestInteractable(this.camera.yaw, this.blockedInteractables(), !!this.coop?.isGuest) : null;
       if (this.nearInteractable !== prev) this.holdT = 0;
       const pi = this.promptIn;
       pi.near = this.nearInteractable;
@@ -1615,7 +1669,7 @@ export class Game {
   qaInteract(): boolean {
     const s = this.session;
     if (!s || !this.fsm.controlling || !this.interactionsAllowed) return false;
-    const it = s.nearestInteractable(this.camera.yaw, this.usedInteractables);
+    const it = s.nearestInteractable(this.camera.yaw, this.blockedInteractables(), !!this.coop?.isGuest);
     if (!it) return false;
     this.nearInteractable = it;
     this.interact(it);

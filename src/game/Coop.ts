@@ -7,11 +7,13 @@ import { FxRecorder } from '../net/fx';
 import type { Link } from '../net/link';
 import { NetGuest } from '../net/NetGuest';
 import { NetHost } from '../net/NetHost';
-import type { MissionNet, RejectReason } from '../net/protocol';
-import { findLocalHost, joinLocal, LocalHost } from '../net/transport/broadcast';
-import { answerInvite, RtcInvite, rtcSupported } from '../net/transport/rtc';
+import type { MissionNet, RejectReason, RejoinTicket } from '../net/protocol';
+import { LOBBY_URL, LOBBY_VERSION } from '../net/config';
+import type { RoomMode } from '../net/lobbyProtocol';
+import { LocalHost } from '../net/transport/broadcast';
+import { iceServers, RoomHost } from '../net/transport/lobby';
+import { RtcInvite } from '../net/transport/rtc';
 import { COOP_TEXT, playerName } from '../text/coop';
-import type { CoopJoinView, CoopScreenApi } from '../ui/coopScreens';
 import type { Game } from './Game';
 import type { LevelSession, SessionDeps } from './LevelSession';
 
@@ -25,8 +27,11 @@ export interface CoopView {
   me: number;
   players: Array<{ id: number; name: string; status: string; you: boolean }>;
   inMatch: boolean;
-  /** Anfitrión: la invitación por código en curso. */
+  /** Anfitrión: su sala en el servicio (código, si está abriéndose, lista o caído, y si es pública). */
+  room: { code: string | null; state: 'connecting' | 'ready' | 'down'; public: boolean };
+  /** Anfitrión: la invitación manual en curso y si está a la vista. */
   invite: { busy: boolean; code: string | null };
+  showManual: boolean;
   answerDraft: string;
   /** Anfitrión: lo que puede elegir. */
   modes: Array<{ id: CoopMode; name: string }>;
@@ -55,6 +60,12 @@ export class Coop {
   mission: MissionId | null = null;
   error: string | null = null;
   answerDraft = '';
+  /** Anfitrión: la invitación manual a la vista. */
+  showManual = false;
+  /** Anfitrión: la sala aparece en la lista pública. */
+  isPublic = true;
+  private room: RoomHost | null = null;
+  private roomState: 'connecting' | 'ready' | 'down' = 'connecting';
   private lobbyIds: number[] = [0];
   private localHost: LocalHost | null = null;
   /** Latido de la red, aparte de los fotogramas: sigue con la pestaña oculta (a ritmo reducido) y en la sala. */
@@ -87,11 +98,25 @@ export class Coop {
       recorder,
       onPlayersChanged: () => coop?.changed(),
       onGuestDied: () => game.coopGuestDied(),
-      onGuestLeft: (id) => game.hud.showToast(COOP_TEXT.left(playerName(id))),
+      onGuestLeft: (id, dropped) => game.hud.showToast(dropped ? COOP_TEXT.dropped(playerName(id)) : COOP_TEXT.left(playerName(id))),
+      onInteract: (slot, id) => game.coopGuestInteract(slot, id),
     });
-    coop = new Coop(game, host, null, recorder);
+    const c = new Coop(game, host, null, recorder);
+    coop = c;
+    // La sala en el servicio: su código para invitar y, si es pública, en la lista.
+    c.room = new RoomHost(LOBBY_URL, LOBBY_VERSION, {
+      code: () => {
+        c.roomState = 'ready';
+        c.changed();
+      },
+      link: (link) => c.host?.accept(link),
+      down: () => {
+        c.roomState = 'down';
+        c.changed();
+      },
+    });
     try {
-      coop.localHost = new LocalHost((link) => coop.host?.accept(link));
+      c.localHost = new LocalHost((link) => c.host?.accept(link));
     } catch {
       // Sin BroadcastChannel solo se puede invitar por código.
     }
@@ -99,11 +124,17 @@ export class Coop {
   }
 
   /** Se une a una sala por un enlace ya abierto (otra pestaña o WebRTC). */
-  static createGuest(game: Game, link: Link): Coop {
+  /**
+   * Se une a una sala por un enlace ya abierto (otra pestaña o WebRTC). `reconnect` abre otro enlace por el mismo
+   * camino (código de sala u otra pestaña): con él, un corte no echa al invitado, que vuelve a su plaza. `rejoin` es
+   * la plaza a recuperar cuando se vuelve tras un corte.
+   */
+  static createGuest(game: Game, link: Link, opts: { reconnect?: () => Promise<Link>; rejoin?: RejoinTicket } = {}): Coop {
     let coop: Coop | null = null;
     const guest = new NetGuest(link, {
       now: () => performance.now(),
       upgrades: new Set(game.profile.upgrades),
+      ...(opts.rejoin ? { rejoin: opts.rejoin } : {}),
       camera: game.camera,
       events: {
         welcome: () => coop?.changed(),
@@ -133,10 +164,15 @@ export class Coop {
         },
         spawned: (revived) => game.coopSpawned(revived),
         results: (r) => game.coopResults(r),
-        closed: (byHost) => coop?.end(byHost ? COOP_TEXT.errors.closed : COOP_TEXT.errors.lost),
+        closed: (byHost) => {
+          if (!coop) return;
+          if (byHost || !opts.reconnect) coop.end(byHost ? COOP_TEXT.errors.closed : COOP_TEXT.errors.lost);
+          else void coop.reconnect(opts.reconnect);
+        },
       },
     });
     coop = new Coop(game, null, guest, new FxRecorder());
+    if (opts.rejoin) game.hud.showToast(COOP_TEXT.reconnected, 2.5);
     return coop;
   }
 
@@ -182,6 +218,7 @@ export class Coop {
     if (this.host) this.host.start(s, level, mission);
     else this.guest?.attach(s, level);
     this.game.updateHiddenTicker();
+    this.changed();
   }
 
   /** El HUD de la misión: en el anfitrión, además envía sus textos a los invitados. */
@@ -206,6 +243,7 @@ export class Coop {
     this.host?.stop();
     this.guest?.detach();
     this.game.updateHiddenTicker();
+    this.changed();
   }
 
   /** Cierra el cooperativo (sale el invitado o cierra la sala el anfitrión). */
@@ -214,6 +252,7 @@ export class Coop {
     this.closed = true;
     clearInterval(this.beat);
     this.invite?.close();
+    this.room?.close();
     this.localHost?.close();
     this.host?.close();
     this.guest?.leave();
@@ -233,7 +272,9 @@ export class Coop {
       me,
       players: ids.map((id) => ({ id, name: playerName(id), status: status(id), you: id === me && (this.isHost || me > 0) })),
       inMatch: this.inMatch,
+      room: { code: this.room?.code ?? null, state: this.roomState, public: this.isPublic },
       invite: { busy: this.inviteBusy, code: this.invite?.code ?? null },
+      showManual: this.showManual,
       answerDraft: this.answerDraft,
       modes: this.isHost ? this.modes() : [],
       error: this.error,
@@ -259,7 +300,8 @@ export class Coop {
     this.error = null;
     this.changed();
     try {
-      this.invite = await RtcInvite.create();
+      // Con el relé del servicio si responde: así conecta también en redes cerradas.
+      this.invite = await RtcInvite.create(await iceServers(LOBBY_URL));
       return this.invite.code;
     } catch {
       this.error = COOP_TEXT.errors.unsupported;
@@ -292,8 +334,18 @@ export class Coop {
     }
   }
 
-  /** Algo cambió en la sala: se vuelve a pintar si está a la vista. */
-  private changed(): void {
+  /** Anfitrión: la sala aparece o no en la lista pública. */
+  setPublic(on: boolean): void {
+    this.isPublic = on;
+    this.changed();
+  }
+
+  /** Algo cambió en la sala: se cuenta al servicio y se vuelve a pintar si está a la vista. */
+  changed(): void {
+    if (this.room && this.host) {
+      const mode: RoomMode = this.inMatch ? (this.mission ?? 'arena') : 'lobby';
+      this.room.update(mode, this.host.lobbyIds.length, this.isPublic);
+    }
     // Quien acaba de entrar, en pantalla (los que se van los avisa el anfitrión al soltarlos).
     const ids = this.host ? this.host.lobbyIds : this.lobbyIds;
     for (const id of ids) if (id !== this.me && !this.seen.has(id) && this.seen.size > 0) this.game.hud.showToast(COOP_TEXT.joined(playerName(id)));
@@ -301,104 +353,33 @@ export class Coop {
     this.game.coopChanged();
   }
 
+  /** Tras un corte: tres intentos de volver por el mismo camino, con la plaza que tenía. Si no, se da por perdida. */
+  private async reconnect(open: () => Promise<Link>): Promise<void> {
+    const ticket = this.guest?.ticket ?? undefined;
+    this.game.hud.showToast(COOP_TEXT.reconnecting, 8);
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      await new Promise((r) => setTimeout(r, 1200 * attempt));
+      // Se fue mientras tanto (salió al título o cerró): no se insiste.
+      if (this.game.coop !== this) return;
+      try {
+        const link = await open();
+        if (this.game.coop !== this) {
+          link.close();
+          return;
+        }
+        this.close();
+        this.game.coop = Coop.createGuest(this.game, link, { reconnect: open, ...(ticket ? { rejoin: ticket } : {}) });
+        return;
+      } catch {
+        // Otro intento.
+      }
+    }
+    this.end(COOP_TEXT.errors.lost);
+  }
+
   private end(message: string): void {
     if (this.closed) return;
     this.close();
     this.game.coopEnded(message);
   }
-}
-
-/**
- * Lo que hacen los botones de las pantallas del cooperativo. Lleva también lo de antes de conectarse: buscar una sala
- * en otra pestaña y unirse con un código (generar la respuesta y esperar a que el anfitrión la pegue).
- */
-export function coopScreenApi(game: Game): CoopScreenApi {
-  const join: CoopJoinView & { cancel: (() => void) | null } = { busy: false, answer: null, error: null, draft: '', cancel: null };
-  const resetJoin = (): void => {
-    join.cancel?.();
-    Object.assign(join, { busy: false, answer: null, error: null, draft: '', cancel: null });
-  };
-  const enterAsGuest = (link: Link): void => {
-    game.coop?.close();
-    game.coopError = null;
-    game.coop = Coop.createGuest(game, link);
-    game.screens.show('coopLobby');
-  };
-  return {
-    view: () => game.coop?.view() ?? null,
-    joinView: () => join,
-    menuError: () => game.coopError,
-    create: () => {
-      game.coop?.close();
-      game.coopError = null;
-      game.coop = Coop.createHost(game);
-      game.screens.show('coopLobby');
-    },
-    joinLocal: () => {
-      game.coopError = null;
-      void findLocalHost().then((room) => {
-        if (room) enterAsGuest(joinLocal(room));
-        else {
-          game.coopError = COOP_TEXT.errors.noLocalHost;
-          if (game.screens.current === 'coop') game.screens.refresh();
-        }
-      });
-    },
-    openJoin: () => {
-      resetJoin();
-      if (!rtcSupported()) game.coopError = COOP_TEXT.errors.unsupported;
-      game.screens.show(rtcSupported() ? 'coopJoin' : 'coop');
-    },
-    joinDraft: (code) => {
-      join.draft = code;
-    },
-    joinCode: (code) => {
-      join.draft = code;
-      join.busy = true;
-      join.error = null;
-      game.screens.refresh();
-      void answerInvite(code)
-        .catch(() => null)
-        .then((r) => {
-          if (game.screens.current !== 'coopJoin') {
-            r?.cancel();
-            return;
-          }
-          if (!r) {
-            join.busy = false;
-            join.error = COOP_TEXT.errors.badCode;
-            game.screens.refresh();
-            return;
-          }
-          join.answer = r.answer;
-          join.cancel = r.cancel;
-          game.screens.refresh();
-          r.link.then(
-            (link) => {
-              join.cancel = null;
-              if (join.answer === r.answer && game.screens.current === 'coopJoin') enterAsGuest(link);
-              else link.close();
-            },
-            () => {
-              if (join.answer !== r.answer) return;
-              Object.assign(join, { busy: false, answer: null, error: COOP_TEXT.errors.rtc, cancel: null });
-              if (game.screens.current === 'coopJoin') game.screens.refresh();
-            },
-          );
-        });
-    },
-    invite: () => void game.coop?.createInvite(),
-    answer: (code) => void game.coop?.acceptAnswer(code),
-    answerDraft: (code) => {
-      if (game.coop) game.coop.answerDraft = code;
-    },
-    start: (mode) => game.coopStart(mode),
-    backToLobby: () => game.coopBackToLobby(),
-    leave: () => game.coopLeave(),
-    back: () => {
-      const from = game.screens.current;
-      resetJoin();
-      game.screens.show(from === 'coopJoin' ? 'coop' : 'title');
-    },
-  };
 }

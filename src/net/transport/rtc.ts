@@ -1,15 +1,17 @@
 import type { Channel, Link } from '../link';
 
 /**
- * Transporte WebRTC entre dos equipos, sin servidor propio. La señalización son dos códigos que los jugadores se pasan
- * a mano (por un chat, por ejemplo): la invitación del anfitrión y la respuesta del invitado. Cada código es la
- * descripción de la conexión (SDP) ya con sus candidatos de red, comprimida.
+ * Transporte WebRTC entre dos equipos: los datos de la partida van directos de uno a otro. Para ponerse de acuerdo
+ * (la señalización) cada lado necesita la descripción de la conexión (SDP) del otro, ya con sus candidatos de red. Se
+ * intercambia por el servicio de salas (`lobby.ts`) o, si no responde, a mano: dos códigos que los jugadores se pasan
+ * por un chat (la invitación del anfitrión y la respuesta del invitado), comprimidos.
  *
- * Para atravesar los routers domésticos se usa un servidor STUN público, que solo le dice a cada equipo cuál es su
- * dirección pública; los datos de la partida van directos de un equipo a otro. Sin servidor de retransmisión (TURN),
- * algunas redes (las de empresas y algunas móviles) no permiten la conexión: el juego lo explica si pasa.
+ * Para atravesar los routers domésticos basta el STUN de Cloudflare, que solo le dice a cada equipo cuál es su
+ * dirección pública. Para las redes que no permiten la conexión directa (algunas de empresa y móviles), el servicio
+ * de salas da además credenciales temporales de un relé TURN.
  */
-const ICE: RTCConfiguration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+/** Servidores ICE sin el servicio de salas: solo STUN. */
+export const DEFAULT_ICE: RTCIceServer[] = [{ urls: 'stun:stun.cloudflare.com:3478' }];
 const PREFIX = 'EXC1.';
 /** Tope de un código pegado (caracteres): una descripción real comprimida ocupa bastante menos. */
 const MAX_CODE = 12_000;
@@ -143,32 +145,61 @@ export async function unpack(code: string, kind: 'o' | 'a'): Promise<string | nu
   }
 }
 
-/** Una invitación del anfitrión para un invitado (una por invitado). */
+/** La oferta del anfitrión para un invitado: su descripción y cómo aceptar la respuesta. */
+export interface Offer {
+  sdp: string;
+  /** La respuesta del invitado: el enlace, cuando la conexión se abra. Falla si no conecta. */
+  accept(answerSdp: string): Promise<Link>;
+  close(): void;
+}
+
+/** Anfitrión: prepara la oferta para un invitado (una por invitado). */
+export async function createOffer(ice: RTCIceServer[] = DEFAULT_ICE): Promise<Offer> {
+  const pc = new RTCPeerConnection({ iceServers: ice });
+  const ch = channels(pc);
+  await pc.setLocalDescription(await pc.createOffer());
+  await gathered(pc);
+  return {
+    sdp: pc.localDescription!.sdp,
+    accept: async (answerSdp) => {
+      await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
+      return opened(new RtcLink(pc, ch.ctl, ch.sim), ch.ctl, pc);
+    },
+    close: () => pc.close(),
+  };
+}
+
+/** Invitado: responde a la oferta del anfitrión. El enlace llega cuando el anfitrión acepta la respuesta. */
+export async function answerOffer(offerSdp: string, ice: RTCIceServer[] = DEFAULT_ICE): Promise<{ sdp: string; link: Promise<Link>; cancel: () => void }> {
+  const pc = new RTCPeerConnection({ iceServers: ice });
+  const ch = channels(pc);
+  await pc.setRemoteDescription({ type: 'offer', sdp: offerSdp });
+  await pc.setLocalDescription(await pc.createAnswer());
+  await gathered(pc);
+  return { sdp: pc.localDescription!.sdp, link: opened(new RtcLink(pc, ch.ctl, ch.sim), ch.ctl, pc), cancel: () => pc.close() };
+}
+
+/** Una invitación a mano (sin servicio de salas): la oferta del anfitrión hecha código. */
 export class RtcInvite {
   private constructor(
-    private readonly pc: RTCPeerConnection,
-    private readonly ch: { ctl: RTCDataChannel; sim: RTCDataChannel },
+    private readonly offer: Offer,
     readonly code: string,
   ) {}
 
-  static async create(): Promise<RtcInvite> {
-    const pc = new RTCPeerConnection(ICE);
-    const ch = channels(pc);
-    await pc.setLocalDescription(await pc.createOffer());
-    await gathered(pc);
-    return new RtcInvite(pc, ch, await pack('o', pc.localDescription!.sdp));
+  static async create(ice: RTCIceServer[] = DEFAULT_ICE): Promise<RtcInvite> {
+    const offer = await createOffer(ice);
+    return new RtcInvite(offer, await pack('o', offer.sdp));
   }
 
   /** Pega la respuesta del invitado: el enlace, cuando la conexión se abra. Falla si el código no vale o no conecta. */
   async accept(answer: string): Promise<Link> {
     const sdp = await unpack(answer, 'a');
     if (!sdp) throw new Error('bad-code');
-    await this.pc.setRemoteDescription({ type: 'answer', sdp });
-    return opened(new RtcLink(this.pc, this.ch.ctl, this.ch.sim), this.ch.ctl, this.pc);
+    return this.offer.accept(sdp);
   }
 
   close(): void {
-    this.pc.close();
+    this.offer.close();
   }
 }
 
@@ -176,14 +207,12 @@ export class RtcInvite {
  * El invitado pega la invitación: su respuesta (para el anfitrión) y el enlace, que llega cuando el anfitrión pega la
  * respuesta. Null si la invitación no es un código válido.
  */
-export async function answerInvite(code: string): Promise<{ answer: string; link: Promise<Link>; cancel: () => void } | null> {
+export async function answerInvite(
+  code: string,
+  ice: RTCIceServer[] = DEFAULT_ICE,
+): Promise<{ answer: string; link: Promise<Link>; cancel: () => void } | null> {
   const sdp = await unpack(code, 'o');
   if (!sdp) return null;
-  const pc = new RTCPeerConnection(ICE);
-  const ch = channels(pc);
-  await pc.setRemoteDescription({ type: 'offer', sdp });
-  await pc.setLocalDescription(await pc.createAnswer());
-  await gathered(pc);
-  const answer = await pack('a', pc.localDescription!.sdp);
-  return { answer, link: opened(new RtcLink(pc, ch.ctl, ch.sim), ch.ctl, pc), cancel: () => pc.close() };
+  const r = await answerOffer(sdp, ice);
+  return { answer: await pack('a', r.sdp), link: r.link, cancel: r.cancel };
 }

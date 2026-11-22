@@ -1,5 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": ["server/salas/src/worker.ts"],
   "ignoreExportsUsedInFile": true,
   "ignoreBinaries": ["ffmpeg"]
 }

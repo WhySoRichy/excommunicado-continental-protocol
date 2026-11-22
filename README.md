@@ -38,7 +38,7 @@ Eres el Huésped, un asesino retirado al que han vuelto a llamar. El hotel Conti
 | **Muelle 9** | Contenedores apilados con tiradores, tres cargamentos que destruir y la huida en bote |
 | **Torre Meridian** | Tres azoteas a distinta altura, el Juez con fases y 45 segundos para escapar |
 | **Gauntlet** | Oleadas infinitas en el vestíbulo, una sola vida y un top 10 local |
-| **Cooperativo** | Hasta cuatro jugadores en la arena o en cualquier contrato. Uno abre la sala y los demás entran con un código (conexión directa, sin servidor) o desde otra pestaña del mismo equipo |
+| **Cooperativo** | Hasta cuatro jugadores en la arena o en cualquier contrato. Uno abre la sala y los demás entran con su código de cinco letras, desde la lista de salas públicas o desde otra pestaña del mismo equipo; la partida va directa entre los equipos. Quien se corta vuelve solo a su plaza |
 
 Cada contrato termina con un **rango de D a S** (tiempo, precisión, daño recibido, variedad y civiles). Los **marcadores de sangre** hacen de vidas, y las monedas se gastan en mejoras: cargador extendido, silenciador, trajes balísticos, escopeta y más. Hay 16 logros.
 
@@ -102,7 +102,7 @@ El navegador se abre en http://localhost:4173. La guía completa, con instalaci�
 - **Three.js 0.187** para el render: personajes low-poly facetados y procedurales (cuerpo, cara, pelo y ropa generados por código, con sombreado plano) como un solo `SkinnedMesh`, rim light Fresnel, IBL, sombras y resolución dinámica. Los neones y carteles van en HDR y alimentan un bloom con viñeta; los exteriores tienen un cielo nocturno con la silueta de la ciudad generado en un canvas.
 - **Rapier 0.21** para la física: el `KinematicCharacterController` mueve las cápsulas de jugador, enemigos y civiles.
 - **Bucle a paso fijo de 60 Hz** con interpolación de render y una sola máquina de estados de juego.
-- **Cooperativo en red con anfitrión con autoridad**: cada invitado envía su paso y recibe 20 instantáneas por segundo, que dibuja interpoladas. Su disparo se predice con la misma semilla que usará el anfitrión, y el anfitrión lo resuelve contra lo que el invitado tenía en pantalla (compensación de latencia). WebRTC con la señalización en dos códigos que se copian, y todo lo que llega por la red se valida.
+- **Cooperativo en red con anfitrión con autoridad**: cada invitado envía su paso y recibe 20 instantáneas por segundo, que dibuja interpoladas. Su disparo se predice con la misma semilla que usará el anfitrión, y el anfitrión lo resuelve contra lo que el invitado tenía en pantalla (compensación de latencia). WebRTC con un servicio de salas propio en el plan gratuito de Cloudflare (código de sala de cinco letras, salas públicas, relé para las redes cerradas) y, si no responde, con la señalización en dos códigos que se copian; todo lo que llega por la red se valida.
 - **Niveles como datos**: mallas y colliders salen de la misma fuente, y la navegación (rejilla 2.5D con A*) se genera a partir de ellos.
 - **Audio 100 % Web Audio**: disparos, ambientes, sirena y música adaptativa que sube con el combate. No hay ningún archivo de sonido.
 - **Todo el contenido es procedural**: no hay modelos, texturas ni música de terceros.
@@ -121,6 +121,8 @@ src/
   text/       catálogo de textos
   audio/      motor de audio y música
   render/     renderer, materiales, efectos y resolución dinámica
+server/
+  salas/      servicio de salas del cooperativo (Cloudflare, plan gratuito)
 ```
 
 Los detalles, decisiones técnicas y convenciones están en [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md). Hacia dónde va el juego y qué promete a quien lo juega (nada de pagar por ventaja): [visión](docs/VISION.md). Para retomar o ampliar el proyecto: [guía de desarrollo](docs/CONTRIBUIR.md), [roadmap](docs/ROADMAP.md) y [plan de escalabilidad](docs/ESCALABILIDAD.md).
@@ -129,8 +131,8 @@ Los detalles, decisiones técnicas y convenciones están en [docs/ARQUITECTURA.m
 
 | | |
 |---|---|
-| **213 pruebas unitarias** (Vitest) | Una partida cooperativa en red sin pantalla (anfitrión e invitado con latencia, variación y pérdida), su protocolo y la compensación de latencia, simulación de combate y misión sin pantalla, cinemática inversa de piernas y brazos del rig, suavizado de la animación sin tirones, movimiento sin pasos perdidos, asomarse por los bordes de una cobertura, daño, estilo, rango (incluida una prueba de coherencia con 500 partidas al azar), economía, IA de los enemigos, navegación de cada nivel, guardado, reasignación de teclas, oleadas, música y superficie bajo los pies |
-| **59 pruebas e2e** (Playwright) | El juego real, compilado como en producción más la API de pruebas: el cooperativo con dos pestañas que juegan juntas (también por WebRTC y con la del anfitrión oculta), movimiento sin atravesar paredes ni atascarse (también con picos de lag), animación sin tirones medida articulación por articulación, combate contra varios enemigos, los cuatro contratos y el Gauntlet de principio a fin, tutorial, ajustes persistentes, mando, claridad visual, mezcla de audio, rendimiento (también que cambiar de nivel no deje recursos en la GPU) y robustez ante un nivel que no se descarga. También comprueban que la versión publicada no incluya la API de pruebas ni los trucos de depuración, y que lleve su política de seguridad de contenido. Una prueba de humo comprueba además el juego en Firefox |
+| **222 pruebas unitarias** (Vitest) | El servicio de salas, una partida cooperativa en red sin pantalla (anfitrión e invitado con latencia, variación y pérdida), su protocolo y la compensación de latencia, simulación de combate y misión sin pantalla, cinemática inversa de piernas y brazos del rig, suavizado de la animación sin tirones, movimiento sin pasos perdidos, asomarse por los bordes de una cobertura, daño, estilo, rango (incluida una prueba de coherencia con 500 partidas al azar), economía, IA de los enemigos, navegación de cada nivel, guardado, reasignación de teclas, oleadas, música y superficie bajo los pies |
+| **62 pruebas e2e** (Playwright) | El juego real, compilado como en producción más la API de pruebas: el cooperativo con dos pestañas que juegan juntas (también por WebRTC y con la del anfitrión oculta), movimiento sin atravesar paredes ni atascarse (también con picos de lag), animación sin tirones medida articulación por articulación, combate contra varios enemigos, los cuatro contratos y el Gauntlet de principio a fin, tutorial, ajustes persistentes, mando, claridad visual, mezcla de audio, rendimiento (también que cambiar de nivel no deje recursos en la GPU) y robustez ante un nivel que no se descarga. También comprueban que la versión publicada no incluya la API de pruebas ni los trucos de depuración, y que lleve su política de seguridad de contenido. Una prueba de humo comprueba además el juego en Firefox |
 | **CI** | Cada push a `main` pasa el linter, audita las dependencias, ejecuta las pruebas y publica el juego en GitHub Pages |
 
 ### Rendimiento

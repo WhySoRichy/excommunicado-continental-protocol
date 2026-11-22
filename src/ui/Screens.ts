@@ -7,11 +7,24 @@ import { canBuy, SHOP } from '../hub/economy';
 import type { Dialogue } from '../hub/dialogue';
 import { MISSION_ORDER, type MissionDef, type MissionId, MISSIONS } from '../missions/types';
 import { COOP_TEXT } from '../text/coop';
-import { buildCoopJoin, buildCoopLobby, buildCoopMenu, type CoopScreenApi } from './coopScreens';
+import { buildCoopBrowse, buildCoopJoin, buildCoopLobby, buildCoopMenu, type CoopScreenApi } from './coopScreens';
 import { button, h, keycap } from './dom';
 
 export type ScreenId =
-  'title' | 'confirmNew' | 'pause' | 'controls' | 'settings' | 'dialog' | 'shop' | 'contracts' | 'briefing' | 'results' | 'coop' | 'coopJoin' | 'coopLobby';
+  | 'title'
+  | 'confirmNew'
+  | 'pause'
+  | 'controls'
+  | 'settings'
+  | 'dialog'
+  | 'shop'
+  | 'contracts'
+  | 'briefing'
+  | 'results'
+  | 'coop'
+  | 'coopJoin'
+  | 'coopBrowse'
+  | 'coopLobby';
 
 type SettingsTab = 'controls' | 'video' | 'access' | 'keys';
 type BoolSetting = 'invertY' | 'aimToggle' | 'dynamicResolution' | 'hints';
@@ -232,6 +245,8 @@ export class Screens {
         return buildCoopMenu(this.cb.coop);
       case 'coopJoin':
         return buildCoopJoin(this.cb.coop);
+      case 'coopBrowse':
+        return buildCoopBrowse(this.cb.coop);
       case 'coopLobby':
         return buildCoopLobby(this.cb.coop);
     }

@@ -18,7 +18,7 @@ import { FxRecorder } from '../../src/net/fx';
 import { TestNetwork, type TestNetworkOptions } from '../../src/net/link';
 import { HOST_TIMEOUT, NetGuest } from '../../src/net/NetGuest';
 import { type HostWorld, NetHost, PEER_TIMEOUT } from '../../src/net/NetHost';
-import { FX } from '../../src/net/protocol';
+import { FX, type RejoinTicket } from '../../src/net/protocol';
 import { loadRapier, PhysicsWorld, type Rapier } from '../../src/physics/Physics';
 
 /**
@@ -87,7 +87,14 @@ function hostSide(level: LevelData, net: TestNetwork) {
   };
   const deaths: number[] = [];
   const left: number[] = [];
-  const host = new NetHost({ now: () => net.now, recorder, onGuestDied: (sl) => deaths.push(sl.id), onGuestLeft: (id) => left.push(id) });
+  const interactions: Array<{ id: number; object: string }> = [];
+  const host = new NetHost({
+    now: () => net.now,
+    recorder,
+    onGuestDied: (sl) => deaths.push(sl.id),
+    onGuestLeft: (id) => left.push(id),
+    onInteract: (slot, object) => interactions.push({ id: slot.id, object }),
+  });
   host.start(hw, level.id, null);
   const step = (): void => {
     r.step(FIXED_DT, true);
@@ -97,11 +104,17 @@ function hostSide(level: LevelData, net: TestNetwork) {
     physics.step();
     host.endStep();
   };
-  return { physics, enemies, roster: r, local, host, recorder, step, deaths, left };
+  return { physics, enemies, roster: r, local, host, recorder, step, deaths, left, interactions };
 }
 
 /** El mundo del invitado: su jugador (lo mueve él) y réplicas de todo lo demás. */
-function guestSide(level: LevelData, link: ReturnType<TestNetwork['pair']>[1], net: TestNetwork, upgrades: ReadonlySet<UpgradeId> = new Set()) {
+function guestSide(
+  level: LevelData,
+  link: ReturnType<TestNetwork['pair']>[1],
+  net: TestNetwork,
+  upgrades: ReadonlySet<UpgradeId> = new Set(),
+  rejoin?: RejoinTicket,
+) {
   const physics = new PhysicsWorld(R);
   buildLevelPhysics(level, physics);
   physics.step();
@@ -125,6 +138,7 @@ function guestSide(level: LevelData, link: ReturnType<TestNetwork['pair']>[1], n
   const guest = new NetGuest(link, {
     now: () => net.now,
     upgrades,
+    ...(rejoin ? { rejoin } : {}),
     camera: STILL_CAMERA,
     events: {
       spawned: () => events.spawned++,
@@ -377,6 +391,84 @@ describe('cooperativo en red sin pantalla', () => {
     c.net.advance(200);
     expect(c.g.events.closed).toBe(1);
     expect(c.g.events.byHost).toBe(true);
+  });
+
+  it('el invitado pide usar un objeto de la misión: llega al anfitrión con su plaza, sin avalanchas y nunca caído', () => {
+    const { h, g, tick, net } = coop();
+    g.guest.requestInteract('alarm-panel');
+    g.guest.requestInteract('alarm-panel');
+    tick(5);
+    expect(h.interactions, 'una sola: la segunda llega antes de medio segundo').toEqual([{ id: 1, object: 'alarm-panel' }]);
+    net.advance(600);
+    g.guest.requestInteract('cargo-1');
+    tick(5);
+    expect(h.interactions.at(-1)).toEqual({ id: 1, object: 'cargo-1' });
+    // Caído, no.
+    const remote = h.roster.byId(1)!;
+    const enemy = h.enemies.spawnAt('heavy', remote.controller.feet.clone().setZ(remote.controller.feet.z - 4), 0);
+    h.physics.step();
+    remote.combat.takeHit(enemy, 1000, remote.ctx);
+    net.advance(600);
+    g.guest.requestInteract('cargo-2');
+    tick(5);
+    expect(h.interactions).toHaveLength(2);
+  });
+
+  it('el anfitrión coloca a un invitado con autoridad y su movimiento sigue valiendo desde allí', () => {
+    const { h, g, tick } = coop();
+    const before = g.events.spawned;
+    expect(h.host.placeGuest(1, new Vector3(5, 0, 2), Math.PI)).toBe(true);
+    tick(10);
+    expect(g.events.spawned).toBe(before + 1);
+    expect(g.local.controller.feet.distanceTo(new Vector3(5, 0, 2))).toBeLessThan(0.1);
+    g.local.intent.moveX = 1;
+    tick(30);
+    g.local.intent.moveX = 0;
+    tick(20);
+    expect(h.roster.byId(1)!.controller.feet.distanceTo(g.local.controller.feet), 'sin rechazos tras el traslado').toBeLessThan(0.05);
+  });
+
+  it('tras un corte, el invitado vuelve a su plaza con su combate; con una contraseña falsa, no', () => {
+    const { h, g, tick, net } = coop();
+    const remote = h.roster.byId(1)!;
+    const before = remote.combat;
+    before.style.score = 1234;
+    before.vitals.health = 37;
+    const ticket = g.guest.ticket!;
+    expect(ticket.id).toBe(1);
+    // Se corta sin despedirse: el anfitrión suelta su personaje pero le guarda la plaza.
+    g.guest.disconnect();
+    net.advance(100);
+    tick(3);
+    expect(h.left).toEqual([1]);
+    expect(h.roster.byId(1)).toBeNull();
+
+    // Un intruso con una contraseña inventada no recupera nada: recibe otra plaza.
+    const [hostEnd2, intruderEnd] = net.pair();
+    h.host.accept(hostEnd2);
+    const intruder = guestSide(arena, intruderEnd, net, new Set(), { id: 1, token: 'abcdefghijkm2345' });
+    for (let i = 0; i < 30 && intruder.guest.id === 0; i++) net.advance(MS);
+    expect(intruder.guest.id, 'el 1 está guardado para su dueño').toBe(2);
+    intruder.guest.leave();
+    net.advance(100);
+
+    // Vuelve con su contraseña: la misma plaza y el mismo combate (salud y estilo incluidos).
+    const [hostEnd3, backEnd] = net.pair();
+    h.host.accept(hostEnd3);
+    const back = guestSide(arena, backEnd, net, new Set(), ticket);
+    for (let i = 0; i < 30 && back.guest.id === 0; i++) net.advance(MS);
+    expect(back.guest.id).toBe(1);
+    back.enter();
+    for (let i = 0; i < 60 && back.events.spawned === 0; i++) {
+      h.step();
+      back.step();
+      net.advance(MS);
+    }
+    const again = h.roster.byId(1)!;
+    expect(again.combat, 'su combate de antes').toBe(before);
+    expect(again.combat.style.score).toBe(1234);
+    expect(again.combat.vitals.health).toBe(37);
+    expect(back.guest.ticket!.token, 'y una contraseña nueva').not.toBe(ticket.token);
   });
 
   it('una instantánea por cada tres pasos y entradas que caben en un canal modesto', () => {

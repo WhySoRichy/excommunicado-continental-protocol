@@ -18,7 +18,7 @@ import type { MissionId } from '../missions/types';
  */
 
 /** Versión del protocolo: cambia con cualquier mensaje. Con versiones distintas no se juega juntos. */
-export const PROTOCOL = 1;
+export const PROTOCOL = 2;
 /** Jugadores por partida (anfitrión incluido). */
 export const MAX_PLAYERS = 4;
 /** Pasos de simulación entre instantáneas: 3 a 60 Hz son 20 por segundo. */
@@ -384,10 +384,12 @@ export interface MissionNet {
   /** El Continental es zona hostil (música de tensión). */
   hostile: boolean;
   alarm: boolean;
+  /** Objetos de la misión ya usados (por cualquiera): ya no se pueden volver a usar. */
+  used: string[];
 }
 
 export function emptyMissionNet(): MissionNet {
-  return { beacon: null, markersUsed: 0, markersTotal: 0, objective: null, hostile: false, alarm: false };
+  return { beacon: null, markersUsed: 0, markersTotal: 0, objective: null, hostile: false, alarm: false, used: [] };
 }
 
 /** Lo que solo le importa a un invitado de sí mismo: su salud, su estilo y su munición tal como la ve el anfitrión. */
@@ -554,13 +556,13 @@ function writeMission(m: MissionNet): number[] {
   ];
 }
 
-function readMission(v: unknown): MissionNet {
+function readMission(v: unknown): Omit<MissionNet, 'used'> {
   const r = tuple(v, 9);
   const has = r.bool();
   const x = r.num(-POS, POS);
   const y = r.num(-POS, POS);
   const z = r.num(-POS, POS);
-  const m: MissionNet = {
+  const m: Omit<MissionNet, 'used'> = {
     beacon: has ? { x, y, z } : null,
     markersUsed: r.int(0, 99),
     markersTotal: r.int(0, 99),
@@ -671,11 +673,18 @@ export type RejectReason = 'version' | 'full' | 'closed';
 
 /** Mensajes fiables del invitado al anfitrión. */
 export type GuestCtl =
-  { t: 'hello'; v: number; tables: string; upgrades: UpgradeId[] } | { t: 'ready'; level: LevelId } | { t: 'ping'; n: number } | { t: 'bye' };
+  /** `rejoin`: vuelve tras un corte con la plaza que tenía (su id y la contraseña que le dio el anfitrión). */
+  | { t: 'hello'; v: number; tables: string; upgrades: UpgradeId[]; rejoin?: RejoinTicket }
+  | { t: 'ready'; level: LevelId }
+  /** Usar un objeto de la misión (terminal, panel): el anfitrión comprueba que esté a su alcance. */
+  | { t: 'interact'; id: string }
+  | { t: 'ping'; n: number }
+  | { t: 'bye' };
 
 /** Mensajes fiables del anfitrión a un invitado. */
 export type HostCtl =
-  | { t: 'welcome'; id: number }
+  /** Su plaza y la contraseña para recuperarla si se corta la conexión. */
+  | { t: 'welcome'; id: number; token: string }
   | { t: 'reject'; why: RejectReason }
   /** La sala: quién está (los ids de los jugadores) y el nivel en juego (null: en la sala, sin partida). */
   | { t: 'lobby'; ids: number[]; level: LevelId | null }
@@ -704,7 +713,12 @@ export function decodeGuestCtl(s: string): GuestCtl | null {
           if (!UPGRADES.includes(id)) throw MALFORMED;
           return id;
         });
-        return { t: 'hello', v: intOf(o.v, 0, 1e6), tables: str(o.tables, 32), upgrades: ups };
+        const hello: GuestCtl = { t: 'hello', v: intOf(o.v, 0, 1e6), tables: str(o.tables, 32), upgrades: ups };
+        if (o.rejoin !== undefined) {
+          const r = obj(o.rejoin);
+          hello.rejoin = { id: intOf(r.id, 1, MAX_PLAYERS - 1), token: token(r.token) };
+        }
+        return hello;
       }
       case 'ready': {
         const level = str(o.level, 16) as LevelId;
@@ -713,12 +727,33 @@ export function decodeGuestCtl(s: string): GuestCtl | null {
       }
       case 'ping':
         return { t: 'ping', n: intOf(o.n, 0, 2 ** 31) };
+      case 'interact':
+        return { t: 'interact', id: objectId(o.id) };
       case 'bye':
         return { t: 'bye' };
       default:
         throw MALFORMED;
     }
   });
+}
+
+/** Contraseña para recuperar una plaza: la da el anfitrión y solo él la comprueba. */
+export interface RejoinTicket {
+  id: number;
+  token: string;
+}
+
+function token(v: unknown): string {
+  const s = str(v, 32);
+  if (!/^[a-z0-9]{12,32}$/.test(s)) throw MALFORMED;
+  return s;
+}
+
+/** Id de un objeto del nivel: corto y con los caracteres que usan los datos de los niveles. */
+function objectId(v: unknown): string {
+  const id = str(v, 40);
+  if (!/^[a-zA-Z0-9_:#-]+$/.test(id)) throw MALFORMED;
+  return id;
 }
 
 export function encodeHostCtl(m: HostCtl): string {
@@ -737,7 +772,7 @@ export function decodeHostCtl(s: string): HostCtl | null {
     const o = obj(v);
     switch (o.t) {
       case 'welcome':
-        return { t: 'welcome', id: intOf(o.id, 1, MAX_PLAYERS - 1) };
+        return { t: 'welcome', id: intOf(o.id, 1, MAX_PLAYERS - 1), token: token(o.token) };
       case 'reject': {
         const why = str(o.why, 16) as RejectReason;
         if (why !== 'version' && why !== 'full' && why !== 'closed') throw MALFORMED;
@@ -855,6 +890,7 @@ export function encodeSnapshotBody(s: Omit<Snapshot, 'owner'>): string {
     u: s.pickups.map((p) => [p.id, ix(PICKUP_KINDS, p.kind), q(p.x, 100), q(p.y, 100), q(p.z, 100)]),
     f: s.fx.slice(0, MAX_FX),
     m: writeMission(s.mission),
+    n: s.mission.used,
   });
 }
 
@@ -879,7 +915,7 @@ export function decodeSnapshot(s: string): Snapshot | null {
         return p;
       }),
       fx: list(o.f, MAX_FX).map(readFx),
-      mission: readMission(o.m),
+      mission: { ...readMission(o.m), used: o.n === undefined ? [] : list(o.n, 64).map(objectId) },
       owner: o.o === undefined ? null : readOwner(o.o),
     };
   });

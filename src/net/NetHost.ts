@@ -65,12 +65,16 @@ export interface HostOptions {
   onPlayersChanged?(): void;
   /** Un invitado cayó (la misión gasta un marcador; si no quedan, la partida termina). */
   onGuestDied?(slot: PlayerSlot): void;
-  /** Un invitado se fue: su id (para avisarlo en pantalla). */
-  onGuestLeft?(id: number): void;
+  /** Un invitado se fue (`dropped`: se cortó sin despedirse y su plaza queda guardada un rato). */
+  onGuestLeft?(id: number, dropped: boolean): void;
+  /** Un invitado quiere usar un objeto de la misión: el juego comprueba que pueda (alcance, que siga sin usar). */
+  onInteract?(slot: PlayerSlot, id: string): void;
 }
 
 /** Sin noticias de un invitado durante este tiempo (ms), se le da por ido. */
 export const PEER_TIMEOUT = 8000;
+/** Lo que se guarda la plaza de quien se corta sin despedirse (ms). */
+export const REJOIN_WINDOW = 60_000;
 /** Velocidad horizontal máxima creíble (m/s): por encima de la de la plancha y la del deslizamiento. */
 const MAX_SPEED = MOVE.maxHorizontal + 2;
 /** Subida máxima por paso (m/s) y margen para el vault y el encaramarse. */
@@ -92,6 +96,12 @@ interface Peer {
   id: number;
   state: PeerState;
   upgrades: ReadonlySet<UpgradeId>;
+  /** Contraseña para recuperar la plaza tras un corte. */
+  token: string;
+  /** El combate que tenía antes del corte (salud, munición, estilo): lo recupera al volver. */
+  restore: PlayerCombat | null;
+  /** Se despidió (`bye`): su plaza no se guarda. */
+  leaving: boolean;
   slot: PlayerSlot | null;
   readonly queue: InputFrame[];
   lastQueued: number;
@@ -106,6 +116,8 @@ interface Peer {
   readonly accepted: Vector3;
   sinceAccepted: number;
   rejected: number;
+  /** Última petición de usar un objeto (ms): una cada medio segundo como mucho. */
+  lastInteract: number;
 }
 
 const _spawn = new Vector3();
@@ -125,6 +137,10 @@ const _center = new Vector3();
  */
 export class NetHost {
   private readonly peers: Peer[] = [];
+  /** Plazas de quien se cortó sin despedirse: su id, su contraseña, hasta cuándo y su combate. */
+  private readonly reserved: Array<{ id: number; token: string; until: number; combat: PlayerCombat | null }> = [];
+  /** Azar de las contraseñas (cada partida, distinto: la semilla sale del reloj). */
+  private readonly tokenRng = new Rng((Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0);
   private world: HostWorld | null = null;
   private level: LevelId | null = null;
   private mission: MissionId | null = null;
@@ -166,6 +182,9 @@ export class NetHost {
       id: 0,
       state: 'hello',
       upgrades: new Set(),
+      token: '',
+      restore: null,
+      leaving: false,
       slot: null,
       queue: [],
       lastQueued: -1,
@@ -178,6 +197,7 @@ export class NetHost {
       accepted: new Vector3(),
       sinceAccepted: 0,
       rejected: 0,
+      lastInteract: -1e9,
     };
     this.peers.push(peer);
     link.onMessage = (ch, data) => {
@@ -245,6 +265,7 @@ export class NetHost {
   /** Latido (también en la sala): suelta a quien lleva demasiado sin dar señales (una pestaña cerrada, un corte). */
   tick(): void {
     const now = this.opts.now();
+    for (let i = this.reserved.length - 1; i >= 0; i--) if (this.reserved[i]!.until <= now) this.reserved.splice(i, 1);
     for (const p of this.peers.slice()) if (now - p.lastHeard > PEER_TIMEOUT) this.drop(p);
   }
 
@@ -282,6 +303,15 @@ export class NetHost {
     };
   }
 
+  /** Coloca a un invitado con autoridad (como al reaparecer): para la misión, para las pruebas. */
+  placeGuest(id: number, at: Vector3, yaw: number): boolean {
+    const p = this.peers.find((x) => x.id === id && x.slot);
+    if (!p?.slot) return false;
+    p.slot.controller.revive(at, yaw);
+    this.placePeer(p, at, yaw);
+    return true;
+  }
+
   /** La misión terminó: los resultados para todos. */
   sendResults(r: CoopResults): void {
     this.broadcast({ t: 'end', r });
@@ -298,15 +328,21 @@ export class NetHost {
           this.reject(p, 'version');
           return;
         }
-        const id = this.freeId();
+        // Vuelve tras un corte: su plaza, si la contraseña es la buena y aún no ha caducado.
+        const now = this.opts.now();
+        const back = m.rejoin ? this.reserved.find((r) => r.id === m.rejoin!.id && r.token === m.rejoin!.token && r.until > now) : undefined;
+        if (back) this.reserved.splice(this.reserved.indexOf(back), 1);
+        const id = back ? back.id : this.freeId();
         if (id < 0) {
           this.reject(p, 'full');
           return;
         }
         p.id = id;
         p.upgrades = new Set(m.upgrades);
+        p.restore = back?.combat ?? null;
+        p.token = this.newToken();
         p.state = 'lobby';
-        this.send(p, { t: 'welcome', id });
+        this.send(p, { t: 'welcome', id, token: p.token });
         this.broadcastLobby();
         if (this.level) {
           p.state = 'loading';
@@ -320,7 +356,15 @@ export class NetHost {
       case 'ping':
         this.send(p, { t: 'pong', n: m.n });
         return;
+      case 'interact': {
+        const now = this.opts.now();
+        if (p.state !== 'playing' || !p.slot || p.slot.combat.dead || now - p.lastInteract < 500) return;
+        p.lastInteract = now;
+        this.opts.onInteract?.(p.slot, m.id);
+        return;
+      }
       case 'bye':
+        p.leaving = true;
         this.drop(p);
         return;
     }
@@ -342,7 +386,12 @@ export class NetHost {
   private spawnPeer(p: Peer, w: HostWorld): void {
     const r = w.roster.respawn;
     const at = w.spawnNear(r.pos, r.yaw, p.id, _spawn);
-    const { controller, combat } = w.createPlayer(at, r.yaw, p.upgrades);
+    const made = w.createPlayer(at, r.yaw, p.upgrades);
+    const controller = made.controller;
+    // Si vuelve tras un corte, con el combate que tenía (salud, munición, estilo); si había caído, ya repuesto.
+    const combat = p.restore ?? made.combat;
+    p.restore = null;
+    if (combat.dead) combat.respawnReset();
     combat.allowFocus = false;
     combat.listener = this.listenerFor(p);
     const ports = this.opts.recorder.tee(p.id, w.ports.vfx, remoteAudio(w.ports.audio, controller));
@@ -508,9 +557,17 @@ export class NetHost {
   }
 
   // ================================================================ utilidades
+  /** El primer id libre: ni en uso ni guardado para alguien que se cortó. */
   private freeId(): number {
-    for (let id = 1; id < MAX_PLAYERS; id++) if (!this.peers.some((p) => p.id === id)) return id;
+    const now = this.opts.now();
+    for (let id = 1; id < MAX_PLAYERS; id++) if (!this.peers.some((p) => p.id === id) && !this.reserved.some((r) => r.id === id && r.until > now)) return id;
     return -1;
+  }
+
+  private newToken(): string {
+    let s = '';
+    for (let i = 0; i < 16; i++) s += 'abcdefghijkmnpqrstuvwxyz23456789'[Math.floor(this.tokenRng.next() * 32)];
+    return s;
   }
 
   private reject(p: Peer, why: 'version' | 'full'): void {
@@ -522,11 +579,14 @@ export class NetHost {
     const i = this.peers.indexOf(p);
     if (i < 0) return;
     this.peers.splice(i, 1);
+    // Se cortó sin despedirse: su plaza y su combate se guardan un rato por si vuelve.
+    const dropped = p.id > 0 && !p.leaving && !this.closed && p.token !== '';
+    if (dropped) this.reserved.push({ id: p.id, token: p.token, until: this.opts.now() + REJOIN_WINDOW, combat: p.slot?.combat ?? p.restore });
     if (p.slot && this.world) this.world.roster.remove(p.slot);
     p.slot = null;
     p.link.close();
     if (p.id > 0) {
-      this.opts.onGuestLeft?.(p.id);
+      this.opts.onGuestLeft?.(p.id, dropped);
       this.broadcastLobby();
     }
   }

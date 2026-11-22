@@ -1761,3 +1761,64 @@ body {
 .team-ping:empty {
   display: none;
 }
+
+/* Código de la sala del anfitrión y lista de salas públicas. */
+.coop-roomcode {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.5rem 0.9rem;
+  background: rgba(212, 175, 55, 0.08);
+  border: 1px solid rgba(212, 175, 55, 0.45);
+  border-radius: 6px;
+}
+
+.coop-roomcode-value {
+  font:
+    700 1.6rem ui-monospace,
+    'Cascadia Mono',
+    Consolas,
+    monospace;
+  letter-spacing: 0.3em;
+  color: var(--c-gold);
+}
+
+.coop-rooms {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.coop-room {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.45rem 0.75rem;
+  background: rgba(255, 255, 255, 0.04);
+  border-left: 3px solid var(--c-gold);
+  border-radius: 4px;
+}
+
+.coop-room-code {
+  font:
+    700 0.95rem ui-monospace,
+    'Cascadia Mono',
+    Consolas,
+    monospace;
+  letter-spacing: 0.18em;
+  color: var(--c-gold-soft);
+}
+
+.coop-room-seats {
+  font-size: 0.85rem;
+  color: var(--c-text-dim);
+}
+
+.coop-roomcode .coop-label {
+  align-self: center;
+}

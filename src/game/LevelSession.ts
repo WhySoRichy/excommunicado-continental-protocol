@@ -227,7 +227,8 @@ export class LevelSession implements HostWorld, GuestWorld {
   }
 
   /** Interactivo más cercano al alcance y delante del jugador (según el yaw de la cámara). */
-  nearestInteractable(camYaw: number, used?: ReadonlySet<string>): InteractableDef | null {
+  /** `missionOnly`: solo los objetos de la misión (un invitado no habla con los NPC ni usa el ascensor). */
+  nearestInteractable(camYaw: number, used?: ReadonlySet<string>, missionOnly = false): InteractableDef | null {
     const f = this.player.feet;
     const fx = -Math.sin(camYaw);
     const fz = -Math.cos(camYaw);
@@ -235,6 +236,7 @@ export class LevelSession implements HostWorld, GuestWorld {
     let bestD = Number.POSITIVE_INFINITY;
     for (const it of this.data.interactables) {
       if (used?.has(it.id)) continue;
+      if (missionOnly && !it.action.startsWith('mission:')) continue;
       const dx = it.pos[0] - f.x;
       const dz = it.pos[2] - f.z;
       const d = Math.hypot(dx, dz);

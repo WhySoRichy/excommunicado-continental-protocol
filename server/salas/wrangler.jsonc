@@ -1,0 +1,16 @@
+// Servicio de salas del cooperativo (docs/VISION.md, bloque 1). Lo despliega .github/workflows/salas.yml con wrangler.
+{
+  "name": "salas",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-11-01",
+  "durable_objects": {
+    "bindings": [{ "name": "LOBBY", "class_name": "Lobby" }],
+  },
+  // El plan gratuito solo admite Durable Objects con almacenamiento SQLite.
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Lobby"] }],
+  "vars": {
+    // El juego publicado y los servidores locales de desarrollo y de pruebas.
+    "ALLOWED_ORIGINS": "https://whysorichy.github.io,http://localhost:5173,http://localhost:4173",
+  },
+  "observability": { "enabled": true },
+}

@@ -59,7 +59,7 @@ Datos de los planes gratuitos comprobados en noviembre de 2026, que se revisan a
 
 ## Orden de trabajo
 
-1. **Cooperativo jugable con gente:** salas públicas, relé para redes cerradas, que los invitados usen los objetos de la misión y volver a entrar tras un corte.
+1. **Cooperativo jugable con gente:** salas públicas, relé para redes cerradas, que los invitados usen los objetos de la misión y volver a entrar tras un corte. Hecho; su servicio de salas está en `server/salas`.
 2. **Skins y progresión:** acabados de armas y accesorios tácticos que se ganan jugando, guardados en el navegador y preparados para pasar a cuentas.
 3. **Identidad propia:** nombre, protagonista, hotel, reglas y personajes. Antes de abrir el juego al público.
 4. **PvP de arena** en salas privadas.
