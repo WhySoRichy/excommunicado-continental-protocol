@@ -1040,6 +1040,7 @@ export class Game {
       s.roster.respawn.yaw = this.mission.respawnYaw;
     }
     s.roster.step(dt);
+    s.roster.updateLooks();
     const tE = this.profiling ? performance.now() : 0;
     s.enemies.fixedUpdate(dt, s.updateTargets(dt));
     const tC = this.profiling ? performance.now() : 0;

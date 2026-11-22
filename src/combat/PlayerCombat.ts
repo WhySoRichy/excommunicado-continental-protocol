@@ -1,13 +1,13 @@
 import { Vector3 } from 'three';
 
-import { DEG2RAD } from '../core/math';
+import { clamp, DEG2RAD } from '../core/math';
 import type { Rng } from '../core/rng';
 import type { CivilianManager } from '../entities/Civilian';
 import type { Enemy } from '../entities/Enemy';
 import type { PlayerController } from '../entities/PlayerController';
 
 import type { PickupKind } from '../levels/types';
-import { createRayHit, type PhysicsWorld, QueryGroups } from '../physics/Physics';
+import { createRayHit, type PhysicsWorld, QueryGroups, type RayHit, type Vec3Like } from '../physics/Physics';
 
 import { applyDamage, falloff, heal, makeVitals, restoreVitals, tickVitals, type Vitals, zoneFromHeight } from './damage';
 import type { EnemyManager } from './EnemyManager';
@@ -59,6 +59,26 @@ export interface CombatCtx {
   audio: CombatAudio;
   rng: Rng;
   pickups: Pickups;
+  /**
+   * Rayo de los disparos (personajes y escenario). Sin él, el de la física. El anfitrión de una partida en red lo
+   * cambia para los invitados: rebobina a los enemigos al instante que veía cada uno (docs/ESCALABILIDAD.md, fase 3).
+   */
+  shotCast?: (origin: Vec3Like, dir: Vec3Like, range: number, out: RayHit, exclude: PlayerController) => boolean;
+}
+
+/** Marcador de impacto: cuerpo, cabeza, baja o armadura pesada. */
+export type HitMarkerKind = 'body' | 'head' | 'kill' | 'armor';
+
+/**
+ * Lo que pasa en el combate de un jugador y le importa a quien lo juega en otro equipo (fase 3): el anfitrión lo
+ * escucha en el combate de cada invitado y se lo envía.
+ */
+export interface CombatListener {
+  marker(kind: HitMarkerKind): void;
+  award(action: StyleAction, points: number): void;
+  pickup(kind: PickupKind): void;
+  hurt(enemy: Enemy, damage: number): void;
+  died(): void;
 }
 
 export interface FeedItem {
@@ -166,6 +186,15 @@ export class PlayerCombat {
   recoilVis = 0;
   /** Pausa de impacto: segundos reales que el mundo va casi congelado tras una baja. */
   hitPause = 0;
+  /**
+   * Decide impactos, daño y recogidas. Sin autoridad (un invitado en red) el combate solo predice lo que se ve y se oye
+   * al disparar; los impactos los confirma el anfitrión.
+   */
+  authority = true;
+  /** El Foco (cámara lenta) y la pausa de impacto. En cooperativo no: el tiempo del mundo es de todos. */
+  allowFocus = true;
+  /** Quien escucha lo que pasa en este combate (la red, en el anfitrión). */
+  listener: CombatListener | null = null;
   private lastHitEnemy: Enemy | null = null;
   private lastHitTime = -99;
   private lastRolls = 0;
@@ -213,6 +242,11 @@ export class PlayerCombat {
     return this.slashT > 0 ? 1 - this.slashT / SLASH_TIME : -1;
   }
 
+  /** Inclinación del apuntado (rad, + arriba): la usa la animación de quien lo ve desde fuera. */
+  get aimPitch(): number {
+    return Math.asin(clamp(this.aimDir.y, -1, 1));
+  }
+
   /** Escala de tiempo deseada (Foco). */
   get timeScale(): number {
     if (this.hitPause > 0) return HIT_PAUSE_SCALE;
@@ -237,8 +271,37 @@ export class PlayerCombat {
   private award(action: StyleAction): void {
     const r = this.style.register(action);
     this.focus = Math.min(100, this.focus + r.points * 0.04);
-    this.feed.unshift({ text: STYLE_LABELS[action], points: r.points, t: 2.2 });
+    this.showAward(action, r.points);
+    this.listener?.award(action, r.points);
+  }
+
+  /** Apunta una acción de estilo en la lista de la pantalla. */
+  showAward(action: StyleAction, points: number): void {
+    this.feed.unshift({ text: STYLE_LABELS[action], points, t: 2.2 });
     if (this.feed.length > 5) this.feed.pop();
+  }
+
+  /** Apunta en la lista lo que se recogió. */
+  showPickup(kind: PickupKind): void {
+    this.pushFeed(PICKUP_FEED[kind]);
+  }
+
+  /** Marcador de impacto, con su sonido y, si fue una baja, la sacudida. */
+  showMarker(kind: HitMarkerKind, audio: CombatAudio, camera: CombatCamera, method: 'gun' | 'knife' | 'takedown' = 'gun'): void {
+    this.hitMarker.kind = kind;
+    this.hitMarker.t = kind === 'kill' ? 0.32 : 0.16;
+    audio.hit(kind);
+    if (kind === 'kill') camera.addTrauma(method === 'gun' ? 0.1 : 0.16);
+  }
+
+  /** Aviso de un disparo recibido: indicador de dirección, sonido y sacudida (el daño en sí lo lleva `takeHit`). */
+  showHurt(from: Vec3Like, damage: number, audio: CombatAudio, camera: CombatCamera): void {
+    const slot = this.damageDirs[this.damageDirNext]!;
+    this.damageDirNext = (this.damageDirNext + 1) % this.damageDirs.length;
+    slot.from.set(from.x, from.y, from.z);
+    slot.t = 1.1;
+    audio.hurt(damage > 20);
+    camera.addTrauma(Math.min(0.6, 0.15 + damage / 50));
   }
 
   private pushFeed(text: string): void {
@@ -286,13 +349,13 @@ export class PlayerCombat {
     }
     if (p.state === 'cover') this.sinceCover = 0;
     for (const w of this.weapons.values()) w.update(dt);
-    this.collectPickups(ctx);
+    if (this.authority) this.collectPickups(ctx);
 
     if (this.takedown) {
       this.tickTakedown(dt, ctx);
       return;
     }
-    if (it.focusPressed) {
+    if (it.focusPressed && this.allowFocus) {
       if (this.focusActive) {
         this.focusActive = false;
         ctx.audio.focus(false);
@@ -397,9 +460,15 @@ export class PlayerCombat {
     this.muzzleOf(ctx.player, true, _muzzle);
     const depth = Math.max(0, _tmp.subVectors(_muzzle, _cam).dot(_fwd));
     _origin.copy(_cam).addScaledVector(_fwd, depth);
-    if (ctx.physics.raycast(_origin, _fwd, range, QueryGroups.PLAYER_SHOT, this.hit, ctx.player.collider)) out.copy(this.hit.point);
+    if (this.castShot(ctx, _origin, _fwd, range)) out.copy(this.hit.point);
     else out.copy(_origin).addScaledVector(_fwd, range);
     return out;
+  }
+
+  /** Rayo de un disparo contra personajes y escenario (el de la red si lo hay). Deja el resultado en `this.hit`. */
+  private castShot(ctx: CombatCtx, origin: Vec3Like, dir: Vec3Like, range: number): boolean {
+    if (ctx.shotCast) return ctx.shotCast(origin, dir, range, this.hit, ctx.player);
+    return ctx.physics.raycast(origin, dir, range, QueryGroups.PLAYER_SHOT, this.hit, ctx.player.collider);
   }
 
   private probeAim(ctx: CombatCtx): void {
@@ -422,7 +491,6 @@ export class PlayerCombat {
   private shoot(w: WeaponState, ctx: CombatCtx, aiming: boolean): void {
     const d = w.def;
     const p = ctx.player;
-    const ph = ctx.physics;
     this.aimPoint(ctx, d.range, _aim);
     this.muzzleOf(p, aiming, _muzzle);
     const base = _base.subVectors(_aim, _muzzle).normalize();
@@ -440,22 +508,24 @@ export class PlayerCombat {
         .addScaledVector(_right, Math.cos(a) * r)
         .addScaledVector(_up, Math.sin(a) * r)
         .normalize();
-      const hit = ph.raycast(_muzzle, _dir, d.range, QueryGroups.PLAYER_SHOT, this.hit, p.collider);
+      const hit = this.castShot(ctx, _muzzle, _dir, d.range);
       if (hit) {
         _end.copy(this.hit.point);
         const enemy = ctx.enemies.enemyFromCollider(this.hit.collider);
         const civ = enemy ? null : ctx.civilians?.fromCollider(this.hit.collider);
         if (enemy && enemy.alive) {
           anyEnemyHit = true;
-          const zone = zoneFromHeight(_end.y, enemy.feet.y, enemy.height);
-          const dmg = d.damage * falloff(this.hit.distance, d.falloffStart, d.falloffEnd);
-          const res = enemy.applyHit(dmg, zone, p.feet, d.headMult);
           ctx.vfx.impact(_end, this.hit.normal, 'blood', 5);
-          this.onHit(enemy, zone, res.killed, res.toHeavyArmor > res.toHealth, this.hit.distance, 'gun', ctx);
+          if (this.authority) {
+            const zone = zoneFromHeight(_end.y, enemy.feet.y, enemy.height);
+            const dmg = d.damage * falloff(this.hit.distance, d.falloffStart, d.falloffEnd);
+            const res = enemy.applyHit(dmg, zone, p.feet, d.headMult);
+            this.onHit(enemy, zone, res.killed, res.toHeavyArmor > res.toHealth, this.hit.distance, 'gun', ctx);
+          }
         } else if (civ && civ.alive && ctx.civilians) {
           // Civil alcanzado: sin estilo ni marcador; la penalización la aplica el director de misión.
           ctx.vfx.impact(_end, this.hit.normal, 'blood', 4);
-          ctx.civilians.hit(civ, d.damage * falloff(this.hit.distance, d.falloffStart, d.falloffEnd));
+          if (this.authority) ctx.civilians.hit(civ, d.damage * falloff(this.hit.distance, d.falloffStart, d.falloffEnd));
         } else {
           ctx.vfx.impact(_end, this.hit.normal, 'spark', 6);
           ctx.vfx.decal(_end, this.hit.normal);
@@ -486,23 +556,17 @@ export class PlayerCombat {
     ctx.camera.kick(rec[0] * DEG2RAD * k, -rec[1] * DEG2RAD * k);
     ctx.camera.addTrauma(d.id === 'shotgun' ? 0.22 : d.id === 'dmr' || d.id === 'revolver' ? 0.14 : 0.07);
     this.recoilVis = 1;
+    if (!this.authority) return;
     ctx.enemies.noise(p.feet, d.noise);
     ctx.civilians?.noise(p.feet, Math.max(d.noise, 12));
   }
 
   private onHit(enemy: Enemy, zone: string, killed: boolean, armored: boolean, dist: number, method: 'gun' | 'knife' | 'takedown', ctx: CombatCtx): void {
-    if (killed) {
-      this.hitMarker.kind = 'kill';
-      this.hitMarker.t = 0.32;
-      ctx.audio.hit('kill');
-      // La baja se nota: el mundo se detiene un instante y la cámara acusa el golpe.
-      this.hitPause = zone === 'head' || method === 'takedown' ? 0.085 : 0.05;
-      ctx.camera.addTrauma(method === 'gun' ? 0.1 : 0.16);
-    } else {
-      this.hitMarker.kind = zone === 'head' ? 'head' : armored ? 'armor' : 'body';
-      this.hitMarker.t = 0.16;
-      ctx.audio.hit(this.hitMarker.kind === 'head' ? 'head' : armored ? 'armor' : 'body');
-    }
+    const kind: HitMarkerKind = killed ? 'kill' : zone === 'head' ? 'head' : armored ? 'armor' : 'body';
+    this.showMarker(kind, ctx.audio, ctx.camera, method);
+    this.listener?.marker(kind);
+    // La baja se nota: el mundo se detiene un instante (en cooperativo, no: el tiempo es de todos).
+    if (killed && this.allowFocus) this.hitPause = zone === 'head' || method === 'takedown' ? 0.085 : 0.05;
     const doubleTap = this.lastHitEnemy === enemy && this.time - this.lastHitTime < 0.35;
     this.lastHitEnemy = enemy;
     this.lastHitTime = this.time;
@@ -552,6 +616,12 @@ export class PlayerCombat {
       bestD = d;
     }
     if (!best) return;
+    if (!this.authority) {
+      // Sin autoridad solo se ve el golpe: el daño lo decide el anfitrión.
+      _tmp.set(best.feet.x, best.feet.y + 1.2, best.feet.z);
+      ctx.vfx.impact(_tmp, _fwd.set(-(best.feet.x - p.feet.x), 0, -(best.feet.z - p.feet.z)).normalize(), 'blood', 8);
+      return;
+    }
     // Por la espalda o sin alertar: letal siempre.
     const efx = -Math.sin(best.mover.yaw);
     const efz = -Math.cos(best.mover.yaw);
@@ -626,7 +696,7 @@ export class PlayerCombat {
     if (td.shots === 0 && td.t >= TD_SHOT1) {
       td.shots = 1;
       fire();
-      if (e.alive) {
+      if (e.alive && this.authority) {
         const res = e.applyHit(999, 'body', ctx.player.feet, 1, true);
         this.stats.takedowns++;
         this.onHit(e, 'body', res.killed, false, 1, 'takedown', ctx);
@@ -663,17 +733,14 @@ export class PlayerCombat {
     this.stats.healthLost += r.toHealth;
     this.sinceDamage = 0;
     this.style.onDamage(r.dealt);
-    const slot = this.damageDirs[this.damageDirNext]!;
-    this.damageDirNext = (this.damageDirNext + 1) % this.damageDirs.length;
-    slot.from.copy(enemy.feet);
-    slot.t = 1.1;
     this.lastDamage = { label: enemy.def.label, type: enemy.def.type, from: enemy.feet.clone(), distance: enemy.feet.distanceTo(p.feet) };
-    ctx.audio.hurt(dmg > 20);
-    ctx.camera.addTrauma(Math.min(0.6, 0.15 + dmg / 50));
+    this.showHurt(enemy.feet, dmg, ctx.audio, ctx.camera);
+    this.listener?.hurt(enemy, dmg);
     if (r.killed) this.die(ctx);
   }
 
   private die(ctx: CombatCtx): void {
+    this.listener?.died();
     this.dead = true;
     this.stats.deaths++;
     this.lastPlayerPos.copy(ctx.player.feet);
@@ -723,16 +790,18 @@ export class PlayerCombat {
     if (kind === 'ammo') {
       // Sirve para todas las armas de reserva limitada (carabina, escopeta, rifle de tirador).
       for (const w of this.weapons.values()) if (w.isGun && Number.isFinite(w.def.reserve)) w.addReserve(w.def.mag * 1.5);
-      this.pushFeed('+ Munición');
     } else if (kind === 'medkit') {
       heal(this.vitals, 50);
-      this.pushFeed('+ Botiquín');
     } else {
       this.vitals.armor = this.vitals.maxArmor;
-      this.pushFeed('+ Integridad del traje');
     }
+    this.showPickup(kind);
+    this.listener?.pickup(kind);
   }
 }
+
+/** Lo que se apunta en la lista al recoger cada objeto. */
+const PICKUP_FEED: Record<PickupKind, string> = { ammo: '+ Munición', medkit: '+ Botiquín', armor: '+ Integridad del traje' };
 
 /** "desde tu derecha/izquierda/espalda/frente" respecto a la cámara. */
 export function relativeSide(camYaw: number, from: Vector3, me: Vector3): string {

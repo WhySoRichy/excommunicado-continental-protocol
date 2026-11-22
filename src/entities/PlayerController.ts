@@ -114,6 +114,49 @@ export interface CoverInfo {
 }
 
 /**
+ * El movimiento de un personaje como objeto plano (fase 3 de docs/ESCALABILIDAD.md): lo que viaja por la red y lo
+ * que basta para dibujarlo y para que el combate y los enemigos lo traten igual que a uno simulado aquí.
+ */
+export interface MoveNet {
+  x: number;
+  y: number;
+  z: number;
+  yaw: number;
+  state: MoveState;
+  posture: Posture;
+  grounded: boolean;
+  stateTime: number;
+  aiming: boolean;
+  sprinting: boolean;
+  invulnerable: boolean;
+  /** Avance del vault 0..1, o −1 sin vault. */
+  vault: number;
+  /** En cobertura: hacia dónde mira la pared (x, z), su altura y el asomado; null fuera de ella. */
+  cover: { nx: number; nz: number; height: CoverHeight; peekSide: number; peekOffset: number } | null;
+  /** Volteretas y planchas hechas (el combate lo usa para saber cuándo esquivó). */
+  dodges: number;
+}
+
+export function emptyMoveNet(): MoveNet {
+  return {
+    x: 0,
+    y: 0,
+    z: 0,
+    yaw: 0,
+    state: 'ground',
+    posture: 'stand',
+    grounded: true,
+    stateTime: 0,
+    aiming: false,
+    sprinting: false,
+    invulnerable: false,
+    vault: -1,
+    cover: null,
+    dodges: 0,
+  };
+}
+
+/**
  * Asomarse por el borde de una cobertura alta: cuánto sale de lado (m) y a qué velocidad máxima (m/s). Por la
  * izquierda sale más porque el arma va en la mano derecha y tiene que despejar la esquina.
  */
@@ -203,6 +246,8 @@ export class PlayerController {
   private readonly desired = { x: 0, y: 0, z: 0 };
   private readonly hit = createRayHit();
   private readonly center = new Vector3();
+  /** Avance del vault recibido por red (null si este personaje se simula aquí). */
+  private netVault: number | null = null;
 
   /** Grupos de colisión del personaje (jugador o enemigo: el mismo motor robusto para ambos). */
   readonly groups: number;
@@ -714,6 +759,7 @@ export class PlayerController {
 
   /** Progreso del vault en curso (0..1), o −1 si no hay. */
   get vaultProgress(): number {
+    if (this.netVault !== null) return this.netVault;
     const v = this.vault;
     if (this.state !== 'vault' || !v) return -1;
     return Math.min(1, this.stateTime / Math.max(1e-3, v.dur1 + v.dur2));
@@ -1012,6 +1058,72 @@ export class PlayerController {
         this.lastSafeYaw = this.yaw;
       }
     }
+  }
+
+  // ===================================================================== red
+  /** Copia el movimiento a un objeto plano (lo que se envía de este personaje). */
+  writeNet(out: MoveNet): MoveNet {
+    out.x = this.feet.x;
+    out.y = this.feet.y;
+    out.z = this.feet.z;
+    out.yaw = this.yaw;
+    out.state = this.state;
+    out.posture = this.posture;
+    out.grounded = this.grounded;
+    out.stateTime = this.stateTime;
+    out.aiming = this.aiming;
+    out.sprinting = this.sprinting;
+    out.invulnerable = this.invulnerable;
+    out.vault = this.vaultProgress;
+    const c = this.state === 'cover' ? this.cover : null;
+    if (c) {
+      const o = (out.cover ??= { nx: 0, nz: 0, height: 'low', peekSide: 0, peekOffset: 0 });
+      o.nx = c.normal.x;
+      o.nz = c.normal.z;
+      o.height = c.height;
+      o.peekSide = c.peekSide;
+      o.peekOffset = c.peekOffset;
+    } else out.cover = null;
+    out.dodges = this.stats.rolls + this.stats.dives;
+    return out;
+  }
+
+  /**
+   * Coloca al personaje según un movimiento recibido, sin simularlo: el de otro equipo (lo mueve su dueño) o el que
+   * dibuja este equipo de la partida del anfitrión. `snap` lo coloca sin transición (aparición, reaparición).
+   */
+  applyNet(s: MoveNet, snap = false): void {
+    if (snap) {
+      this.prevFeet.set(s.x, s.y, s.z);
+      this.prevYaw = s.yaw;
+    } else {
+      this.prevFeet.copy(this.feet);
+      this.prevYaw = this.yaw;
+    }
+    this.feet.set(s.x, s.y, s.z);
+    this.yaw = s.yaw;
+    if (s.posture !== this.posture) {
+      // Su dueño ya comprobó que cabía: aquí solo se ajusta la cápsula.
+      this.posture = s.posture;
+      this.char.collider.setHalfHeight(this.halfHeight);
+    }
+    this.state = s.state;
+    this.grounded = s.grounded;
+    this.stateTime = s.stateTime;
+    this.aiming = s.aiming;
+    this.sprinting = s.sprinting;
+    this.invulnerable = s.invulnerable;
+    this.netVault = s.vault;
+    if (s.cover) {
+      const c = (this.cover ??= { normal: new Vector3(), height: 'low', edge: 0, edgeNear: 0, peekSide: 0, peekOffset: 0 });
+      c.normal.set(s.cover.nx, 0, s.cover.nz);
+      c.height = s.cover.height;
+      c.peekSide = s.cover.peekSide;
+      c.peekOffset = s.cover.peekOffset;
+    } else this.cover = null;
+    this.stats.rolls = s.dodges;
+    this.stats.dives = 0;
+    this.syncCollider();
   }
 
   /** Posición de render interpolada. */

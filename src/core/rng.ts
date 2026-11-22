@@ -10,6 +10,11 @@ export class Rng {
     this.s = seed >>> 0;
   }
 
+  /** Vuelve a empezar la secuencia desde otra semilla (la red siembra cada paso igual en los dos equipos). */
+  reseed(seed: number): void {
+    this.s = seed >>> 0;
+  }
+
   /** Flotante uniforme en [0, 1). */
   next(): number {
     let t = (this.s = (this.s + 0x6d2b79f5) >>> 0);

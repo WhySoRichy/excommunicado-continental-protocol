@@ -2,7 +2,6 @@ import type { Scene } from 'three';
 import type { PlayerSlot } from '../combat/PlayerRoster';
 import type { WeaponId } from '../combat/weapons';
 import { FIXED_DT } from '../core/Loop';
-import { clamp } from '../core/math';
 import { CharacterRig, idlePose, PLAYER_LOOK, type RigOptions, type RigPose, type WeaponModel } from './CharacterRig';
 import { type BodyYaw, bodyYaw, updateBodyYaw } from './rigMath';
 
@@ -25,12 +24,17 @@ const ALLY_LOOK: RigOptions = {
   weapon: 'none',
 };
 
-/** Vista de un jugador que no es el local: su personaje animado con el arma que lleva. Lee su plaza sin cambiarla. */
+/**
+ * Vista de un jugador que no es el local: su personaje animado con el arma que lleva. Lee su movimiento y lo que se ve
+ * de él (`look`) sin cambiar nada: le da igual que se simule aquí o llegue por la red.
+ */
 class PlayerView {
   private readonly rig: CharacterRig;
   private readonly pose: RigPose = idlePose();
   private readonly visualYaw: BodyYaw = bodyYaw();
   private model: WeaponModel = 'none';
+  /** Marca de la última actualización (para soltar las vistas de quien se fue). */
+  seen = 0;
 
   constructor(
     private readonly slot: PlayerSlot,
@@ -42,8 +46,8 @@ class PlayerView {
 
   update(alpha: number, dt: number): void {
     const p = this.slot.controller;
-    const c = this.slot.combat;
-    const model: WeaponModel = c.holstered ? 'none' : WEAPON_MODEL[c.current];
+    const look = this.slot.look;
+    const model: WeaponModel = look.weapon === 'none' ? 'none' : WEAPON_MODEL[look.weapon];
     if (model !== this.model) {
       this.model = model;
       this.rig.setWeapon(model);
@@ -57,18 +61,18 @@ class PlayerView {
     const vx = p.feet.x - p.prevFeet.x;
     const vz = p.feet.z - p.prevFeet.z;
     pose.moveAngle = Math.hypot(vx, vz) > 1e-4 ? Math.atan2(-vx, -vz) - yaw : 0;
-    pose.state = c.dead ? 'dead' : p.state;
+    pose.state = look.dead ? 'dead' : p.state;
     pose.posture = p.posture;
     pose.grounded = p.grounded;
-    pose.aim = !c.holstered && p.aiming ? 1 : 0;
-    // Inclina el arma hacia donde apunta (su rayo de apuntado llega en la intención).
-    pose.aimPitch = Math.asin(clamp(this.slot.combatIntent.aimDir.y, -1, 1));
+    pose.aim = look.aim ? 1 : 0;
+    // Inclina el arma hacia donde apunta.
+    pose.aimPitch = look.aimPitch;
     pose.stateTime = p.stateTime;
-    pose.reload = c.weapon.reloadProgress;
-    pose.recoil = c.recoilVis;
-    pose.melee = c.grab;
-    pose.slash = c.slashPhase;
-    pose.takedown = c.takedown ? c.takedown.t : -1;
+    pose.reload = look.reload;
+    pose.recoil = look.recoil;
+    pose.melee = look.melee;
+    pose.slash = look.slash;
+    pose.takedown = look.takedown;
     pose.vault = p.vaultProgress;
     pose.cover = p.state === 'cover' && p.cover ? p.cover.height : 'none';
     pose.peek = p.peekAmount;
@@ -85,10 +89,12 @@ class PlayerView {
 /** Las vistas de los jugadores que no son el local (el local lo dibuja el juego, con su cámara). */
 export class PlayerViews {
   private readonly views = new Map<PlayerSlot, PlayerView>();
+  private tick = 0;
 
   constructor(private readonly scene: Scene) {}
 
   update(slots: readonly PlayerSlot[], alpha: number, dt: number): void {
+    const t = ++this.tick;
     for (const s of slots) {
       if (s.local) continue;
       let v = this.views.get(s);
@@ -96,7 +102,14 @@ export class PlayerViews {
         v = new PlayerView(s, this.scene);
         this.views.set(s, v);
       }
+      v.seen = t;
       v.update(alpha, dt);
+    }
+    // Quien se fue de la partida ya no está en la lista: su personaje se retira.
+    for (const [s, v] of this.views) {
+      if (v.seen === t) continue;
+      v.dispose();
+      this.views.delete(s);
     }
   }
 

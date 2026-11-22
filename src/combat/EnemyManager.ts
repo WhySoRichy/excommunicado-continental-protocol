@@ -4,6 +4,7 @@ import { Vector3 } from 'three';
 import type { Rng } from '../core/rng';
 import type { Tactics } from '../entities/ai/EnemyBrain';
 import { Enemy, type EnemyWorld, type PlayerTarget } from '../entities/Enemy';
+import type { MoveNet } from '../entities/PlayerController';
 import { boxToOriented } from '../levels/levelPhysics';
 import type { NavGrid } from '../levels/nav/NavGrid';
 import type { EnemySpawnDef, EnemyType, LevelData } from '../levels/types';
@@ -41,6 +42,9 @@ const SHOUT_RADIUS = 18;
 export class EnemyManager implements Tactics {
   readonly enemies: Enemy[] = [];
   private readonly byHandle = new Map<number, Enemy>();
+  private readonly byUid = new Map<number, Enemy>();
+  /** Siguiente id de red: nunca se reutiliza en la partida, aunque se retiren enemigos. */
+  private nextUid = 1;
   private readonly cover: CoverPoint[] = [];
   private readonly world: EnemyWorld;
   private readonly deps: EnemyManagerDeps;
@@ -89,11 +93,30 @@ export class EnemyManager implements Tactics {
     return n;
   }
 
-  spawn(def: EnemySpawnDef): Enemy {
-    const e = new Enemy(def, this.world, this.enemies.length);
+  spawn(def: EnemySpawnDef, uid = this.nextUid++): Enemy {
+    const e = new Enemy(def, this.world, this.enemies.length, uid);
     this.enemies.push(e);
     this.byHandle.set(e.collider.handle, e);
+    this.byUid.set(uid, e);
     return e;
+  }
+
+  /** El enemigo con ese id de red, si sigue en la partida. */
+  byNetId(uid: number): Enemy | null {
+    return this.byUid.get(uid) ?? null;
+  }
+
+  /**
+   * Réplica de un enemigo del anfitrión (fase 3): aparece con su id de red donde está y no piensa; lo mueve lo que
+   * llega por la red. Su cuerpo sí cuenta para chocar con él y para los disparos de este equipo.
+   */
+  spawnReplica(uid: number, type: EnemyType, at: MoveNet): Enemy {
+    return this.spawn({ id: `net-${uid}`, type, pos: [at.x, at.y, at.z], yaw: at.yaw, stationary: true }, uid);
+  }
+
+  /** Retira un enemigo concreto (la réplica de uno que el anfitrión ya retiró). */
+  remove(e: Enemy): void {
+    this.despawnWhere((x) => x === e);
   }
 
   /** Aparece un enemigo en una posición (debug / oleadas). */
@@ -156,6 +179,7 @@ export class EnemyManager implements Tactics {
     for (const e of this.enemies) e.dispose();
     this.enemies.length = 0;
     this.byHandle.clear();
+    this.byUid.clear();
     for (const c of this.cover) c.claimedBy = null;
   }
 
@@ -181,6 +205,7 @@ export class EnemyManager implements Tactics {
       if (!match(e)) continue;
       for (const c of this.cover) if (c.claimedBy === e.id) c.claimedBy = null;
       this.byHandle.delete(e.collider.handle);
+      this.byUid.delete(e.uid);
       e.dispose();
       this.enemies.splice(i, 1);
       n++;
@@ -210,6 +235,7 @@ export class EnemyManager implements Tactics {
     for (const e of this.enemies) e.dispose();
     this.enemies.length = 0;
     this.byHandle.clear();
+    this.byUid.clear();
   }
 
   // ===================================================== tácticas

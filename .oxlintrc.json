@@ -48,7 +48,8 @@
         "src/physics/**",
         "src/levels/nav/**",
         "src/levels/data/**",
-        "src/core/**"
+        "src/core/**",
+        "src/net/**"
       ],
       "rules": {
         "no-restricted-imports": [

@@ -59,7 +59,8 @@ function simWorld(level: LevelData, seed: number, onShot?: (target: PlayerTarget
   /** Un paso de todo: jugadores (con su intención), enemigos y física. */
   const step = (n = 1): void => {
     for (let i = 0; i < n; i++) {
-      r.step(FIXED_DT, 0);
+      r.step(FIXED_DT, true);
+      r.updateLooks();
       enemies.fixedUpdate(FIXED_DT, r.updateTargets(FIXED_DT));
       physics.step();
     }

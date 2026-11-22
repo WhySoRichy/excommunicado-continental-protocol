@@ -5,12 +5,23 @@ import type { Rng } from '../core/rng';
 import type { NavGrid } from '../levels/nav/NavGrid';
 import type { CivilianDef } from '../levels/types';
 import { Groups, type PhysicsWorld } from '../physics/Physics';
-import { emptyIntent, PlayerController, yawFromDir } from './PlayerController';
+import { emptyIntent, emptyMoveNet, type MoveNet, PlayerController, yawFromDir } from './PlayerController';
 
 const FLEE_SPEED = 0.95;
 const PANIC_RADIUS = 14;
 
-type CivState = 'calm' | 'flee' | 'hide' | 'dead';
+export type CivState = 'calm' | 'flee' | 'hide' | 'dead';
+
+/** Un civil como objeto plano (fase 3): los civiles son los del nivel, así que se identifican por su orden. */
+export interface CivilianNet {
+  move: MoveNet;
+  state: CivState;
+  alive: boolean;
+}
+
+export function emptyCivilianNet(): CivilianNet {
+  return { move: emptyMoveNet(), state: 'calm', alive: true };
+}
 
 /**
  * Civil, solo simulación: no lleva armas, no bloquea al jugador ni a los enemigos (grupo CIVILIAN) y huye del ruido.
@@ -153,6 +164,23 @@ export class Civilian {
       }
     }
     this.mover.fixedUpdate(dt, it);
+  }
+
+  writeNet(out: CivilianNet): CivilianNet {
+    this.mover.writeNet(out.move);
+    out.state = this.state;
+    out.alive = this.alive;
+    return out;
+  }
+
+  /** Toma el estado recibido del anfitrión (réplica: no huye ni camina sola). */
+  applyNet(s: CivilianNet, snap = false): void {
+    this.mover.applyNet(s.move, snap);
+    this.state = s.state;
+    if (this.vitals.dead === s.alive) {
+      this.vitals.dead = !s.alive;
+      this.mover.collider.setEnabled(s.alive);
+    }
   }
 
   /** Suelta su cuerpo físico (la vista se suelta aparte, en `CivilianViews`). */

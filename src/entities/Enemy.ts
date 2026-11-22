@@ -6,13 +6,76 @@ import { FIXED_DT } from '../core/Loop';
 import { clamp, wrapAngle } from '../core/math';
 import type { Rng } from '../core/rng';
 import type { NavGrid } from '../levels/nav/NavGrid';
-import type { EnemySpawnDef } from '../levels/types';
+import type { EnemySpawnDef, EnemyType } from '../levels/types';
 import { Groups, type PhysicsWorld, QueryGroups } from '../physics/Physics';
 
 import { type AiState, EnemyBrain, emptyCommand, emptyPerception, type Tactics } from './ai/EnemyBrain';
 import { ENEMY_TYPES, type EnemyTypeDef } from './ai/enemyTypes';
 
-import { emptyIntent, PlayerController, yawFromDir } from './PlayerController';
+import { emptyIntent, emptyMoveNet, type MoveNet, PlayerController, yawFromDir } from './PlayerController';
+
+/**
+ * Un enemigo como objeto plano (fase 3 de docs/ESCALABILIDAD.md): lo que el anfitrión envía de cada uno y lo que basta
+ * para dibujarlo en otro equipo y para que sus disparos le alcancen allí.
+ */
+export interface EnemyNet {
+  /** Id de red: estable mientras exista y único en la partida. */
+  uid: number;
+  type: EnemyType;
+  move: MoveNet;
+  ai: AiState;
+  aim: boolean;
+  health: number;
+  alive: boolean;
+  hitFlash: number;
+  recoilVis: number;
+  flinch: number;
+  flinchSide: number;
+  deathStyle: 0 | 1 | 2;
+  deathFallStart: number;
+  thrownT: number;
+  targetRise: number;
+  icon: 'none' | 'suspicious' | 'alert';
+  detection: number;
+  telegraph: number;
+  hasLook: boolean;
+  lookX: number;
+  lookY: number;
+  lookZ: number;
+  telegraphX: number;
+  telegraphY: number;
+  telegraphZ: number;
+}
+
+export function emptyEnemyNet(): EnemyNet {
+  return {
+    uid: 0,
+    type: 'thug',
+    move: emptyMoveNet(),
+    ai: 'patrol',
+    aim: false,
+    health: 0,
+    alive: true,
+    hitFlash: 0,
+    recoilVis: 0,
+    flinch: 0,
+    flinchSide: 0,
+    deathStyle: 0,
+    deathFallStart: 0,
+    thrownT: -1,
+    targetRise: 1.2,
+    icon: 'none',
+    detection: 0,
+    telegraph: 0,
+    hasLook: false,
+    lookX: 0,
+    lookY: 0,
+    lookZ: 0,
+    telegraphX: 0,
+    telegraphY: 0,
+    telegraphZ: 0,
+  };
+}
 
 /** Lo que el enemigo necesita saber de un jugador en cada paso. */
 export interface PlayerTarget {
@@ -94,6 +157,8 @@ export const CORPSE_SETTLE = 3;
  */
 export class Enemy {
   readonly id: string;
+  /** Id de red: único en la partida (el anfitrión lo asigna; en otro equipo, el suyo). */
+  readonly uid: number;
   readonly def: EnemyTypeDef;
   readonly spawnDef: EnemySpawnDef;
   readonly brain: EnemyBrain;
@@ -154,8 +219,9 @@ export class Enemy {
   /** Segundos que le quedan sin cambiar de objetivo por distancia. */
   private lockT = 0;
 
-  constructor(def: EnemySpawnDef, w: EnemyWorld, index: number) {
+  constructor(def: EnemySpawnDef, w: EnemyWorld, index: number, uid = index + 1) {
     this.id = def.id;
+    this.uid = uid;
     this.spawnDef = def;
     this.def = ENEMY_TYPES[def.type];
     this.w = w;
@@ -563,6 +629,68 @@ export class Enemy {
     this.mover.revive(this.home, this.spawnDef.yaw);
     this.hasPath = false;
     this.aimIn = 0;
+  }
+
+  // ======================================================== red
+  /** Copia su estado a un objeto plano (lo que el anfitrión envía de él). */
+  writeNet(out: EnemyNet): EnemyNet {
+    out.uid = this.uid;
+    out.type = this.def.type;
+    this.mover.writeNet(out.move);
+    out.ai = this.brain.state;
+    out.aim = this.intent.aim;
+    out.health = this.vitals.health;
+    out.alive = this.alive;
+    out.hitFlash = this.hitFlash;
+    out.recoilVis = this.recoilVis;
+    out.flinch = this.flinch;
+    out.flinchSide = this.flinchSide;
+    out.deathStyle = this.deathStyle;
+    out.deathFallStart = this.deathFallStart;
+    out.thrownT = this.thrownT;
+    out.targetRise = this.targetRise;
+    const c = this.cmd;
+    out.icon = c.icon;
+    out.detection = c.detection;
+    out.telegraph = c.telegraph;
+    out.hasLook = c.hasLook;
+    out.lookX = c.lookAt.x;
+    out.lookY = c.lookAt.y;
+    out.lookZ = c.lookAt.z;
+    out.telegraphX = this.telegraphAt.x;
+    out.telegraphY = this.telegraphAt.y;
+    out.telegraphZ = this.telegraphAt.z;
+    return out;
+  }
+
+  /**
+   * Toma el estado recibido del anfitrión (este enemigo es una réplica: no piensa ni se mueve solo). Al morir o volver
+   * a la vida su cuerpo deja o vuelve a recibir disparos, como en el anfitrión.
+   */
+  applyNet(s: EnemyNet, snap = false): void {
+    this.mover.applyNet(s.move, snap);
+    this.brain.state = s.ai;
+    this.intent.aim = s.aim;
+    this.vitals.health = s.health;
+    if (this.vitals.dead === s.alive) {
+      this.vitals.dead = !s.alive;
+      this.mover.collider.setEnabled(s.alive);
+    }
+    this.hitFlash = s.hitFlash;
+    this.recoilVis = s.recoilVis;
+    this.flinch = s.flinch;
+    this.flinchSide = s.flinchSide;
+    this.deathStyle = s.deathStyle;
+    this.deathFallStart = s.deathFallStart;
+    this.thrownT = s.thrownT;
+    this.targetRise = s.targetRise;
+    const c = this.cmd;
+    c.icon = s.icon;
+    c.detection = s.detection;
+    c.telegraph = s.telegraph;
+    c.hasLook = s.hasLook;
+    c.lookAt.set(s.lookX, s.lookY, s.lookZ);
+    this.telegraphAt.set(s.telegraphX, s.telegraphY, s.telegraphZ);
   }
 
   /** Suelta su cuerpo físico (la vista se suelta aparte, en `EnemyViews`). */
