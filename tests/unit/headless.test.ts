@@ -3,8 +3,8 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { EnemyManager } from '../../src/combat/EnemyManager';
 import { Pickups } from '../../src/combat/Pickups';
 import { PlayerCombat } from '../../src/combat/PlayerCombat';
-import { PlayerRoster, type PlayerSlot } from '../../src/combat/PlayerRoster';
-import { NO_VFX, SILENT_AUDIO } from '../../src/combat/ports';
+import { PlayerRoster, type PlayerSlot, REMOTE_RESPAWN } from '../../src/combat/PlayerRoster';
+import { type CombatAudio, NO_VFX, SILENT_AUDIO } from '../../src/combat/ports';
 import { FIXED_DT } from '../../src/core/Loop';
 import { newProfile } from '../../src/core/Save';
 import { Rng } from '../../src/core/rng';
@@ -12,6 +12,7 @@ import type { PlayerTarget } from '../../src/entities/Enemy';
 import { PlayerController } from '../../src/entities/PlayerController';
 import { arena } from '../../src/levels/data/arena';
 import { hub } from '../../src/levels/data/hub';
+import { practice } from '../../src/levels/data/practice';
 import { buildLevelPhysics } from '../../src/levels/levelPhysics';
 import { NavGrid } from '../../src/levels/nav/NavGrid';
 import type { LevelData } from '../../src/levels/types';
@@ -30,7 +31,7 @@ beforeAll(async () => {
 });
 
 /** Mundo sin pantalla con el mismo registro de jugadores que la sesión. `onShot` ve cada disparo enemigo a un jugador. */
-function simWorld(level: LevelData, seed: number, onShot?: (target: PlayerTarget, hit: boolean) => void) {
+function simWorld(level: LevelData, seed: number, onShot?: (target: PlayerTarget, hit: boolean) => void, audio: CombatAudio = SILENT_AUDIO) {
   const physics = new PhysicsWorld(R);
   buildLevelPhysics(level, physics);
   physics.step();
@@ -51,10 +52,10 @@ function simWorld(level: LevelData, seed: number, onShot?: (target: PlayerTarget
     },
   });
   enemies.spawnInitial();
-  const r = new PlayerRoster({ physics, enemies, civilians: null, vfx: NO_VFX, audio: SILENT_AUDIO, rng, pickups: new Pickups() });
+  const r = new PlayerRoster({ physics, enemies, civilians: null, vfx: NO_VFX, audio, rng, pickups: new Pickups() });
   roster = r;
-  const join = (x: number, y: number, z: number, yaw = 0): PlayerSlot =>
-    r.add(new PlayerController(physics, new Vector3(x, y + 0.02, z), yaw), new PlayerCombat(new Set()));
+  const join = (x: number, y: number, z: number, yaw = 0, local = false): PlayerSlot =>
+    r.add(new PlayerController(physics, new Vector3(x, y + 0.02, z), yaw), new PlayerCombat(new Set()), { local });
   /** Un paso de todo: jugadores (con su intención), enemigos y física. */
   const step = (n = 1): void => {
     for (let i = 0; i < n; i++) {
@@ -63,7 +64,7 @@ function simWorld(level: LevelData, seed: number, onShot?: (target: PlayerTarget
       physics.step();
     }
   };
-  return { physics, enemies, roster: r, join, step };
+  return { physics, rng, enemies, roster: r, join, step };
 }
 
 describe('simulación sin pantalla', () => {
@@ -162,5 +163,94 @@ describe('Gauntlet sin pantalla', () => {
     expect(mission.gauntletWaves, 'oleadas superadas').toBeGreaterThanOrEqual(3);
     expect(shotsAtPlayer, 'los enemigos de las oleadas atacan').toBeGreaterThan(0);
     expect(outcome, 'la partida sigue en curso').toBeNull();
+  });
+});
+
+describe('varios jugadores: sonido, reaparición y objetivos (fase 2)', () => {
+  /** Puerto de audio que apunta cada llamada y si llevaba posición. */
+  function recordingAudio(calls: Array<{ name: string; positioned: boolean }>): CombatAudio {
+    const rec: Record<string, (...a: unknown[]) => void> = {};
+    for (const name of Object.keys(SILENT_AUDIO)) rec[name] = (...a) => calls.push({ name, positioned: a.some((x) => typeof x === 'object' && x !== null) });
+    return rec as unknown as CombatAudio;
+  }
+
+  function aimAhead(p: PlayerSlot): void {
+    p.combatIntent.aim = true;
+    p.combatIntent.aimFrom.set(p.controller.feet.x, p.controller.feet.y + 1.7, p.controller.feet.z);
+    p.combatIntent.aimDir.set(0, 0, -1);
+  }
+
+  it('los disparos de otro jugador suenan donde está; sus avisos de primera persona, no', () => {
+    const calls: Array<{ name: string; positioned: boolean }> = [];
+    const w = simWorld(arena, 3, undefined, recordingAudio(calls));
+    const local = w.join(0, 0, 9.5, 0, true);
+    const remote = w.join(3, 0, 9.5);
+    aimAhead(local);
+    aimAhead(remote);
+    // El otro jugador dispara y recarga.
+    remote.combatIntent.firePressed = true;
+    w.step();
+    remote.combatIntent.firePressed = false;
+    w.step(20);
+    remote.combatIntent.reloadPressed = true;
+    w.step();
+    remote.combatIntent.reloadPressed = false;
+    w.step(150);
+    expect(calls, 'solo su disparo, con posición').toEqual([{ name: 'shot', positioned: true }]);
+
+    // El local, en cambio, oye su disparo de cerca y su recarga.
+    calls.length = 0;
+    local.combatIntent.firePressed = true;
+    w.step();
+    local.combatIntent.firePressed = false;
+    w.step(20);
+    local.combatIntent.reloadPressed = true;
+    w.step();
+    expect(calls.find((c) => c.name === 'shot')?.positioned, 'su disparo, sin posición').toBe(false);
+    expect(
+      calls.some((c) => c.name === 'reload'),
+      'y su recarga',
+    ).toBe(true);
+  });
+
+  it('un jugador que no es el local reaparece en el último punto de control', () => {
+    const w = simWorld(arena, 4);
+    w.join(0, 0, 9.5, 0, true);
+    const remote = w.join(3, 0, 9.5);
+    const enemy = w.enemies.spawnAt('thug', new Vector3(0, 0, 4), Math.PI);
+    w.roster.respawn.pos.set(-4, 0, 8);
+    remote.combat.takeHit(enemy, 9999, remote.ctx);
+    expect(remote.combat.dead).toBe(true);
+    // A partir de aquí nadie recibe daño: se mide la reaparición, no el combate.
+    w.roster.god = true;
+    w.step(Math.round(REMOTE_RESPAWN * 60) - 30);
+    expect(remote.combat.dead, 'antes de tiempo sigue caído').toBe(true);
+    w.step(60);
+    expect(remote.combat.dead, 'reaparece').toBe(false);
+    expect(remote.controller.feet.distanceTo(w.roster.respawn.pos), 'en el punto de control').toBeLessThan(0.5);
+  });
+
+  it('un objetivo de alcanzar una zona se cumple llegue quien llegue', () => {
+    const w = simWorld(practice, 2);
+    w.roster.god = true;
+    const sp = practice.spawn.pos;
+    const local = w.join(sp[0], sp[1], sp[2], practice.spawn.yaw, true);
+    const mission = new MissionDirector({
+      session: { data: practice, player: local.controller, combat: local.combat, enemies: w.enemies, players: w.roster.slots },
+      hud: { showToast() {}, setObjective() {}, setZone() {}, setCombatVisible() {} },
+      audio: { ui() {}, alert() {}, siren() {} },
+      profile: newProfile(0),
+      save() {},
+      onFinished() {},
+    });
+    mission.skipLearn();
+    expect(mission.current?.id).toBe('yard');
+    w.step(5);
+    mission.fixedUpdate(FIXED_DT);
+    expect(mission.current?.id, 'nadie en el patio todavía').toBe('yard');
+    w.join(4, 0, -11);
+    w.step(5);
+    mission.fixedUpdate(FIXED_DT);
+    expect(mission.current?.id, 'llega el otro jugador y basta').toBe('clear');
   });
 });

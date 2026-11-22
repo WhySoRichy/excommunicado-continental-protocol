@@ -1,5 +1,6 @@
 import type { EnemyManager } from '../combat/EnemyManager';
 import type { PlayerCombat } from '../combat/PlayerCombat';
+import type { PlayerSlot } from '../combat/PlayerRoster';
 import type { PlayerController } from '../entities/PlayerController';
 import type { LevelData } from '../levels/types';
 import type { Vec3Like } from '../physics/Physics';
@@ -24,6 +25,8 @@ export interface MissionWorld {
   readonly player: PlayerController;
   readonly combat: PlayerCombat;
   readonly enemies: EnemyManager;
+  /** Todos los jugadores, si hay más de uno (los objetivos de alcanzar una zona cuentan con cualquiera). */
+  readonly players?: readonly PlayerSlot[];
 }
 
 /** La alarma del Continental: el director decide cuándo suena; cómo se ve (luces rojas que laten) es cosa de la vista. */

@@ -4,7 +4,7 @@ import { AudioEngine } from '../audio/AudioEngine';
 import { type IntensityInput, musicIntensity } from '../audio/music';
 import { type CombatIntent, emptyCombatIntent, SWITCH_TIME } from '../combat/PlayerCombat';
 import { STYLE_RANKS } from '../combat/StyleMeter';
-import type { UpgradeId, WeaponId } from '../combat/weapons';
+import type { UpgradeId } from '../combat/weapons';
 import type { Action } from '../core/actions';
 import { GameStateMachine, type GameStateId } from '../core/GameStateMachine';
 import { Input, type InputEvent, type Vec2 } from '../core/Input';
@@ -28,6 +28,7 @@ import { probeGpu } from '../render/gpu';
 import { CollisionDebugView, DebugOverlay } from '../debug/DebugOverlay';
 import { FrameStats } from '../debug/FrameStats';
 import { idlePose, type RigPose, type WeaponModel } from '../entities/CharacterRig';
+import { WEAPON_MODEL } from '../entities/PlayerViews';
 import { type BodyYaw, bodyYaw, updateBodyYaw } from '../entities/rigMath';
 import { emptyIntent, type PlayerIntent } from '../entities/PlayerController';
 import { DIALOGUE, HUB_TEXT, rulesPlaque } from '../hub/dialogue';
@@ -63,14 +64,6 @@ export interface GameOptions {
 
 /** Contadores de invariantes de QA (deben quedar en 0). */
 
-const WEAPON_MODEL: Record<WeaponId, WeaponModel> = {
-  carbine: 'rifle',
-  shotgun: 'shotgun',
-  dmr: 'dmr',
-  pistol: 'pistol',
-  revolver: 'revolver',
-  knife: 'knife',
-};
 /** Nivel que se carga para cada contrato. */
 const MISSION_LEVEL: Record<MissionId, LevelId> = { practice: 'practice', nightclub: 'nightclub', docks: 'docks', rooftop: 'rooftop', gauntlet: 'hub' };
 const SUB_LABELS = { time: 'Tiempo', accuracy: 'Precisión', damage: 'Daño recibido', variety: 'Variedad', civilians: 'Civiles ilesos' } as const;
@@ -821,6 +814,7 @@ export class Game {
 
     if (s) {
       s.combat.frameUpdate(realDt, this.audio);
+      s.roster.frameUpdate(realDt);
       this.deathSlowmo = Math.max(0, this.deathSlowmo - realDt);
       this.sim.timeScale = this.deathSlowmo > 0 ? 0.4 : s.combat.timeScale;
       this.audio.setMuffle(s.combat.focusActive ? 0.55 : 0);
@@ -840,6 +834,7 @@ export class Game {
       s.enemyViews.update(s.enemies.enemies, alpha, scaledDt);
       s.civilianViews?.update(alpha, scaledDt);
       s.pickupViews.update(s.pickups.items, scaledDt);
+      s.playerViews.update(s.roster.slots, alpha, scaledDt);
       s.vfx.update(scaledDt);
       s.renderNpcs(scaledDt);
       s.alarm.update(scaledDt);
@@ -1038,7 +1033,12 @@ export class Game {
     ci.aimDir.copy(this.camera.forward);
     if (s.infiniteAmmo) s.combat.weapon.mag = Math.max(s.combat.weapon.mag, 1);
     s.combat.fixedUpdate(dt, ci, s.ctx);
-    // El resto de jugadores (si los hay) se simulan con lo que pide su intención.
+    // El resto de jugadores (si los hay) se simulan con lo que pide su intención y reaparecen en el último punto de
+    // control de la misión.
+    if (this.mission) {
+      s.roster.respawn.pos.copy(this.mission.respawnPos);
+      s.roster.respawn.yaw = this.mission.respawnYaw;
+    }
     s.roster.step(dt);
     const tE = this.profiling ? performance.now() : 0;
     s.enemies.fixedUpdate(dt, s.updateTargets(dt));

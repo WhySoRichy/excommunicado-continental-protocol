@@ -564,9 +564,12 @@ export class MissionDirector {
     // Todos los puntos ocupados: se reintenta en el siguiente paso fijo.
   }
 
+  /** ¿Hay algún jugador vivo en la zona? (con uno solo, el local). */
   private playerInZone(at: readonly [number, number, number], radius: number): boolean {
-    const f = this.d.session.player.feet;
-    return Math.hypot(at[0] - f.x, at[2] - f.z) <= radius && Math.abs(at[1] - f.y) < 2.5;
+    const players = this.d.session.players;
+    if (!players) return inZone(this.d.session.player.feet, at, radius);
+    for (const p of players) if (!p.combat.dead && inZone(p.controller.feet, at, radius)) return true;
+    return false;
   }
 
   private trackMarksmen(): void {
@@ -729,4 +732,9 @@ export class MissionDirector {
       gauntlet: { waves, position, top: p.gauntlet.map((g) => ({ ...g })) },
     });
   }
+}
+
+/** ¿Están unos pies dentro de una zona circular (con margen de altura)? */
+function inZone(f: Vector3, at: readonly [number, number, number], radius: number): boolean {
+  return Math.hypot(at[0] - f.x, at[2] - f.z) <= radius && Math.abs(at[1] - f.y) < 2.5;
 }

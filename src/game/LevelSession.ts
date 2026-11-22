@@ -6,6 +6,7 @@ import { Pickups } from '../combat/Pickups';
 import { PlayerRoster, type PlayerSlot } from '../combat/PlayerRoster';
 import { LevelAlarm } from '../render/LevelAlarm';
 import { PickupViews } from '../render/PickupViews';
+import { PlayerViews } from '../entities/PlayerViews';
 import { type CombatCtx, PlayerCombat } from '../combat/PlayerCombat';
 import { loadoutFor, type UpgradeId } from '../combat/weapons';
 import type { Rng } from '../core/rng';
@@ -55,6 +56,8 @@ export class LevelSession {
   readonly pickups: Pickups;
   /** Lo que se ve de los objetos recogibles; `pickups` no sabe que existe. */
   readonly pickupViews: PickupViews;
+  /** Lo que se ve de los jugadores que no son el local. */
+  readonly playerViews: PlayerViews;
   readonly enemies: EnemyManager;
   /** Lo que se ve de los enemigos; la simulación (`enemies`) no sabe que existe. */
   readonly enemyViews: EnemyViews;
@@ -115,7 +118,10 @@ export class LevelSession {
       rng: deps.rng,
       pickups: this.pickups,
     });
-    this.local = this.roster.add(this.player, this.combat, deps.camera);
+    this.local = this.roster.add(this.player, this.combat, { local: true, camera: deps.camera });
+    this.roster.respawn.pos.set(s[0], s[1], s[2]);
+    this.roster.respawn.yaw = data.spawn.yaw;
+    this.playerViews = new PlayerViews(scene);
     this.ctx = this.local.ctx;
     this.target = this.local.target;
     for (const it of data.interactables) {
@@ -131,6 +137,18 @@ export class LevelSession {
     this.enemyViews = new EnemyViews(scene);
     this.enemyViews.sync(this.enemies.enemies);
     this.physics.step();
+  }
+
+  /** Todos los jugadores de la partida (el local es el primero). */
+  get players(): readonly PlayerSlot[] {
+    return this.roster.slots;
+  }
+
+  /** Añade a la partida un jugador que no es el local (lo mueve su intención; QA y, en la fase 3, la red). */
+  addPlayer(x: number, y: number, z: number, yaw: number): PlayerSlot {
+    const controller = new PlayerController(this.physics, new Vector3(x, y + 0.02, z), yaw);
+    controller.killY = this.data.killY;
+    return this.roster.add(controller, new PlayerCombat(this.deps.upgrades, loadoutFor(this.deps.upgrades)));
   }
 
   /** God mode de debug: los disparos enemigos no hacen daño. */
@@ -186,6 +204,7 @@ export class LevelSession {
     this.enemyViews.dispose();
     this.enemies.dispose();
     this.pickupViews.dispose();
+    this.playerViews.dispose();
     this.pickups.dispose();
     this.vfx.dispose();
     this.playerRig.dispose();

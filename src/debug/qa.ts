@@ -80,6 +80,8 @@ export interface EnemySnapshot {
   z: number;
   health: number;
   headY: number;
+  /** Jugador al que ataca (−1 si aún ninguno). */
+  targetId: number;
 }
 
 export interface HubSnapshot {
@@ -151,6 +153,10 @@ export interface QaApi {
   /** Orienta la cámara para apuntar a un punto del mundo. */
   aimAt(x: number, y: number, z: number): void;
   spawnEnemy(type: 'thug' | 'escort' | 'marksman' | 'heavy' | 'boss', x: number, y: number, z: number, alert: boolean): string | null;
+  /** Añade un jugador que no es el local, quieto (devuelve su id, o −1 sin partida). */
+  addPlayer(x: number, y: number, z: number, yaw: number): number;
+  /** Todos los jugadores de la partida (el local, id 0). */
+  players(): Array<{ id: number; local: boolean; x: number; y: number; z: number; health: number; armor: number; dead: boolean }>;
   setGod(on: boolean): void;
   /** Ruta A* (suavizada) desde el jugador hasta un punto: lista de waypoints. */
   pathTo(x: number, y: number, z: number): Array<{ x: number; y: number; z: number }>;
@@ -430,6 +436,19 @@ export function installQa(game: Game): void {
         z: e.feet.z,
         health: e.vitals.health,
         headY: e.feet.y + e.height - 0.15,
+        targetId: e.target?.id ?? -1,
+      })),
+    addPlayer: (x, y, z, yaw) => game.session?.addPlayer(x, y, z, yaw).id ?? -1,
+    players: () =>
+      (game.session?.players ?? []).map((p) => ({
+        id: p.id,
+        local: p.local,
+        x: p.controller.feet.x,
+        y: p.controller.feet.y,
+        z: p.controller.feet.z,
+        health: p.combat.vitals.health,
+        armor: p.combat.vitals.armor,
+        dead: p.combat.dead,
       })),
     aiStats: () => game.session?.enemies.qaStats() ?? null,
     aimAt: (x, y, z) => {

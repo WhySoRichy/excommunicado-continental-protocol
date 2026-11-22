@@ -17,7 +17,7 @@ El juego va a seguir creciendo en cuatro direcciones a la vez: gráficos, conten
 | Problema | Dato | Qué bloquea |
 |---|---|---|
 | Simulación y vista mezcladas | Al empezar la fase 1, 11 módulos de simulación importaban render, audio, interfaz o cámara. Tras la fase 1, ninguno (vigilado por lint) | Resuelto: la simulación corre sin pantalla |
-| Un solo jugador cableado | `LevelSession` guarda un `player`, un `combat` y un único `PlayerTarget`; los enemigos reciben ese objetivo | Cualquier modo con más de un jugador |
+| Un solo jugador cableado | Al empezar la fase 2, `LevelSession` guardaba un `player`, un `combat` y un único `PlayerTarget`. Tras ella, un registro de plazas con un objetivo por jugador | Resuelto en la simulación: falta la red (fase 3) |
 | Módulos que concentran demasiado | `Game.ts` 1.330 líneas, `PlayerController.ts` 1.035, `CharacterRig.ts` 1.018 (su `update` ronda las 550) | Que dos frentes avancen a la vez sin pisarse |
 | Textos dentro del código | Cadenas en español repartidas por más de diez módulos de juego (armas, estilo, logros, diálogos) | Traducir y revisar textos sin tocar lógica |
 | Contenido sin validar fuera de los niveles | Armas, tipos de enemigo y diálogos no tienen comprobaciones como las de los niveles | Añadir contenido en volumen sin romper el equilibrio ni las referencias |
@@ -52,15 +52,16 @@ Resultado: ningún módulo de simulación importa ya render, interfaz, audio, c�
 
 - **Gauntlet sin pantalla.** Una segunda prueba monta en Node el director de misión real sobre el vestíbulo: lanza las oleadas, los enemigos atacan y se superan tres.
 
-### Fase 2 · Varios jugadores en la simulación (aún en local)
-Hecho:
+### Fase 2 · Varios jugadores en la simulación (aún en local) · completada
 - **Los enemigos eligen objetivo entre los jugadores.** Cada jugador tiene su `PlayerTarget` con un id (`combat/playerTarget.ts` lo crea y lo actualiza) y `EnemyManager` recibe la lista. Cada enemigo sigue con el mismo mientras viva y no haya otro claramente más cerca (al 60 % de la distancia); si le hieren, se vuelve hacia el jugador más cercano al origen del disparo y no lo suelta en 3 s, para no dudar entre dos. El aviso de disparo dice a qué jugador iba.
 - **Prueba sin pantalla con dos jugadores**: el enemigo elige al más cercano, solo le dispara a él y, cuando el lejano le hiere, se vuelve hacia este. Sin el bloqueo de 3 s la prueba falla.
 - **Registro de jugadores** (`combat/PlayerRoster.ts`): cada jugador ocupa una plaza con su id, su controlador, su combate, su objetivo, su contexto de combate y sus intenciones. El registro actualiza los objetivos, lleva cada disparo enemigo al combate del jugador alcanzado y simula a los que no son el local. La sesión lo usa con el jugador local en la plaza 0, y las pruebas sin pantalla usan el mismo código; una de ellas comprueba que el daño va solo al jugador atacado.
+- **Avisos de primera persona solo para el local.** Los disparos de los demás suenan en su posición; sus marcadores de impacto, recarga, Foco e interfaz no suenan en este equipo. Su parte en tiempo real del combate (gasto del Foco, retroceso) avanza igual que la del local.
+- **Reglas de misión con varios jugadores.** Un objetivo de alcanzar una zona se cumple llegue quien llegue (vivo). Los que no son el local reaparecen a los 5 s en el último punto de control; la muerte del local sigue su flujo de siempre (pantalla de muerte y marcadores).
+- **Vista de los demás jugadores** (`entities/PlayerViews.ts`): el Huésped con traje gris y contorno azul, con su arma y la misma animación que el local. La cámara y el HUD siguen siendo del local.
+- **En el juego real**: la API de pruebas añade un segundo jugador (`addPlayer`) y una e2e comprueba que se ve, que el enemigo cercano le ataca a él y que el daño es suyo.
 
-Pendiente:
-- Las reglas de misión con varios jugadores (quién recoge, cuándo se pierde, reaparición) y una vista para los jugadores que no son el local; la cámara y el HUD siguen siendo solo del local.
-- Algunos avisos del combate son de primera persona (marcadores de impacto, recarga, Foco): con jugadores remotos solo deben sonar para el local.
+Queda para la fase 3: quién mueve a los demás jugadores (la red), y qué pasa cuando cae el local con otros vivos.
 
 ### Fase 3 · Multijugador en red
 - Anfitrión con autoridad sobre WebRTC: el anfitrión simula y los invitados envían sus intenciones. El lockstep queda descartado porque la coma flotante no es idéntica entre navegadores.
