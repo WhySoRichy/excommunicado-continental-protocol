@@ -540,6 +540,18 @@ export class AudioEngine implements CombatAudio, MissionAudio {
     }
   }
 
+  /** Golpe del cuerpo contra la pared al llegar a una cobertura: `k` (0..1) según lo rápido que llegó. */
+  coverHit(k: number, surface: Surface = 'hard'): void {
+    if (!this.ready) return;
+    const d = this.sfxBus;
+    this.noiseHit(d, { freq: 360, q: 0.8, type: 'lowpass', gain: 0.06 + 0.16 * k, attack: 0.006, decay: 0.13 });
+    this.tone(d, { type: 'sine', f0: 125, f1: 55, gain: 0.05 + 0.13 * k, decay: 0.12 });
+    // El roce de la ropa, un instante después.
+    this.noiseHit(d, { freq: 2600, q: 0.7, gain: 0.03 + 0.04 * k, decay: 0.09, delay: 0.03 });
+    if (surface === 'metal') this.tone(d, { type: 'triangle', f0: 240, f1: 200, gain: 0.06 * k, decay: 0.32 });
+    else if (surface === 'wood') this.noiseHit(d, { freq: 520, q: 2, gain: 0.07 * k, decay: 0.07 });
+  }
+
   dodge(): void {
     if (!this.ready) return;
     this.noiseHit(this.sfxBus, { freq: 700, q: 0.6, type: 'lowpass', gain: 0.22, attack: 0.04, decay: 0.2 });

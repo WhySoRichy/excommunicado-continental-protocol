@@ -120,7 +120,7 @@ export const practice: LevelData = {
       { id: 't-vault', kind: 'learn', skill: 'vault', text: 'Ve hasta la caja y, pegado a ella, pulsa {jump} para saltarla', at: [0, 0, 0.4] },
       { id: 't-slide', kind: 'learn', skill: 'slide', text: 'Corriendo, pulsa {crouch} para deslizarte' },
       { id: 't-dodge', kind: 'learn', skill: 'dodge', text: 'Esquiva rodando con {dodge} (o doble {jump})' },
-      { id: 't-cover', kind: 'learn', skill: 'cover', text: 'Pégate al muro alto y pulsa {crouch} para cubrirte', at: [4, 0, -4.2] },
+      { id: 't-cover', kind: 'learn', skill: 'cover', text: 'Mira el muro alto y mantén {crouch}: correrás a cubrirte. Dispara sin apuntar para hacerlo a ciegas', at: [4, 0, -4.2] },
       { id: 't-shoulder', kind: 'learn', skill: 'shoulder', text: 'Cambia la cámara de hombro con {shoulder}: verás mejor por el lado izquierdo' },
       { id: 't-shoot', kind: 'learn', skill: 'shoot', text: 'En los carriles: apunta con {aim} y dispara con {fire}', at: [-14, 0, -7] },
       { id: 't-reload', kind: 'learn', skill: 'reload', text: 'Recarga con {reload}; vuelve a pulsar en la zona dorada' },

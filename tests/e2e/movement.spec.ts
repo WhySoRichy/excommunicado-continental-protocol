@@ -116,7 +116,8 @@ test.describe('Fase 1 · movimiento', () => {
       out.vaultZ = q.player()!.z;
       q.teleport(0, 0, -3.4, N);
       go(N, 0.02, { crouch: true });
-      go(N, 2.5, { moveX: 1 });
+      go(N, 0.5, {});
+      go(N, 1.2, { moveX: 1 });
       out.coverEdge = q.player()!.edge;
       spin([-1.2, 1.0]);
       go(N, 0.02, { crouch: true });
@@ -332,14 +333,19 @@ test.describe('Fase 1 · movimiento', () => {
     await frames(page, 0.3);
     await expect.poll(() => page.evaluate(() => window.__EXCOM__!.prompt())).toContain('Cubrirse');
     await page.screenshot({ path: shotPath('fase1-prompt-cover') });
-    // En cobertura alta, el aviso explica cómo asomarse: lejos de un borde, que vayas a uno; junto a él, por qué lado.
-    await page.evaluate(() => window.__EXCOM__!.step(2, { crouch: true }));
+    // En cobertura alta, el aviso explica cómo asomarse: lejos de un borde, que al apuntar irá al más cercano; junto a
+    // él, por qué lado (y que se puede disparar a ciegas).
+    await page.evaluate(() => {
+      const q = window.__EXCOM__!;
+      q.step(1, { crouch: true });
+      q.step(40, {});
+    });
     await frames(page, 0.3);
-    await expect.poll(() => page.evaluate(() => window.__EXCOM__!.prompt())).toContain('borde para asomarte');
+    await expect.poll(() => page.evaluate(() => window.__EXCOM__!.prompt())).toContain('Asomarse por el borde');
     await page.screenshot({ path: shotPath('fase1-en-cobertura') });
     await page.evaluate(() => window.__EXCOM__!.step(180, { moveX: 1 }));
     await frames(page, 0.3);
-    await expect.poll(() => page.evaluate(() => window.__EXCOM__!.prompt())).toContain('Asomarse por la derecha');
+    await expect.poll(() => page.evaluate(() => window.__EXCOM__!.prompt())).toContain('Asomarse por la derecha · a ciegas');
     // Vista general del personaje y la cámara.
     await page.evaluate(() => {
       const q = window.__EXCOM__!;

@@ -4,7 +4,8 @@ import { clamp, DEG2RAD } from '../core/math';
 import type { Rng } from '../core/rng';
 import type { CivilianManager } from '../entities/Civilian';
 import type { Enemy } from '../entities/Enemy';
-import type { PlayerController } from '../entities/PlayerController';
+import { COVER } from '../entities/coverSensor';
+import { PLAYER_RADIUS, type PlayerController } from '../entities/PlayerController';
 
 import type { PickupKind } from '../levels/types';
 import { createRayHit, type PhysicsWorld, QueryGroups, type RayHit, type Vec3Like } from '../physics/Physics';
@@ -117,6 +118,30 @@ const FOCUS_SCALE = 0.35;
 /** Escala de tiempo durante la pausa de impacto. */
 const HIT_PAUSE_SCALE = 0.08;
 
+/**
+ * Disparo a ciegas: sin apuntar desde una cobertura baja (por encima) o desde el borde de una alta (por el lado). El
+ * arma asoma sin el cuerpo: se sigue a cubierto, a cambio de mucha más dispersión.
+ */
+export type BlindMode = 0 | 1 | 2;
+const BLIND_SPREAD = 2.8;
+/** Cuánto sigue el arma en alto tras el último disparo a ciegas (s). */
+const BLIND_HOLD = 0.45;
+/** Por encima: lo que pasa la boca del arma de la cara de la pared y del borde superior (m; coherente con la pose). */
+const BLIND_OVER_REACH = 0.3;
+const BLIND_OVER_CLEAR = 0.2;
+/** Por el borde: lo que sale de lado más allá del cuerpo, lo que avanza hacia la pared y a qué altura (m). */
+const BLIND_SIDE_REACH = 0.4;
+const BLIND_SIDE_FWD = 0.45;
+const BLIND_SIDE_Y = 1.3;
+
+/** Cómo dispararía ahora a ciegas (sin apuntar), o 0 si no puede. */
+export function blindMode(p: PlayerController): BlindMode {
+  const c = p.cover;
+  if (p.state !== 'cover' || !c || p.aiming || c.wrap >= 0) return 0;
+  if (c.height === 'low') return 1;
+  return c.edgeNear !== 0 ? 2 : 0;
+}
+
 const _cam = new Vector3();
 const _fwd = new Vector3();
 const _origin = new Vector3();
@@ -184,6 +209,8 @@ export class PlayerCombat {
   spreadDeg = 0;
   /** Recoil visual para la pose (decae). */
   recoilVis = 0;
+  /** Segundos que el arma sigue en alto tras un disparo a ciegas (la pose de disparar por encima o por el borde). */
+  private blindT = 0;
   /** Pausa de impacto: segundos reales que el mundo va casi congelado tras una baja. */
   hitPause = 0;
   /**
@@ -335,6 +362,7 @@ export class PlayerCombat {
     this.sinceDamage += dt;
     this.sinceDodge += dt;
     this.sinceCover += dt;
+    this.blindT = Math.max(0, this.blindT - dt);
     this.grabT = Math.max(0, this.grabT - dt);
     this.slashT = Math.max(0, this.slashT - dt);
     if (this.dead) return;
@@ -441,8 +469,29 @@ export class PlayerCombat {
     this.stats.switches++;
   }
 
-  /** Posición aproximada de la boca del arma (coherente con el modelo). */
+  /** Disparo a ciegas en curso (1 por encima, 2 por el borde) o 0: lo que dibuja la pose. */
+  blindPose(p: PlayerController): BlindMode {
+    return this.blindT > 0 ? blindMode(p) : 0;
+  }
+
+  /** Posición aproximada de la boca del arma (coherente con el modelo). A ciegas, por encima de la cobertura o tras su borde. */
   muzzleOf(p: PlayerController, aiming: boolean, out: Vector3): Vector3 {
+    const blind = aiming ? 0 : blindMode(p);
+    if (blind !== 0 && p.cover) {
+      const c = p.cover;
+      const nx = c.normal.x;
+      const nz = c.normal.z;
+      if (blind === 1) {
+        // Brazo estirado por encima del borde, justo pasada la cara de la pared.
+        const k = PLAYER_RADIUS + COVER.gap + BLIND_OVER_REACH;
+        return out.set(p.feet.x - nx * k, p.feet.y + c.top + BLIND_OVER_CLEAR, p.feet.z - nz * k);
+      }
+      // Brazo asomado tras el borde, a la altura del pecho.
+      const tx = nz * c.edgeNear;
+      const tz = -nx * c.edgeNear;
+      const k = PLAYER_RADIUS + BLIND_SIDE_REACH;
+      return out.set(p.feet.x + tx * k - nx * BLIND_SIDE_FWD, p.feet.y + BLIND_SIDE_Y, p.feet.z + tz * k - nz * BLIND_SIDE_FWD);
+    }
     const y = p.yaw;
     const fx = -Math.sin(y);
     const fz = -Math.cos(y);
@@ -478,7 +527,8 @@ export class PlayerCombat {
     const overEnemy = this.hit.hit ? ctx.enemies.enemyFromCollider(this.hit.collider) : null;
     const overCiv = this.hit.hit && !overEnemy ? ctx.civilians?.fromCollider(this.hit.collider) : null;
     this.aimOver = overEnemy && overEnemy.alive ? 'enemy' : overCiv && overCiv.alive ? 'civilian' : 'none';
-    this.muzzleOf(ctx.player, true, _muzzle);
+    // La mira se pone gris si el disparo daría en algo antes del punto apuntado (a ciegas, desde donde asoma el arma).
+    this.muzzleOf(ctx.player, ctx.player.aiming, _muzzle);
     _dir.subVectors(_aim, _muzzle);
     const len = _dir.length();
     this.blocked = false;
@@ -493,11 +543,13 @@ export class PlayerCombat {
     const p = ctx.player;
     this.aimPoint(ctx, d.range, _aim);
     this.muzzleOf(p, aiming, _muzzle);
+    const blind = aiming ? 0 : blindMode(p);
+    if (blind !== 0) this.blindT = BLIND_HOLD;
     const base = _base.subVectors(_aim, _muzzle).normalize();
     // Base perpendicular para el cono de spread.
     _right.crossVectors(base, Math.abs(base.y) < 0.95 ? _tmp.set(0, 1, 0) : _tmp.set(1, 0, 0)).normalize();
     _up.crossVectors(_right, base).normalize();
-    const spread = w.spread(aiming, p.stepSpeed(1 / 60) / 4.6, p.posture === 'crouch') * DEG2RAD;
+    const spread = w.spread(aiming, p.stepSpeed(1 / 60) / 4.6, p.posture === 'crouch') * DEG2RAD * (blind !== 0 ? BLIND_SPREAD : 1);
     let anyEnemyHit = false;
     for (let i = 0; i < Math.max(1, d.pellets); i++) {
       // Distribución uniforme en disco (más densa al centro de forma controlada).

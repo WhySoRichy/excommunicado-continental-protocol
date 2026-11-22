@@ -90,6 +90,10 @@ class PlayerView {
     pose.vault = p.vaultProgress;
     pose.cover = p.state === 'cover' && p.cover ? p.cover.height : 'none';
     pose.peek = p.peekAmount;
+    pose.blind = look.blind;
+    pose.coverSide = p.state === 'cover' && p.cover ? p.cover.edgeNear : 0;
+    pose.brace = p.state === 'cover' && p.cover ? p.cover.impact : 0;
+    pose.coverTop = p.cover ? p.cover.top : 1.2;
     pose.death = 1;
     this.rig.update(pose, dt);
     const lp = root.position;

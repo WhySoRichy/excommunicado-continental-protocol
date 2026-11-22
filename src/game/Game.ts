@@ -1,4 +1,4 @@
-import { surfaceAt } from '../levels/surface';
+import { surfaceAt, surfaceInside } from '../levels/surface';
 import { Vector3 } from 'three';
 import { AudioEngine } from '../audio/AudioEngine';
 import { type IntensityInput, musicIntensity } from '../audio/music';
@@ -54,7 +54,7 @@ import { CameraRig, DEFAULT_CAMERA } from './CameraRig';
 import type { Coop, CoopMode } from './Coop';
 import { coopScreenApi } from './coopScreenApi';
 import { HiddenTicker } from './HiddenTicker';
-import { buildIntelView, contextPrompt, fillHudData, type HudView, type PromptInput } from './hudModel';
+import { buildIntelView, contextPrompt, coverMarkerSpot, fillHudData, type HudView, type PromptInput } from './hudModel';
 import { checkCameraInvariants, checkCombatInvariants, checkPlayerInvariants, type QaInvariants } from './invariants';
 import { LevelSession } from './LevelSession';
 
@@ -166,7 +166,19 @@ export class Game {
   /** Etiqueta de tecla y entradas del HUD y del aviso contextual, creadas una vez (sin asignar por frame). */
   private readonly labelFn = (a: Action): string => this.input.label(a);
   private readonly hudView: HudView = { yaw: 0, fovDeg: 60, viewportHeight: 1, label: this.labelFn };
-  private readonly promptIn: PromptInput = { near: null, holdT: 0, yaw: 0, moveX: 0, moveY: 0, label: this.labelFn };
+  private readonly promptIn: PromptInput = {
+    near: null,
+    holdT: 0,
+    yaw: 0,
+    moveX: 0,
+    moveY: 0,
+    lookFrom: { x: 0, y: 0, z: 0 },
+    lookDir: { x: 0, y: 0, z: 0 },
+    combat: false,
+    label: this.labelFn,
+  };
+  /** Llegadas a una cobertura ya oídas (la siguiente suena contra la pared). */
+  private lastCoverEnters = 0;
   private readonly hudData: HudData;
   private peekTimer = 0;
   private orbit = 0;
@@ -651,7 +663,7 @@ export class Game {
       this.hud.setHints([
         { key: move, text: 'Mover' },
         { key: lab('sprint'), text: 'Sprint' },
-        { key: lab('crouch'), text: 'Agacharse · deslizar (corriendo) · cubrirse (junto a pared)' },
+        { key: lab('crouch'), text: 'Agacharse · deslizar (corriendo) · cubrirse (mantén: a la cobertura que miras)' },
         { key: lab('jump'), text: 'Saltar · vault sobre obstáculos bajos' },
         { key: `2× ${lab('jump')} / ${lab('dodge')}`, text: 'Esquiva (voltereta)' },
         { key: lab('aim'), text: 'Apuntar' },
@@ -1038,8 +1050,12 @@ export class Game {
     if (this.settings.aimToggle && inp.pressed('aim')) this.aimLatched = !this.aimLatched;
     it.aim = this.aimHeld();
     it.crouchPressed = inp.pressed('crouch');
+    it.crouchHeld = inp.isDown('crouch');
     it.jumpPressed = inp.pressed('jump');
     it.dodgePressed = inp.pressed('dodge');
+    // La cobertura a la que correr es la que se mira.
+    it.lookFrom = this.camera.position;
+    it.lookDir = this.camera.forward;
     return it;
   }
 
@@ -1091,9 +1107,9 @@ export class Game {
     } else this.holdT = 0;
     const it = controlling ? this.buildIntent() : this.idleIntent;
     s.player.fixedUpdate(dt, it);
-    // Pisadas: una por zancada recorrida, más largas y fuertes al esprintar.
+    // Pisadas: una por zancada recorrida, más largas y fuertes al esprintar (también corriendo a cubierto y por la pared).
     const pl = s.player;
-    if (pl.grounded && pl.state === 'ground') {
+    if (pl.grounded && (pl.state === 'ground' || pl.state === 'toCover' || pl.state === 'cover')) {
       const v = pl.stepSpeed(dt);
       if (v > 0.6) {
         this.stepDist += v * dt;
@@ -1103,6 +1119,17 @@ export class Game {
           const f = pl.feet;
           this.audio.footstep(crouched ? 0.35 : pl.sprinting ? 1 : 0.65, surfaceAt(s.data.boxes, f.x, f.y, f.z));
         }
+      }
+    }
+    // Llegada a una cobertura: el golpe contra la pared y una sacudida corta, según lo rápido que llegó.
+    if (pl.stats.coverEnters !== this.lastCoverEnters) {
+      this.lastCoverEnters = pl.stats.coverEnters;
+      const c = pl.cover;
+      if (c && c.impact > 0.15) {
+        const f = pl.feet;
+        const wall = surfaceInside(s.data.boxes, f.x - c.normal.x * 0.6, f.y + 1, f.z - c.normal.z * 0.6);
+        this.audio.coverHit(c.impact, wall);
+        this.camera.addTrauma(0.12 + 0.2 * c.impact);
       }
     }
     const ci = controlling ? this.buildCombatIntent() : this.idleCIntent;
@@ -1536,8 +1563,12 @@ export class Game {
     if (!s) return;
     const p = s.player;
     p.renderFeet(alpha, _feet);
-    // Asomado por el borde de una cobertura, la cámara pasa al hombro de ese lado (sin contar como cambio del jugador).
-    this.camera.shoulderOverride = p.state === 'cover' ? (p.cover?.peekSide ?? 0) : 0;
+    // En el borde de una cobertura alta (y asomado por él), la cámara pasa al hombro de ese lado sin contar como cambio
+    // del jugador; antes de asomarse se abre un poco más para enseñar lo que hay tras la esquina.
+    const pc = p.state === 'cover' ? p.cover : null;
+    const edgeSide = pc && pc.height === 'high' && pc.wrap < 0 ? pc.peekSide || pc.edgeNear : 0;
+    this.camera.shoulderOverride = edgeSide;
+    this.camera.coverLean = edgeSide !== 0 && pc?.peekSide === 0 ? 1 : 0;
     this.camera.update({ feet: _feet, posture: p.posture, aiming: p.aiming, sprinting: p.sprinting, dt: realDt, zoom: s.combat.weapon.def.aimFov }, s.physics);
     if (this.opts.qa) checkCameraInvariants(s, this.camera, this.invariants);
     const rig = s.playerRig;
@@ -1560,7 +1591,9 @@ export class Game {
     pose.state = p.state;
     pose.posture = p.posture;
     pose.grounded = p.grounded;
-    pose.aim = !c.holstered && (p.aiming || c.weapon.cooldown > 0) ? 1 : 0;
+    pose.blind = c.holstered ? 0 : c.blindPose(p);
+    // Un disparo a ciegas no levanta el arma a la mira: la saca por encima o por el borde.
+    pose.aim = !c.holstered && (p.aiming || (c.weapon.cooldown > 0 && pose.blind === 0)) ? 1 : 0;
     pose.aimPitch = this.camera.pitch;
     pose.stateTime = p.stateTime;
     pose.reload = c.weapon.reloadProgress;
@@ -1575,6 +1608,9 @@ export class Game {
     pose.vault = p.vaultProgress;
     pose.cover = p.state === 'cover' && p.cover ? p.cover.height : 'none';
     pose.peek = p.peekAmount;
+    pose.coverSide = p.state === 'cover' && p.cover ? p.cover.edgeNear : 0;
+    pose.brace = p.state === 'cover' && p.cover ? p.cover.impact : 0;
+    pose.coverTop = p.cover ? p.cover.top : 1.2;
     rig.update(pose, scaledDt);
     rig.setOpacity(this.camera.distanceToHead < 0.55 ? 0 : 1);
   }
@@ -1608,6 +1644,7 @@ export class Game {
     fillHudData(this.hudData, s, v);
     this.hud.update(this.hudData, dt);
     this.hud.setCrosshairVisible(!c.holstered);
+    s.coverMarker.update(this.fsm.controlling ? coverMarkerSpot(s, this.promptIn.combat) : null, dt);
     const net = this.coop?.missionNet;
     if (net) this.hud.setMarkers(net.markersUsed, net.markersTotal);
     this.peekTimer -= dt;
@@ -1623,6 +1660,9 @@ export class Game {
       pi.yaw = this.camera.yaw;
       pi.moveX = this.move.x;
       pi.moveY = this.move.y;
+      pi.lookFrom = this.camera.position;
+      pi.lookDir = this.camera.forward;
+      pi.combat = this.musicIn.fighting > 0 || this.currentLevel === 'practice' || this.currentLevel === 'arena';
       this.hud.setPrompt(this.fsm.controlling ? contextPrompt(s, pi) : null);
       this.hud.setTeam(this.coop?.inMatch ? this.teamView(s) : null);
     }

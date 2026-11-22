@@ -1,7 +1,21 @@
 import type { CharacterCollision, Collider } from '@dimforge/rapier3d-compat';
 import { Vector3 } from 'three';
 import { angleDelta, clamp, lerp, moveTowardsAngle } from '../core/math';
-import { createRayHit, DEFAULT_KCC, Groups, type CharacterBody, type PhysicsWorld, QueryGroups } from '../physics/Physics';
+import { createRayHit, DEFAULT_KCC, Groups, type CharacterBody, type PhysicsWorld, QueryGroups, type Vec3Like } from '../physics/Physics';
+import {
+  CHEST_Y,
+  COVER,
+  copyProbe,
+  CoverSensor,
+  type CoverSpot,
+  emptyProbe,
+  emptySpot,
+  emptyWrap,
+  LOW_Y,
+  type WallProbe,
+  wrapPoint,
+  wrapTurn,
+} from './coverSensor';
 
 /** Dimensiones de la cápsula (total = 2·half + 2·radio). */
 export const PLAYER_RADIUS = 0.32;
@@ -14,7 +28,6 @@ export const MOVE = {
   sprint: 7.0,
   aimWalk: 2.6,
   crouch: 2.2,
-  cover: 1.9,
   accelGround: 38,
   decelGround: 30,
   accelAir: 9,
@@ -52,11 +65,10 @@ export const MOVE = {
   vaultExitSpeed: 3.5,
   /** Desviación máxima del plan de vault antes de abortar (m). */
   vaultAbortDev: 0.35,
-  coverGap: 0.06,
-  coverProbe: 0.95,
 } as const;
 
-export type MoveState = 'ground' | 'air' | 'roll' | 'slide' | 'vault' | 'cover' | 'locked' | 'dead';
+/** `toCover`: corriendo hasta una cobertura para pegarse a ella. */
+export type MoveState = 'ground' | 'air' | 'roll' | 'slide' | 'vault' | 'toCover' | 'cover' | 'locked' | 'dead';
 export type Posture = 'stand' | 'crouch';
 export type CoverHeight = 'low' | 'high';
 
@@ -68,12 +80,40 @@ export interface PlayerIntent {
   sprint: boolean;
   aim: boolean;
   crouchPressed: boolean;
+  /** C mantenida: con una cobertura a la vista, correr a ella. */
+  crouchHeld: boolean;
   jumpPressed: boolean;
   dodgePressed: boolean;
+  /** Rayo de la mirada (la cámara): elige la cobertura a la que correr. Dirección nula si no hay cámara. */
+  lookFrom: Vec3Like;
+  lookDir: Vec3Like;
 }
 
 export function emptyIntent(): PlayerIntent {
-  return { moveX: 0, moveY: 0, camYaw: 0, sprint: false, aim: false, crouchPressed: false, jumpPressed: false, dodgePressed: false };
+  return {
+    moveX: 0,
+    moveY: 0,
+    camYaw: 0,
+    sprint: false,
+    aim: false,
+    crouchPressed: false,
+    crouchHeld: false,
+    jumpPressed: false,
+    dodgePressed: false,
+    lookFrom: { x: 0, y: 0, z: 0 },
+    lookDir: { x: 0, y: 0, z: 0 },
+  };
+}
+
+/** Lo que muestra el HUD sobre lo que harían Espacio y C ahora mismo (`peekContext`). */
+export interface MoveHint {
+  vault: 'vault' | 'mantle' | null;
+  /** C pulsada: cobertura al alcance (su altura). */
+  cover: CoverHeight | null;
+  /** Adónde iría con C (pulsada si hay `cover`; mantenida si no), o null. */
+  spot: CoverSpot | null;
+  /** En la alta, lejos de un borde: el más cercano al que iría solo al apuntar (−1/+1), o 0. */
+  edge: number;
 }
 
 interface VaultPlan {
@@ -111,6 +151,23 @@ export interface CoverInfo {
   peekSide: number;
   /** Cuánto ha salido de lado al asomarse (m, con signo: + derecha). */
   peekOffset: number;
+  /** Borde superior sobre los pies (m): por encima se dispara a ciegas en la baja. */
+  top: number;
+  /** Con qué fuerza llegó (0..1): la animación apoya la mano y el cuerpo en la pared. */
+  impact: number;
+  /** Al apuntar en la alta lejos de un borde, el lado del borde al que va solo (−1/+1), o 0. */
+  seek: number;
+  /** Rodeando una esquina: avance 0..1, o −1. */
+  wrap: number;
+}
+
+function emptyCover(): CoverInfo {
+  return { normal: new Vector3(0, 0, 1), height: 'low', edge: 0, edgeNear: 0, peekSide: 0, peekOffset: 0, top: 1.2, impact: 0, seek: 0, wrap: -1 };
+}
+
+/** La misma intención sin la pulsación de C (la consumió la cobertura). */
+function noCrouch(it: PlayerIntent): PlayerIntent {
+  return { ...it, crouchPressed: false, crouchHeld: false };
 }
 
 /**
@@ -131,10 +188,25 @@ export interface MoveNet {
   invulnerable: boolean;
   /** Avance del vault 0..1, o −1 sin vault. */
   vault: number;
-  /** En cobertura: hacia dónde mira la pared (x, z), su altura y el asomado; null fuera de ella. */
-  cover: { nx: number; nz: number; height: CoverHeight; peekSide: number; peekOffset: number } | null;
+  /** En cobertura: hacia dónde mira la pared, su altura, el asomado, el borde al alcance, la altura de su borde superior y la llegada; null fuera de ella. */
+  cover: CoverNet | null;
   /** Volteretas y planchas hechas (el combate lo usa para saber cuándo esquivó). */
   dodges: number;
+}
+
+export interface CoverNet {
+  nx: number;
+  nz: number;
+  height: CoverHeight;
+  peekSide: number;
+  peekOffset: number;
+  edgeNear: number;
+  top: number;
+  impact: number;
+}
+
+export function emptyCoverNet(): CoverNet {
+  return { nx: 0, nz: 0, height: 'low', peekSide: 0, peekOffset: 0, edgeNear: 0, top: 1.2, impact: 0 };
 }
 
 export function emptyMoveNet(): MoveNet {
@@ -163,6 +235,10 @@ export function emptyMoveNet(): MoveNet {
 const PEEK_OUT_RIGHT = 0.55;
 const PEEK_OUT_LEFT = 0.75;
 const PEEK_SPEED = 4;
+/** C pulsada busca la pared en un abanico de ±25° alrededor de la marcha o de la mirada. */
+const NEAR_FAN = 0.44;
+/** Un borde de la alta está al alcance para asomarse si la pared se acaba a esta distancia del centro (m). */
+const EDGE_REACH = PLAYER_RADIUS * 0.9 + 0.12;
 
 export interface PlayerMoveStats {
   jumps: number;
@@ -172,6 +248,8 @@ export interface PlayerMoveStats {
   dives: number;
   slides: number;
   coverEnters: number;
+  /** Esquinas exteriores rodeadas sin soltarse de la cobertura. */
+  coverWraps: number;
   sprintTime: number;
   distance: number;
 }
@@ -219,7 +297,18 @@ export class PlayerController {
   /** Multiplicador de velocidad (solo debug/QA de estrés). */
   speedMultiplier = 1;
   killY = -50;
-  readonly stats: PlayerMoveStats = { jumps: 0, vaults: 0, mantles: 0, rolls: 0, dives: 0, slides: 0, coverEnters: 0, sprintTime: 0, distance: 0 };
+  readonly stats: PlayerMoveStats = {
+    jumps: 0,
+    vaults: 0,
+    mantles: 0,
+    rolls: 0,
+    dives: 0,
+    slides: 0,
+    coverEnters: 0,
+    coverWraps: 0,
+    sprintTime: 0,
+    distance: 0,
+  };
   /** Diagnósticos de QA (deben quedar en 0). */
   nanResets = 0;
   killPlaneResets = 0;
@@ -248,6 +337,31 @@ export class PlayerController {
   private readonly center = new Vector3();
   /** Avance del vault recibido por red (null si este personaje se simula aquí). */
   private netVault: number | null = null;
+  /** Consultas de la cobertura contra el escenario. */
+  private readonly sensor: CoverSensor;
+  /** Los datos de la cobertura (se reutilizan: `cover` apunta aquí o es null). */
+  private readonly coverInfo = emptyCover();
+  /** La pared en la que se está, sondeada en cada paso. */
+  private readonly here = emptyProbe();
+  private readonly corner = emptyProbe();
+  /** Adónde corre (estado `toCover`), y las coberturas candidatas de este paso. */
+  private readonly run = emptySpot();
+  private readonly nearSpot = emptySpot();
+  private readonly lookSpot = emptySpot();
+  private readonly hintSpot = emptySpot();
+  private runPeak = 0;
+  private runMaxT = 0;
+  /** C pulsada con una cobertura a la vista: se decide al soltar (agacharse o salir) o al cumplir el tiempo (correr). */
+  private holding = false;
+  private holdT = 0;
+  /** Empuje contra un borde para rodear la esquina (negativo: espera tras un intento fallido). */
+  private edgePush = 0;
+  private readonly wrapPlan = emptyWrap();
+  private wrapT = 0;
+  /** Tras doblar una esquina, la dirección se mantiene mientras no cambie la tecla. */
+  private readonly latch = { on: false, x: 0, y: 0, s: 0 };
+  private seekTried = false;
+  private readonly hint: MoveHint = { vault: null, cover: null, spot: null, edge: 0 };
 
   /** Grupos de colisión del personaje (jugador o enemigo: el mismo motor robusto para ambos). */
   readonly groups: number;
@@ -257,6 +371,7 @@ export class PlayerController {
     this.groups = groups;
     this.center.set(spawn.x, spawn.y + STAND_HALF + PLAYER_RADIUS, spawn.z);
     this.char = physics.createCharacter(this.center, PLAYER_RADIUS, STAND_HALF, groups);
+    this.sensor = new CoverSensor(physics, this.char.collider, PLAYER_RADIUS, CROUCH_HALF);
     this.colOut = new physics.R.CharacterCollision();
     this.feet.copy(spawn);
     this.prevFeet.copy(spawn);
@@ -305,6 +420,7 @@ export class PlayerController {
     this.stateTime = 0;
     this.vault = null;
     this.cover = null;
+    this.holding = false;
     this.invulnerable = false;
     this.syncCollider();
   }
@@ -376,6 +492,7 @@ export class PlayerController {
     if (s === this.state) return;
     this.state = s;
     this.stateTime = 0;
+    if (s !== 'ground' && s !== 'cover') this.holding = false;
   }
 
   // =====================================================================
@@ -416,6 +533,9 @@ export class PlayerController {
       case 'vault':
         this.stepVault(dt);
         break;
+      case 'toCover':
+        this.stepToCover(dt, it, wishLen);
+        break;
       case 'cover':
         this.stepCover(dt, it, wishLen);
         break;
@@ -452,7 +572,17 @@ export class PlayerController {
       }
       // La misma pulsación de C no debe sacarlo de la cobertura: el paso de cobertura empieza en el siguiente tick.
       if (this.tryEnterCover(it, wishLen)) return;
-      this.setPosture(this.posture === 'stand' ? 'crouch' : 'stand');
+      // Con una cobertura a la vista, C se decide al soltarla (agacharse) o al mantenerla (correr a ella).
+      if (this.lookCover(it.lookFrom, it.lookDir, null)) this.beginHold();
+      else this.togglePosture();
+    } else if (this.holding) {
+      const go = this.stepHold(dt, it, null);
+      if (go === 'tap') this.togglePosture();
+      else if (go === 'run') {
+        this.startRun(this.lookSpot);
+        if (this.state === 'toCover') this.stepToCover(dt, it, wishLen);
+        return;
+      }
     }
 
     if (it.dodgePressed && this.rollCooldown <= 0) {
@@ -634,6 +764,12 @@ export class PlayerController {
       this.setState('air');
       return;
     }
+    // Deslizándose contra una pared que cubre, termina a cubierto.
+    if (this.sensor.probe(this.feet, this.slideDir.x, this.slideDir.z, PLAYER_RADIUS + 0.2, this.here)) {
+      this.slideCooldown = MOVE.slideCooldown;
+      this.enterCover(this.here, clamp(speed / MOVE.slideStartSpeed, 0.5, 1));
+      return;
+    }
     if (k >= 1 || blocked) {
       this.slideCooldown = MOVE.slideCooldown;
       // Si sigue corriendo y hay espacio, se levanta; si no, queda agachado.
@@ -733,14 +869,27 @@ export class PlayerController {
   private readonly scratchPlan: VaultPlan = newPlan();
   private readonly activePlan: VaultPlan = newPlan();
 
+  /** El último resultado de `peekContext` (la marca de la cobertura lo lee sin repetir la consulta). */
+  get moveHint(): MoveHint {
+    return this.hint;
+  }
+
   /**
-   * Consulta para el HUD (sin efectos): qué haría Espacio y C ahora mismo.
-   * `camYaw` y el eje de movimiento definen la dirección que se sondea.
+   * Consulta para el HUD (sin efectos): qué haría Espacio y C ahora mismo. `camYaw` y el eje de movimiento definen la
+   * dirección que se sondea; el rayo de la mirada, la cobertura a la que correría.
    */
-  peekContext(camYaw: number, moveX: number, moveY: number): { vault: 'vault' | 'mantle' | null; cover: CoverHeight | null } {
-    const out = this.peekOut;
+  peekContext(camYaw: number, moveX: number, moveY: number, lookFrom: Vec3Like, lookDir: Vec3Like): MoveHint {
+    const out = this.hint;
     out.vault = null;
     out.cover = null;
+    out.spot = null;
+    out.edge = 0;
+    if (this.state === 'cover' && this.cover) {
+      const c = this.cover;
+      if (c.wrap < 0 && this.lookCover(lookFrom, lookDir, this.here, this.hintSpot)) out.spot = this.hintSpot;
+      if (c.height === 'high' && c.edgeNear === 0 && c.peekSide === 0 && c.wrap < 0) out.edge = this.nearestEdge(camYaw);
+      return out;
+    }
     if (this.state !== 'ground' || !this.grounded) return out;
     const fx = -Math.sin(camYaw);
     const fz = -Math.cos(camYaw);
@@ -751,11 +900,12 @@ export class PlayerController {
     else _tmp2.normalize();
     const plan = this.planVault(_tmp2);
     if (plan) out.vault = plan.mantle ? 'mantle' : 'vault';
-    if (this.probeCover(_tmp2, MOVE.coverProbe)) out.cover = this.coverProbe.height;
+    if (this.sensor.find(this.feet, _tmp2.x, _tmp2.z, COVER.near, NEAR_FAN, 5, this.hintSpot)) {
+      out.cover = this.hintSpot.height;
+      out.spot = this.hintSpot;
+    } else if (this.lookCover(lookFrom, lookDir, null, this.hintSpot)) out.spot = this.hintSpot;
     return out;
   }
-
-  private readonly peekOut: { vault: 'vault' | 'mantle' | null; cover: CoverHeight | null } = { vault: null, cover: null };
 
   /** Progreso del vault en curso (0..1), o −1 si no hay. */
   get vaultProgress(): number {
@@ -802,51 +952,163 @@ export class PlayerController {
   }
 
   // ---------------------------------------------------------------------
-  /**
-   * Sondea una superficie de cobertura en `dir` desde los pies. Rellena `this.coverProbe`
-   * (reutilizable, sin asignaciones) y devuelve si hay cobertura válida.
-   * Requiere pared a 0,45 m y 0,8 m (cobertura de al menos ~0,85 m); a 1,5 m decide baja/alta.
-   */
-  private probeCover(dir: Vector3, maxDist: number): boolean {
-    const ph = this.physics;
-    const h = this.hit;
-    const out = this.coverProbe;
-    _probe.set(this.feet.x, this.feet.y + 0.45, this.feet.z);
-    if (!ph.raycast(_probe, dir, maxDist, QueryGroups.STATIC, h, this.char.collider)) return false;
-    if (Math.abs(h.normal.y) > 0.35 || h.normal.x * dir.x + h.normal.z * dir.z > -0.5) return false;
-    const nl = Math.hypot(h.normal.x, h.normal.z) || 1;
-    out.dist = h.distance;
-    out.nx = h.normal.x / nl;
-    out.nz = h.normal.z / nl;
-    _probe.set(this.feet.x, this.feet.y + 0.8, this.feet.z);
-    if (!ph.raycast(_probe, dir, out.dist + 0.35, QueryGroups.STATIC, h, this.char.collider)) return false; // demasiado bajo
-    _probe.set(this.feet.x, this.feet.y + 1.5, this.feet.z);
-    out.height = ph.raycast(_probe, dir, out.dist + 0.4, QueryGroups.STATIC, h, this.char.collider) ? 'high' : 'low';
-    return true;
-  }
+  // Cobertura (DISENO §3): entrar desde cerca o corriendo a la que se mira, recorrerla doblando rincones y esquinas,
+  // pasar de una a otra y disparar asomado o a ciegas. Las consultas al escenario están en `coverSensor.ts`.
 
-  private readonly coverProbe: { dist: number; nx: number; nz: number; height: CoverHeight } = { dist: 0, nx: 0, nz: 1, height: 'low' };
-
+  /** C pulsada: la pared más cercana hacia donde se anda (o se mira) a menos de `COVER.near`. Corre a ella si no está pegado. */
   tryEnterCover(it: PlayerIntent, wishLen: number): boolean {
     if (!this.grounded) return false;
     const dir = wishLen > 0.3 ? _tmp2.copy(_wish) : yawForward(it.camYaw, _tmp2);
-    if (!this.probeCover(dir, MOVE.coverProbe)) return false;
-    const p = this.coverProbe;
-    this.cover = { normal: new Vector3(p.nx, 0, p.nz), height: p.height, edge: 0, edgeNear: 0, peekSide: 0, peekOffset: 0 };
-    if (p.height === 'low') this.setPosture('crouch');
+    if (!this.sensor.find(this.feet, dir.x, dir.z, COVER.near, NEAR_FAN, 5, this.nearSpot)) return false;
+    this.startRun(this.nearSpot);
+    return true;
+  }
+
+  /** La cobertura que se mira (a menos de `COVER.far`), fuera de la pared `avoid`. La escribe en `out`. */
+  private lookCover(from: Vec3Like, dir: Vec3Like, avoid: WallProbe | null, out: CoverSpot = this.lookSpot): boolean {
+    if (!this.grounded || (dir.x === 0 && dir.y === 0 && dir.z === 0)) return false;
+    return this.sensor.look(from, dir, this.feet, COVER.far, out, avoid);
+  }
+
+  private beginHold(): void {
+    this.holding = true;
+    this.holdT = 0;
+  }
+
+  /** C sigue pulsada con una cobertura a la vista: 'tap' si se soltó antes de tiempo, 'run' si toca correr. */
+  private stepHold(dt: number, it: PlayerIntent, avoid: WallProbe | null): 'wait' | 'tap' | 'run' | 'lost' {
+    if (!it.crouchHeld) {
+      this.holding = false;
+      return 'tap';
+    }
+    this.holdT += dt;
+    if (this.holdT < COVER.hold) return 'wait';
+    this.holding = false;
+    return this.lookCover(it.lookFrom, it.lookDir, avoid) ? 'run' : 'lost';
+  }
+
+  private togglePosture(): void {
+    this.setPosture(this.posture === 'stand' ? 'crouch' : 'stand');
+  }
+
+  /** Empieza a correr hacia una cobertura (o se pega a ella si ya está ahí). */
+  private startRun(s: CoverSpot): void {
+    const d = Math.hypot(s.x - this.feet.x, s.z - this.feet.z);
+    if (d < 0.12 && this.sensor.probe(this.feet, -s.nx, -s.nz, COVER.probe, this.here)) {
+      this.enterCover(this.here, 0);
+      return;
+    }
+    const r = this.run;
+    copyProbe(s, r);
+    r.x = s.x;
+    r.y = s.y;
+    r.z = s.z;
+    this.cover = null;
+    this.runPeak = this.horizontalSpeed;
+    this.runMaxT = d / COVER.run + 0.6;
+    if (this.posture === 'crouch' && (s.height === 'high' || d > 1)) this.setPosture('stand');
+    this.setState('toCover');
+  }
+
+  private stepToCover(dt: number, it: PlayerIntent, wishLen: number): void {
+    const r = this.run;
+    if (it.dodgePressed && this.rollCooldown <= 0) {
+      this.startRoll(wishLen, false);
+      this.stepRoll(dt);
+      return;
+    }
+    // Otra pulsación de C o apuntar: se queda donde está.
+    if (it.crouchPressed || this.aiming) {
+      this.setState('ground');
+      this.stepGround(dt, noCrouch(it), wishLen);
+      return;
+    }
+    const dx = r.x - this.feet.x;
+    const dz = r.z - this.feet.z;
+    const d = Math.hypot(dx, dz);
+    if (d > 0.02) {
+      const ux = dx / d;
+      const uz = dz / d;
+      // Echarse atrás cancela la carrera.
+      if (wishLen > 0.5 && _wish.x * ux + _wish.z * uz < -0.5) {
+        this.setState('ground');
+        this.stepGround(dt, it, wishLen);
+        return;
+      }
+      // Arranca fuerte y frena justo antes de la pared.
+      const want = Math.min(COVER.run, Math.sqrt(2 * COVER.runBrake * d)) * this.speedMultiplier;
+      _wish.set(ux, 0, uz);
+      this.accelerate(dt, want, COVER.runAccel, COVER.runBrake * 2);
+      const hs = this.horizontalSpeed;
+      if (hs * dt > d) {
+        this.velocity.x *= d / (hs * dt);
+        this.velocity.z *= d / (hs * dt);
+      }
+    } else {
+      this.velocity.x = 0;
+      this.velocity.z = 0;
+    }
+    this.velocity.y = 0;
+    if (r.height === 'low' && d < 0.9) this.setPosture('crouch');
+    this.move(dt, true);
+    this.runPeak = Math.max(this.runPeak, this.stepSpeed(dt));
+    if (!this.grounded) {
+      this.coyote = MOVE.coyote;
+      this.setState('air');
+      return;
+    }
+    const left = Math.hypot(r.x - this.feet.x, r.z - this.feet.z);
+    if (left < 0.03 || (this.stateTime > 0.15 && this.stepSpeed(dt) < 0.25) || this.stateTime > this.runMaxT) this.arriveCover();
+  }
+
+  /** Llegó (o se detuvo): se pega a la pared si sigue delante; si no, queda de pie. */
+  private arriveCover(): void {
+    const r = this.run;
+    const impact = clamp((this.runPeak - 1.5) / (COVER.run - 1.5), 0, 1);
+    if (this.sensor.probe(this.feet, -r.nx, -r.nz, COVER.probe + 0.3, this.here)) this.enterCover(this.here, impact);
+    else this.setState('ground');
+  }
+
+  private enterCover(p: WallProbe, impact: number): void {
+    const c = this.coverInfo;
+    c.normal.set(p.nx, 0, p.nz);
+    c.height = p.height;
+    c.top = p.top;
+    c.edge = 0;
+    c.edgeNear = 0;
+    c.peekSide = 0;
+    c.peekOffset = 0;
+    c.seek = 0;
+    c.wrap = -1;
+    c.impact = impact;
+    copyProbe(p, this.here);
+    this.cover = c;
+    this.setPosture(p.height === 'low' ? 'crouch' : 'stand');
     this.velocity.set(0, 0, 0);
     this.stats.coverEnters++;
+    this.edgePush = 0;
+    this.latch.on = false;
+    this.seekTried = false;
     this.setState('cover');
-    return true;
   }
 
   exitCover(): void {
     if (!this.cover) return;
     this.cover = null;
+    this.holding = false;
+    this.latch.on = false;
     if (this.state === 'cover') {
       this.setPosture('stand');
       this.setState('ground');
     }
+  }
+
+  private latchTo(it: PlayerIntent, s: number): void {
+    const l = this.latch;
+    l.on = true;
+    l.x = it.moveX;
+    l.y = it.moveY;
+    l.s = s;
   }
 
   private stepCover(dt: number, it: PlayerIntent, wishLen: number): void {
@@ -855,16 +1117,51 @@ export class PlayerController {
       this.setState('ground');
       return;
     }
+    if (c.wrap >= 0) {
+      this.stepWrap(dt, it, wishLen);
+      return;
+    }
     const n = c.normal;
     // Tangente de la pared.
-    const tx = n.z;
-    const tz = -n.x;
-    const along = (_wish.x * tx + _wish.z * tz) * wishLen;
-    const away = (_wish.x * n.x + _wish.z * n.z) * wishLen;
+    let tx = n.z;
+    let tz = -n.x;
+    let along = (_wish.x * tx + _wish.z * tz) * wishLen;
+    let away = (_wish.x * n.x + _wish.z * n.z) * wishLen;
+    // Tras doblar una esquina la cámara no ha girado: se sigue en la misma dirección mientras no cambie la tecla.
+    const l = this.latch;
+    if (l.on) {
+      if (wishLen > 0.3 && Math.abs(it.moveX - l.x) < 0.35 && Math.abs(it.moveY - l.y) < 0.35) {
+        along = l.s * wishLen;
+        away = 0;
+      } else l.on = false;
+    }
 
-    if (it.crouchPressed || (it.sprint && wishLen > 0.5) || away > 0.65) {
+    // C: salir; mantenida con otra cobertura a la vista, correr a ella.
+    if (this.holding) {
+      const go = this.stepHold(dt, it, this.here);
+      if (go === 'tap') {
+        this.exitCover();
+        this.stepGround(dt, noCrouch(it), wishLen);
+        return;
+      }
+      if (go === 'run') {
+        this.startRun(this.lookSpot);
+        if (this.state === 'toCover') this.stepToCover(dt, noCrouch(it), wishLen);
+        return;
+      }
+    } else if (it.crouchPressed) {
+      if (this.lookCover(it.lookFrom, it.lookDir, this.here)) this.beginHold();
+      else {
+        this.exitCover();
+        this.stepGround(dt, noCrouch(it), wishLen);
+        return;
+      }
+    }
+    // Esprintar sale corriendo, salvo empujando contra la pared (se llega a ella esprintando o deslizándose con la
+    // tecla aún pulsada); echarse atrás también sale.
+    if ((it.sprint && wishLen > 0.5 && away > -0.5 && this.stateTime > 0.25) || away > 0.65) {
       this.exitCover();
-      this.stepGround(dt, { ...it, crouchPressed: false }, wishLen);
+      this.stepGround(dt, noCrouch(it), wishLen);
       return;
     }
     if (it.dodgePressed && this.rollCooldown <= 0) {
@@ -886,35 +1183,74 @@ export class PlayerController {
 
     let vt = 0;
     let vn = 0;
-    _tmp2.set(-n.x, 0, -n.z);
     // Asomado, la pared queda a un lado: se sigue en cobertura hasta volver a ella.
     if (c.peekSide === 0) {
+      const here = this.here;
       // ¿Sigue habiendo pared aquí?
-      if (!this.probeCover(_tmp2, MOVE.coverProbe + 0.2)) {
+      if (!this.sensor.probe(this.feet, -n.x, -n.z, COVER.probe + 0.2, here)) {
         this.exitCover();
         return;
       }
-      const here = this.coverProbe;
       // Sigue paredes ligeramente curvas.
       n.set(n.x * 0.7 + here.nx * 0.3, 0, n.z * 0.7 + here.nz * 0.3).normalize();
+      tx = n.z;
+      tz = -n.x;
       c.height = here.height;
+      c.top = here.top;
 
-      // Borde: mira por delante en la dirección del movimiento lateral.
-      vt = along * MOVE.cover * this.speedMultiplier;
+      // Al apuntar en la alta lejos de un borde, va solo al más cercano.
+      if (!this.aiming) {
+        c.seek = 0;
+        this.seekTried = false;
+      } else if (c.height === 'high' && c.edgeNear === 0 && c.seek === 0 && !this.seekTried) {
+        this.seekTried = true;
+        c.seek = this.nearestEdge(it.camYaw);
+      }
+      const move = c.seek !== 0 ? c.seek : along;
+      vt = move * (c.seek !== 0 ? COVER.seekSpeed : COVER.speed) * this.speedMultiplier;
       c.edge = 0;
-      if (Math.abs(along) > 0.1) {
-        const s = Math.sign(along);
-        const look = PLAYER_RADIUS * 0.9 + Math.abs(vt) * dt;
-        _probe.set(this.feet.x + tx * s * look, this.feet.y + 0.45, this.feet.z + tz * s * look);
-        if (!this.physics.raycast(_probe, _tmp2, here.dist + 0.35, QueryGroups.STATIC, this.hit, this.char.collider)) {
-          vt = 0;
-          c.edge = s;
+      if (Math.abs(move) > 0.1) {
+        const s = Math.sign(move);
+        if (c.seek === 0 && this.sensor.innerCorner(this.feet, n.x, n.z, s, this.corner)) {
+          // Rincón: pasa a la otra pared sin soltarse; el cuerpo gira con suavidad (`updateFacing`).
+          n.set(this.corner.nx, 0, this.corner.nz);
+          copyProbe(this.corner, here);
+          tx = n.z;
+          tz = -n.x;
+          c.height = here.height;
+          c.top = here.top;
+          this.latchTo(it, s);
+        } else {
+          // Borde: mira por delante en la dirección del movimiento lateral.
+          const look = PLAYER_RADIUS * 0.9 + Math.abs(vt) * dt;
+          if (this.sensor.endsAt(this.feet, tx * s * look, tz * s * look, LOW_Y, n.x, n.z, here.dist)) {
+            vt = 0;
+            c.edge = s;
+          }
         }
       }
-      c.edgeNear = c.height === 'high' ? this.coverEdgeNear(tx, tz, here.dist, it.camYaw) : 0;
+      c.edgeNear = c.height === 'high' ? this.coverEdgeNear(it.camYaw) : 0;
+      if (c.seek !== 0 && (c.edgeNear === c.seek || c.edge === c.seek)) c.seek = 0;
       // Pegado a la pared a distancia constante.
-      const gap = here.dist - PLAYER_RADIUS - MOVE.coverGap;
+      const gap = here.dist - PLAYER_RADIUS - COVER.gap;
       vn = clamp(gap * 12, -2, 3);
+
+      // Empujar contra un borde rodea la esquina (si la cara lateral también cubre).
+      if (c.edge !== 0 && !this.aiming && Math.abs(along) > 0.5 && Math.sign(along) === c.edge) {
+        this.edgePush += dt;
+        if (this.edgePush >= COVER.wrapHold) {
+          if (this.sensor.planWrap(this.feet, n.x, n.z, here.dist, c.edge, this.wrapPlan)) {
+            this.edgePush = 0;
+            this.wrapT = 0;
+            c.wrap = 0;
+            c.edge = 0;
+            this.stats.coverWraps++;
+            this.stepWrap(dt, it, wishLen);
+            return;
+          }
+          this.edgePush = -0.6;
+        }
+      } else this.edgePush = this.edgePush < 0 ? Math.min(0, this.edgePush + dt) : 0;
     }
 
     // Asomarse por el borde (cobertura alta): al apuntar junto a un borde sale de lado lo justo para despejar la
@@ -948,21 +1284,71 @@ export class PlayerController {
     }
   }
 
+  /** Rodeando una esquina exterior: recorre el plan (tramo, arco y tramo) y al final la pared lateral es la cobertura. */
+  private stepWrap(dt: number, it: PlayerIntent, wishLen: number): void {
+    const c = this.cover;
+    if (!c) return;
+    const w = this.wrapPlan;
+    if (it.dodgePressed && this.rollCooldown <= 0) {
+      this.exitCover();
+      this.startRoll(wishLen, false);
+      return;
+    }
+    this.wrapT += dt;
+    const k = Math.min(1, this.wrapT / COVER.wrapTime);
+    const u = k * k * (3 - 2 * k);
+    c.wrap = u;
+    wrapPoint(w, u, _tmp);
+    this.velocity.set((_tmp.x - this.feet.x) / dt, 0, (_tmp.z - this.feet.z) / dt);
+    this.setPosture(c.height === 'low' || w.height === 'low' ? 'crouch' : 'stand');
+    this.move(dt, true);
+    if (!this.grounded) {
+      this.exitCover();
+      this.setState('air');
+      return;
+    }
+    if (Math.hypot(_tmp.x - this.feet.x, _tmp.z - this.feet.z) > 0.3) {
+      // Algo inesperado cortó el camino: suelta la cobertura (nunca atascado).
+      this.exitCover();
+      return;
+    }
+    if (k >= 1) {
+      c.normal.set(w.tx, 0, w.tz);
+      c.height = w.height;
+      c.top = w.top;
+      c.wrap = -1;
+      c.edge = 0;
+      c.edgeNear = 0;
+      this.latchTo(it, w.side);
+    }
+  }
+
   /**
    * Borde de una cobertura alta al alcance para asomarse: a cada lado, un poco más allá del hombro y a la altura del
    * pecho, ¿sigue la pared? Si se acaba por los dos lados (una columna), gana el lado hacia el que mira la cámara.
    */
-  private coverEdgeNear(tx: number, tz: number, dist: number, camYaw: number): number {
-    const reach = PLAYER_RADIUS * 0.9 + 0.12;
-    const right = this.wallEndsAt(tx * reach, tz * reach, dist);
-    const left = this.wallEndsAt(-tx * reach, -tz * reach, dist);
+  private coverEdgeNear(camYaw: number): number {
+    const n = this.coverInfo.normal;
+    const tx = n.z;
+    const tz = -n.x;
+    const dist = this.here.dist;
+    const right = this.sensor.endsAt(this.feet, tx * EDGE_REACH, tz * EDGE_REACH, CHEST_Y, n.x, n.z, dist);
+    const left = this.sensor.endsAt(this.feet, -tx * EDGE_REACH, -tz * EDGE_REACH, CHEST_Y, n.x, n.z, dist);
     if (right && left) return -Math.sin(camYaw) * tx - Math.cos(camYaw) * tz >= 0 ? 1 : -1;
     return right ? 1 : left ? -1 : 0;
   }
 
-  private wallEndsAt(dx: number, dz: number, dist: number): boolean {
-    _probe.set(this.feet.x + dx, this.feet.y + 1.3, this.feet.z + dz);
-    return !this.physics.raycast(_probe, _tmp2, dist + 0.35, QueryGroups.STATIC, this.hit, this.char.collider);
+  /** El borde de la alta más cercano a menos de `COVER.seekEdge` (−1/+1), o 0. A igual distancia, el lado de la cámara. */
+  private nearestEdge(camYaw: number): number {
+    const n = this.coverInfo.normal;
+    const max = COVER.seekEdge + EDGE_REACH;
+    const right = this.sensor.edgeDistance(this.feet, n.x, n.z, this.here.dist, 1, max);
+    const left = this.sensor.edgeDistance(this.feet, n.x, n.z, this.here.dist, -1, max);
+    if (right < 0 && left < 0) return 0;
+    if (right < 0) return -1;
+    if (left < 0) return 1;
+    if (Math.abs(right - left) < 0.05) return -Math.sin(camYaw) * n.z + Math.cos(camYaw) * n.x >= 0 ? 1 : -1;
+    return right < left ? 1 : -1;
   }
 
   /** Cuánto está asomado por el borde de una cobertura: −1..1 (+ = por la derecha). Lo usa la animación. */
@@ -983,7 +1369,22 @@ export class PlayerController {
       target = it.camYaw;
       rate = MOVE.aimTurnRate;
     } else if (this.state === 'cover' && this.cover) {
-      target = yawFromDir(-this.cover.normal.x, -this.cover.normal.z);
+      const c = this.cover;
+      if (c.wrap >= 0) {
+        // Rodeando una esquina: el cuerpo gira con el arco, de una pared a la otra.
+        const w = this.wrapPlan;
+        const y0 = yawFromDir(-w.nx, -w.nz);
+        target = y0 + angleDelta(y0, yawFromDir(-w.tx, -w.tz)) * wrapTurn(w, c.wrap);
+        rate = 22;
+      } else {
+        target = yawFromDir(-c.normal.x, -c.normal.z);
+        rate = 11;
+      }
+    } else if (this.state === 'toCover') {
+      const r = this.run;
+      const dx = r.x - this.feet.x;
+      const dz = r.z - this.feet.z;
+      target = Math.hypot(dx, dz) > 0.7 ? yawFromDir(dx, dz) : yawFromDir(-r.nx, -r.nz);
     } else if (this.state === 'roll') {
       target = yawFromDir(this.rollDir.x, this.rollDir.z);
       rate = MOVE.aimTurnRate;
@@ -1077,12 +1478,15 @@ export class PlayerController {
     out.vault = this.vaultProgress;
     const c = this.state === 'cover' ? this.cover : null;
     if (c) {
-      const o = (out.cover ??= { nx: 0, nz: 0, height: 'low', peekSide: 0, peekOffset: 0 });
+      const o = (out.cover ??= emptyCoverNet());
       o.nx = c.normal.x;
       o.nz = c.normal.z;
       o.height = c.height;
       o.peekSide = c.peekSide;
       o.peekOffset = c.peekOffset;
+      o.edgeNear = c.edgeNear;
+      o.top = c.top;
+      o.impact = c.impact;
     } else out.cover = null;
     out.dodges = this.stats.rolls + this.stats.dives;
     return out;
@@ -1115,11 +1519,15 @@ export class PlayerController {
     this.invulnerable = s.invulnerable;
     this.netVault = s.vault;
     if (s.cover) {
-      const c = (this.cover ??= { normal: new Vector3(), height: 'low', edge: 0, edgeNear: 0, peekSide: 0, peekOffset: 0 });
+      const c = (this.cover = this.coverInfo);
       c.normal.set(s.cover.nx, 0, s.cover.nz);
       c.height = s.cover.height;
       c.peekSide = s.cover.peekSide;
       c.peekOffset = s.cover.peekOffset;
+      c.edgeNear = s.cover.edgeNear;
+      c.top = s.cover.top;
+      c.impact = s.cover.impact;
+      c.wrap = -1;
     } else this.cover = null;
     this.stats.rolls = s.dodges;
     this.stats.dives = 0;

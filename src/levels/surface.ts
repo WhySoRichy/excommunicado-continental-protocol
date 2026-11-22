@@ -59,3 +59,22 @@ export function surfaceAt(boxes: readonly BoxDef[], x: number, y: number, z: num
   }
   return best ? surfaceOf(best.mat) : 'hard';
 }
+
+/** Superficie de la caja que contiene el punto (la pared contra la que se apoya alguien), o suelo duro. */
+export function surfaceInside(boxes: readonly BoxDef[], x: number, y: number, z: number): Surface {
+  for (const b of boxes) {
+    if (b.collide === false || b.invisible) continue;
+    if (Math.abs(y - b.c[1]) > b.s[1] / 2) continue;
+    let dx = x - b.c[0];
+    let dz = z - b.c[2];
+    if (b.rotY) {
+      const c = Math.cos(b.rotY);
+      const s = Math.sin(b.rotY);
+      const lx = dx * c - dz * s;
+      dz = dx * s + dz * c;
+      dx = lx;
+    }
+    if (Math.abs(dx) <= b.s[0] / 2 && Math.abs(dz) <= b.s[2] / 2) return surfaceOf(b.mat);
+  }
+  return 'hard';
+}

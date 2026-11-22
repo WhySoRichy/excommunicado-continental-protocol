@@ -9,6 +9,7 @@ import type { FxRecorder } from '../net/fx';
 import type { HostWorld } from '../net/NetHost';
 import type { GuestWorld } from '../net/NetGuest';
 import { LevelAlarm } from '../render/LevelAlarm';
+import { CoverMarker } from '../render/CoverMarker';
 import { PickupViews } from '../render/PickupViews';
 import { PlayerViews } from '../entities/PlayerViews';
 import { type CombatCtx, PlayerCombat } from '../combat/PlayerCombat';
@@ -71,6 +72,8 @@ export class LevelSession implements HostWorld, GuestWorld {
   readonly pickups: Pickups;
   /** Lo que se ve de los objetos recogibles; `pickups` no sabe que existe. */
   readonly pickupViews: PickupViews;
+  /** Marca de la cobertura a la que iría C. */
+  readonly coverMarker: CoverMarker;
   /** Lo que se ve de los jugadores que no son el local. */
   readonly playerViews: PlayerViews;
   readonly enemies: EnemyManager;
@@ -112,6 +115,7 @@ export class LevelSession implements HostWorld, GuestWorld {
     const world = net?.role === 'host' ? net.recorder.tee(-1, this.vfx, deps.audio) : this.ports;
     this.pickups = new Pickups();
     this.pickupViews = new PickupViews(scene);
+    this.coverMarker = new CoverMarker(scene);
     if (!this.replica) for (const p of data.pickups) this.pickups.add(p.kind, new Vector3(p.pos[0], p.pos[1], p.pos[2]));
     this.combat = new PlayerCombat(deps.upgrades, loadoutFor(deps.upgrades));
     this.enemies = new EnemyManager({
@@ -267,6 +271,7 @@ export class LevelSession implements HostWorld, GuestWorld {
     this.enemyViews.dispose();
     this.enemies.dispose();
     this.pickupViews.dispose();
+    this.coverMarker.dispose();
     this.playerViews.dispose();
     this.pickups.dispose();
     this.vfx.dispose();

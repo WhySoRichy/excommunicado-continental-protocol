@@ -3,7 +3,8 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { PlayerCombat } from '../../src/combat/PlayerCombat';
 import { FIXED_DT } from '../../src/core/Loop';
 import { Rng } from '../../src/core/rng';
-import { emptyIntent, MOVE, PlayerController, type PlayerIntent } from '../../src/entities/PlayerController';
+import { COVER } from '../../src/entities/coverSensor';
+import { emptyIntent, MOVE, PLAYER_RADIUS, PlayerController, type PlayerIntent } from '../../src/entities/PlayerController';
 import { arena } from '../../src/levels/data/arena';
 import { buildLevelPhysics } from '../../src/levels/levelPhysics';
 import { createRayHit, loadRapier, PhysicsWorld, QueryGroups, type Rapier } from '../../src/physics/Physics';
@@ -255,11 +256,37 @@ describe('Movimiento · vault, mantle y cobertura', () => {
     expectClean(ctx);
   });
 
-  it('cobertura alta: entra con C, se desliza y se detiene en el borde', () => {
+  /** Deja que termine de correr hasta la cobertura (como mucho dos segundos). */
+  function arrive(ctx: Ctx, yaw = NORTH): void {
+    for (let i = 0; i < 120 && ctx.p.state === 'toCover'; i++) run(ctx, 1 / 60, () => ({ camYaw: yaw }));
+  }
+
+  /** Pulsa C (sin mantenerla) y deja que llegue a la pared. */
+  function takeCover(ctx: Ctx, yaw = NORTH): void {
+    run(ctx, 1 / 60, () => ({ camYaw: yaw, crouchPressed: true }));
+    arrive(ctx, yaw);
+  }
+
+  /** Rayo de una cámara detrás del jugador que mira al punto (x, y, z). */
+  function lookAt(ctx: Ctx, x: number, y: number, z: number): Pick<PlayerIntent, 'lookFrom' | 'lookDir'> {
+    const f = ctx.p.feet;
+    const from = { x: f.x + 0.4, y: f.y + 1.8, z: f.z + 0.2 };
+    const d = new Vector3(x - from.x, y - from.y, z - from.z).normalize();
+    // La cámara va detrás: se retrasa 3 m en la dirección de la mirada.
+    return { lookFrom: { x: from.x - d.x * 3, y: from.y - d.y * 3, z: from.z - d.z * 3 }, lookDir: { x: d.x, y: d.y, z: d.z } };
+  }
+
+  it('cobertura alta: C a casi un metro da un paso hasta la pared, la recorre y se detiene en el borde', () => {
     const ctx = setup(0, 0, -3.4, NORTH);
     run(ctx, 1 / 60, () => ({ camYaw: NORTH, crouchPressed: true }));
+    expect(ctx.p.state).toBe('toCover');
+    arrive(ctx);
     expect(ctx.p.state).toBe('cover');
     expect(ctx.p.cover?.height).toBe('high');
+    // Un paso corto: menos de medio segundo.
+    expect(ctx.steps * FIXED_DT).toBeLessThan(0.5);
+    // Pegado a la pared (cara en z = −4,2) con su holgura.
+    expect(ctx.p.feet.z).toBeCloseTo(-4.2 + PLAYER_RADIUS + COVER.gap, 1);
     run(ctx, 3, () => ({ moveX: 1, camYaw: NORTH }));
     expect(ctx.p.state).toBe('cover');
     expect(ctx.p.cover?.edge).toBe(1);
@@ -267,13 +294,140 @@ describe('Movimiento · vault, mantle y cobertura', () => {
     expect(ctx.p.feet.x).toBeLessThan(1.5 + 0.35);
     expect(ctx.p.feet.x).toBeGreaterThan(1.0);
     run(ctx, 1 / 60, () => ({ camYaw: NORTH, crouchPressed: true }));
+    run(ctx, 1 / 60, () => ({ camYaw: NORTH }));
     expect(ctx.p.state).toBe('ground');
     expectClean(ctx);
   });
 
+  it('C alcanza la pared desde 1,5 m aunque no se la mire de frente', () => {
+    const ctx = setup(0.5, 0, -2.75, NORTH);
+    // La cámara mira 20° a la izquierda del muro.
+    takeCover(ctx, NORTH + 0.35);
+    expect(ctx.p.state).toBe('cover');
+    expect(ctx.p.cover?.normal.z).toBeCloseTo(1, 1);
+    expectClean(ctx);
+  });
+
+  it('mantener C con una cobertura a la vista corre hasta ella y llega con fuerza', () => {
+    const ctx = setup(4, 0, 6, NORTH);
+    const look = lookAt(ctx, 4, 0.6, 0.4);
+    run(ctx, 1 / 60, () => ({ camYaw: NORTH, crouchPressed: true, crouchHeld: true, ...look }));
+    run(ctx, 0.25, () => ({ camYaw: NORTH, crouchHeld: true, ...look }));
+    expect(ctx.p.state).toBe('toCover');
+    arrive(ctx);
+    expect(ctx.p.state).toBe('cover');
+    expect(ctx.p.cover?.height).toBe('low');
+    expect(ctx.p.posture).toBe('crouch');
+    expect(ctx.p.feet.z).toBeCloseTo(0.4 + PLAYER_RADIUS + COVER.gap, 1);
+    expect(ctx.p.cover?.impact).toBeGreaterThan(0.6);
+    // Más de 5 m en menos de un segundo y medio, sin pasar del tope de velocidad.
+    expect(ctx.steps * FIXED_DT).toBeLessThan(1.6);
+    expectClean(ctx);
+  });
+
+  it('corriendo hacia el final de una caja, se queda donde la caja lo cubre entero', () => {
+    // La caja de 1,2 m acaba en x = 4,8; se la mira casi en su esquina.
+    const ctx = setup(4.6, 0, 6, NORTH);
+    const look = lookAt(ctx, 4.75, 0.6, 0.4);
+    run(ctx, 1 / 60, () => ({ camYaw: NORTH, crouchPressed: true, crouchHeld: true, ...look }));
+    run(ctx, 0.25, () => ({ camYaw: NORTH, crouchHeld: true, ...look }));
+    arrive(ctx);
+    expect(ctx.p.state).toBe('cover');
+    expect(ctx.p.feet.x).toBeLessThanOrEqual(4.8 - 0.28);
+    expectClean(ctx);
+  });
+
+  it('un toque de C con una cobertura a la vista solo agacha', () => {
+    const ctx = setup(4, 0, 6, NORTH);
+    const look = lookAt(ctx, 4, 0.6, 0.4);
+    run(ctx, 1 / 60, () => ({ camYaw: NORTH, crouchPressed: true, crouchHeld: true, ...look }));
+    run(ctx, 0.3, () => ({ camYaw: NORTH, ...look }));
+    expect(ctx.p.state).toBe('ground');
+    expect(ctx.p.posture).toBe('crouch');
+    expect(ctx.p.feet.z).toBeCloseTo(6, 1);
+    expectClean(ctx);
+  });
+
+  it('deslizarse contra una pared que cubre termina a cubierto', () => {
+    const ctx = setup(0, 0, 5, NORTH);
+    run(ctx, 0.4, sprint(NORTH));
+    run(ctx, 1 / 60, () => ({ moveY: 1, sprint: true, camYaw: NORTH, crouchPressed: true }));
+    expect(ctx.p.state).toBe('slide');
+    // Con Shift y W aún pulsadas: empujar contra la pared no la suelta.
+    for (let i = 0; i < 90 && ctx.p.state === 'slide'; i++) run(ctx, 1 / 60, sprint(NORTH));
+    expect(ctx.p.state).toBe('cover');
+    expect(ctx.p.cover?.height).toBe('low');
+    expect(ctx.p.cover?.impact).toBeGreaterThan(0.3);
+    run(ctx, 0.5, sprint(NORTH));
+    expect(ctx.p.state).toBe('cover');
+    // Esprintar hacia un lado sí sale corriendo.
+    run(ctx, 0.1, () => ({ moveX: 1, sprint: true, camYaw: NORTH }));
+    expect(ctx.p.state).toBe('ground');
+    expectClean(ctx);
+  });
+
+  it('rincón: recorriendo la pared pasa a la de al lado sin soltarse y sigue en la misma dirección', () => {
+    // Esquina en L del suroeste: paredes en z = 19,7 (mira al norte) y en x = −10,2 (mira al este).
+    const ctx = setup(-8, 0, 18.6, SOUTH);
+    takeCover(ctx, SOUTH);
+    expect(ctx.p.state).toBe('cover');
+    expect(ctx.p.cover?.normal.z).toBeCloseTo(-1, 1);
+    // Con la cámara al sur, la derecha es −X: hacia el rincón.
+    run(ctx, 3, () => ({ moveX: 1, camYaw: SOUTH }));
+    expect(ctx.p.state).toBe('cover');
+    expect(ctx.p.cover?.normal.x).toBeCloseTo(1, 1);
+    expect(ctx.p.feet.x).toBeCloseTo(-10.2 + PLAYER_RADIUS + COVER.gap, 1);
+    expect(ctx.p.feet.z).toBeLessThan(18);
+    expectClean(ctx);
+  });
+
+  it('esquina exterior: empujando contra el borde rodea la columna sin soltarse', () => {
+    // Columna de 1,2 × 1,2 × 2,4 (dos cajas apiladas) en (4,5, −4,5).
+    const ctx = setup(4.5, 0, -3.1, NORTH);
+    takeCover(ctx);
+    expect(ctx.p.state).toBe('cover');
+    // Llega al borde, empuja un instante y rodea la esquina (en poco más de un segundo).
+    run(ctx, 1.05, () => ({ moveX: 1, camYaw: NORTH }));
+    expect(ctx.p.stats.coverWraps).toBe(1);
+    expect(ctx.p.state).toBe('cover');
+    // Ya en la cara este, mirando al oeste.
+    expect(ctx.p.cover?.normal.x).toBeCloseTo(1, 1);
+    expect(ctx.p.feet.x).toBeGreaterThan(5.1 + 0.25);
+    // Mantener la tecla la sigue rodeando.
+    run(ctx, 3, () => ({ moveX: 1, camYaw: NORTH }));
+    expect(ctx.p.stats.coverWraps).toBeGreaterThanOrEqual(2);
+    expect(ctx.p.state).toBe('cover');
+    expectClean(ctx);
+  });
+
+  it('de una cobertura a otra: mirando la siguiente y manteniendo C corre hasta ella', () => {
+    const ctx = setup(0, 0, -3.4, NORTH);
+    takeCover(ctx);
+    const look = lookAt(ctx, 3.6, 0.6, -0.4);
+    run(ctx, 1 / 60, () => ({ camYaw: NORTH, crouchPressed: true, crouchHeld: true, ...look }));
+    run(ctx, 0.25, () => ({ camYaw: NORTH, crouchHeld: true, ...look }));
+    expect(ctx.p.state).toBe('toCover');
+    arrive(ctx);
+    expect(ctx.p.state).toBe('cover');
+    // La caja de 1,2 m: su cara norte (z = −0,4) mira al muro de donde viene.
+    expect(ctx.p.cover?.height).toBe('low');
+    expect(ctx.p.cover?.normal.z).toBeCloseTo(-1, 1);
+    expect(ctx.p.feet.z).toBeCloseTo(-0.4 - PLAYER_RADIUS - COVER.gap, 1);
+    expectClean(ctx);
+  });
+
+  it('rincón agudo en V: recorrerlo no atraviesa paredes ni deja al jugador atascado', () => {
+    const ctx = setup(-13, 0, 18.5, SOUTH);
+    takeCover(ctx, SOUTH);
+    run(ctx, 2, () => ({ moveX: 1, camYaw: SOUTH }));
+    run(ctx, 2, () => ({ moveX: -1, camYaw: SOUTH }));
+    expect(['cover', 'ground']).toContain(ctx.p.state);
+    expectClean(ctx);
+  });
+
   /** ¿Sale limpio un disparo hacia el norte desde la boca del arma (la misma que usa el combate)? */
-  function muzzleClear(ctx: Ctx): boolean {
-    const muzzle = new PlayerCombat(new Set()).muzzleOf(ctx.p, true, new Vector3());
+  function muzzleClear(ctx: Ctx, aiming = true): boolean {
+    const muzzle = new PlayerCombat(new Set()).muzzleOf(ctx.p, aiming, new Vector3());
     return !ctx.physics.raycast(muzzle, new Vector3(0, 0, -1), 3, QueryGroups.STATIC, createRayHit(), ctx.p.collider);
   }
 
@@ -282,12 +436,13 @@ describe('Movimiento · vault, mantle y cobertura', () => {
     ['izquierdo', -1],
   ])('cobertura alta: apuntando junto al borde %s se asoma, dispara despejado y al soltar vuelve', (_n, side) => {
     const ctx = setup(0, 0, -3.4, NORTH);
-    run(ctx, 1 / 60, () => ({ camYaw: NORTH, crouchPressed: true }));
+    takeCover(ctx);
     run(ctx, 3, () => ({ moveX: side, camYaw: NORTH }));
     run(ctx, 0.2, () => ({ camYaw: NORTH }));
     const atEdge = ctx.p.feet.x;
     expect(ctx.p.cover?.edgeNear).toBe(side);
     expect(muzzleClear(ctx), 'pegado a la pared, el disparo da en el muro').toBe(false);
+    expect(muzzleClear(ctx, false), 'a ciegas, el arma asoma por el borde').toBe(true);
     run(ctx, 0.5, () => ({ camYaw: NORTH, aim: true }));
     expect(ctx.p.state).toBe('cover');
     expect(ctx.p.cover?.peekSide).toBe(side);
@@ -301,9 +456,22 @@ describe('Movimiento · vault, mantle y cobertura', () => {
     expectClean(ctx);
   });
 
-  it('cobertura alta: lejos de un borde, apuntar no lo saca de la pared', () => {
-    const ctx = setup(0, 0, -3.4, NORTH);
-    run(ctx, 1 / 60, () => ({ camYaw: NORTH, crouchPressed: true }));
+  it('cobertura alta: apuntando a un metro del borde va solo hasta él y se asoma', () => {
+    const ctx = setup(0.6, 0, -3.4, NORTH);
+    takeCover(ctx);
+    expect(ctx.p.cover?.edgeNear).toBe(0);
+    run(ctx, 1, () => ({ camYaw: NORTH, aim: true }));
+    expect(ctx.p.state).toBe('cover');
+    expect(ctx.p.cover?.peekSide).toBe(1);
+    expect(ctx.p.feet.x).toBeGreaterThan(1.5 + 0.1);
+    expectClean(ctx);
+  });
+
+  it('cobertura alta: lejos de cualquier borde, apuntar no lo saca de la pared', () => {
+    // La pared norte de la arena mide 48 m.
+    const ctx = setup(0, 0, -22.8, NORTH);
+    takeCover(ctx);
+    expect(ctx.p.state).toBe('cover');
     run(ctx, 0.5, () => ({ camYaw: NORTH, aim: true }));
     expect(ctx.p.cover?.edgeNear).toBe(0);
     expect(ctx.p.cover?.peekSide).toBe(0);
@@ -311,15 +479,19 @@ describe('Movimiento · vault, mantle y cobertura', () => {
     expectClean(ctx);
   });
 
-  it('cobertura baja: agachado; al apuntar asoma de pie; Espacio salta por encima', () => {
-    const ctx = setup(0, 0, 1.15, NORTH);
-    run(ctx, 1 / 60, () => ({ camYaw: NORTH, crouchPressed: true }));
+  it('cobertura baja: agachado; a ciegas dispara por encima; al apuntar asoma de pie; Espacio salta por encima', () => {
+    // Caja de 1,2 m: agachado, el arma queda por debajo de su borde.
+    const ctx = setup(4, 0, 1.2, NORTH);
+    takeCover(ctx);
     expect(ctx.p.state).toBe('cover');
     expect(ctx.p.cover?.height).toBe('low');
+    expect(ctx.p.cover?.top).toBeCloseTo(1.2, 1);
     run(ctx, 0.2, () => ({ camYaw: NORTH }));
     expect(ctx.p.posture).toBe('crouch');
+    expect(muzzleClear(ctx, false), 'a ciegas, por encima del borde').toBe(true);
     run(ctx, 0.2, () => ({ camYaw: NORTH, aim: true }));
     expect(ctx.p.posture).toBe('stand');
+    expect(muzzleClear(ctx), 'asomado de pie').toBe(true);
     run(ctx, 1 / 60, () => ({ camYaw: NORTH, jumpPressed: true }));
     expect(ctx.p.state).toBe('vault');
     run(ctx, 1.5, () => ({ camYaw: NORTH }));

@@ -1,6 +1,6 @@
 # Visión
 
-Qué queremos que sea este juego, qué no va a ser nunca y cómo va a crecer sin depender del dinero. Recoge las decisiones del 22 de noviembre de 2026 y solo cambia de forma explícita. El plan técnico de cada paso está en [ESCALABILIDAD.md](ESCALABILIDAD.md) y el trabajo concreto, en [ROADMAP.md](ROADMAP.md).
+Qué queremos que sea este juego, qué no va a ser nunca y cómo va a crecer sin depender del dinero. Recoge las decisiones del 22 de noviembre de 2026 y solo cambia de forma explícita (el mismo día, el pulido de mecánicas y gráficos pasó por delante de las skins). El plan técnico de cada paso está en [ESCALABILIDAD.md](ESCALABILIDAD.md) y el trabajo concreto, en [ROADMAP.md](ROADMAP.md).
 
 ## Qué queremos
 
@@ -60,7 +60,8 @@ Datos de los planes gratuitos comprobados en noviembre de 2026, que se revisan a
 ## Orden de trabajo
 
 1. **Cooperativo jugable con gente:** salas públicas, relé para redes cerradas, que los invitados usen los objetos de la misión y volver a entrar tras un corte. Hecho; su servicio de salas está en `server/salas`.
-2. **Skins y progresión:** acabados de armas y accesorios tácticos que se ganan jugando, guardados en el navegador y preparados para pasar a cuentas.
-3. **Identidad propia:** nombre, protagonista, hotel, reglas y personajes. Antes de abrir el juego al público.
-4. **PvP de arena** en salas privadas.
-5. **Inglés.**
+2. **Pulir mecánicas y gráficos:** que todo se sienta tan pulido como el deslizamiento (la cobertura, primero), gráficos más realistas en un estilo propio (referente: Valorant), armas y personajes con detalle, enemigos que se distingan y se comporten mejor, y mapas más grandes. El detalle está en [ROADMAP.md](ROADMAP.md).
+3. **Skins y progresión:** acabados de armas y accesorios tácticos que se ganan jugando, guardados en el navegador y preparados para pasar a cuentas. Van después del bloque 2, cuando los gráficos les den sentido.
+4. **Identidad propia:** nombre, protagonista, hotel, reglas y personajes. Antes de abrir el juego al público.
+5. **PvP de arena** en salas privadas.
+6. **Inglés.**

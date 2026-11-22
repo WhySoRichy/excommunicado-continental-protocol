@@ -1,3 +1,4 @@
+import type { BlindMode } from '../combat/PlayerCombat';
 import type { PlayerLook } from '../combat/playerLook';
 import type { HitMarkerKind } from '../combat/PlayerCombat';
 import type { ImpactKind, ShotSound } from '../combat/ports';
@@ -6,7 +7,7 @@ import type { UpgradeId, WeaponId } from '../combat/weapons';
 import type { AiState } from '../entities/ai/EnemyBrain';
 import type { CivilianNet, CivState } from '../entities/Civilian';
 import { emptyEnemyNet, type EnemyNet } from '../entities/Enemy';
-import { type CoverHeight, emptyMoveNet, type MoveNet, type MoveState, type Posture } from '../entities/PlayerController';
+import { type CoverHeight, emptyCoverNet, emptyMoveNet, type MoveNet, type MoveState, type Posture } from '../entities/PlayerController';
 import type { EnemyType, LevelId, ObjectiveKind, PickupKind } from '../levels/types';
 import type { MissionId } from '../missions/types';
 
@@ -18,7 +19,7 @@ import type { MissionId } from '../missions/types';
  */
 
 /** Versión del protocolo: cambia con cualquier mensaje. Con versiones distintas no se juega juntos. */
-export const PROTOCOL = 2;
+export const PROTOCOL = 3;
 /** Jugadores por partida (anfitrión incluido). */
 export const MAX_PLAYERS = 4;
 /** Pasos de simulación entre instantáneas: 3 a 60 Hz son 20 por segundo. */
@@ -47,7 +48,7 @@ function table<T extends string>() {
   return <const A extends readonly T[]>(a: A & ([Exclude<T, A[number]>] extends [never] ? unknown : 'falta un valor en la tabla')): A => a;
 }
 
-const MOVE_STATES = table<MoveState>()(['ground', 'air', 'roll', 'slide', 'vault', 'cover', 'locked', 'dead']);
+const MOVE_STATES = table<MoveState>()(['ground', 'air', 'roll', 'slide', 'vault', 'toCover', 'cover', 'locked', 'dead']);
 const POSTURES = table<Posture>()(['stand', 'crouch']);
 const COVER_HEIGHTS = table<CoverHeight>()(['low', 'high']);
 const AI_STATES = table<AiState>()(['patrol', 'suspicious', 'combat', 'cover', 'flank', 'search', 'stunned', 'dead']);
@@ -217,7 +218,7 @@ const ix = <T>(tab: readonly T[], v: T): number => tab.indexOf(v);
 const POS = 1e4;
 
 // ============================================================ movimiento
-const MOVE_LEN = 15;
+const MOVE_LEN = 18;
 
 function writeMove(m: MoveNet, out: number[]): void {
   const c = m.cover;
@@ -237,6 +238,9 @@ function writeMove(m: MoveNet, out: number[]): void {
     c ? q(c.nz) : 0,
     c ? c.peekSide : 0,
     c ? q(c.peekOffset) : 0,
+    c ? c.edgeNear : 0,
+    c ? q(c.top) : 0,
+    c ? q(c.impact) : 0,
   );
 }
 
@@ -260,13 +264,19 @@ function readMove(r: Reader, out: MoveNet): MoveNet {
   const nz = r.num(-1.01, 1.01);
   const peekSide = r.int(-1, 1);
   const peekOffset = r.num(-2, 2);
+  const edgeNear = r.int(-1, 1);
+  const top = r.num(0, 3);
+  const impact = r.num(0, 1);
   if (height) {
-    const c = (out.cover ??= { nx: 0, nz: 0, height: 'low', peekSide: 0, peekOffset: 0 });
+    const c = (out.cover ??= emptyCoverNet());
     c.nx = nx;
     c.nz = nz;
     c.height = height;
     c.peekSide = peekSide;
     c.peekOffset = peekOffset;
+    c.edgeNear = edgeNear;
+    c.top = top;
+    c.impact = impact;
   } else out.cover = null;
   return out;
 }
@@ -429,7 +439,7 @@ function writePlayer(p: PlayerNet): number[] {
   const l = p.look;
   out.push(
     l.weapon === 'none' ? -1 : ix(WEAPON_IDS, l.weapon),
-    (l.aim ? 1 : 0) | (l.dead ? 2 : 0),
+    (l.aim ? 1 : 0) | (l.dead ? 2 : 0) | (l.blind << 2),
     q(l.aimPitch),
     q(l.reload),
     q(l.recoil, 100),
@@ -446,11 +456,13 @@ function readPlayer(v: unknown): PlayerNet {
   const id = r.int(0, MAX_PLAYERS - 1);
   const move = readMove(r, emptyMoveNet());
   const weapon = r.pickOrNull(WEAPON_IDS) ?? 'none';
-  const f = r.int(0, 3);
+  // Bits: apuntando, caído y el disparo a ciegas (0..2) a partir del tercero.
+  const f = r.int(0, 11);
   const look: PlayerLook = {
     weapon,
     aim: (f & 1) !== 0,
     dead: (f & 2) !== 0,
+    blind: (f >> 2) as BlindMode,
     aimPitch: r.num(-2, 2),
     reload: r.num(-1, 1),
     recoil: r.num(0, 1),

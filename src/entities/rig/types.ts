@@ -101,6 +101,14 @@ export interface RigPose {
   cover: CoverHeight | 'none';
   /** Asomado por el borde de una cobertura alta: −1..1 (+ = por la derecha). */
   peek: number;
+  /** Disparo a ciegas desde la cobertura: 1 por encima, 2 por el borde (el de `coverSide`), 0 no. */
+  blind: 0 | 1 | 2;
+  /** Borde de la cobertura alta al alcance (−1 izquierda, +1 derecha, 0 ninguno). */
+  coverSide: number;
+  /** Fuerza con la que llegó a la cobertura (0..1): al llegar, se apoya en la pared. */
+  brace: number;
+  /** Borde superior de la cobertura sobre los pies (m): a ciegas, el arma asoma justo por encima. */
+  coverTop: number;
 }
 
 export function idlePose(): RigPose {
@@ -129,5 +137,9 @@ export function idlePose(): RigPose {
     vault: -1,
     cover: 'none',
     peek: 0,
+    blind: 0,
+    coverSide: 0,
+    brace: 0,
+    coverTop: 1.2,
   };
 }

@@ -1,5 +1,5 @@
 import type { PlayerController } from '../entities/PlayerController';
-import type { PlayerCombat } from './PlayerCombat';
+import type { BlindMode, PlayerCombat } from './PlayerCombat';
 import type { WeaponId } from './weapons';
 
 /**
@@ -22,19 +22,23 @@ export interface PlayerLook {
   slash: number;
   /** Tiempo del takedown en curso (s), o −1. */
   takedown: number;
+  /** Disparo a ciegas desde la cobertura: 1 por encima, 2 por el borde, 0 no. */
+  blind: BlindMode;
   dead: boolean;
   /** Salud 0..1 (su etiqueta en pantalla). */
   health: number;
 }
 
 export function emptyPlayerLook(): PlayerLook {
-  return { weapon: 'pistol', aim: false, aimPitch: 0, reload: -1, recoil: 0, melee: 0, slash: -1, takedown: -1, dead: false, health: 1 };
+  return { weapon: 'pistol', aim: false, aimPitch: 0, reload: -1, recoil: 0, melee: 0, slash: -1, takedown: -1, blind: 0, dead: false, health: 1 };
 }
 
 /** Rellena lo que se ve de un jugador a partir de su simulación (sin asignaciones). */
 export function fillPlayerLook(out: PlayerLook, p: PlayerController, c: PlayerCombat): void {
   out.weapon = c.holstered ? 'none' : c.current;
-  out.aim = !c.holstered && (p.aiming || c.weapon.cooldown > 0);
+  out.blind = c.holstered ? 0 : c.blindPose(p);
+  // Un disparo a ciegas no levanta el arma a la mira: la saca por encima o por el borde.
+  out.aim = !c.holstered && (p.aiming || (c.weapon.cooldown > 0 && out.blind === 0));
   out.aimPitch = c.aimPitch;
   out.reload = c.weapon.reloadProgress;
   out.recoil = c.recoilVis;

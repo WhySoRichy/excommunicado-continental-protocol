@@ -17,6 +17,7 @@ La primera vez que se ejecuten las e2e: `npx playwright install chromium firefox
 | Quiero cambiar... | Está en... |
 |---|---|
 | Movimiento del jugador | `src/entities/PlayerController.ts` |
+| Cobertura (entrar, recorrerla, esquinas, de una a otra, a ciegas) | `src/entities/PlayerController.ts` (los estados `toCover` y `cover`) y `coverSensor.ts` (las consultas al escenario); el disparo a ciegas, en `src/combat/PlayerCombat.ts` (`blindMode`); su marca, en `src/render/CoverMarker.ts` |
 | Animaciones | `src/entities/CharacterRig.ts` (huesos y poses) y `rigMath.ts` |
 | Aspecto de personajes y armas | `src/entities/rig/`: `body.ts` (torso, cabeza, pelo, prendas, miembros), `weapons.ts` (modelos y agarre), `geometry.ts` (primitivas), `skeleton.ts` (medidas) y `types.ts` |
 | Armas, daño, estilo, rango | `src/combat/` |
@@ -87,6 +88,8 @@ La primera vez que se ejecuten las e2e: `npx playwright install chromium firefox
 - **Una prueba de red que pasa a la primera.** Las del cooperativo se comprobaron rompiendo a propósito la semilla de la dispersión y la comprobación de plausibilidad: fallaron como debían. Una prueba que nunca se ha visto fallar no demuestra nada.
 - **Estado de un Durable Object en memoria.** Con la hibernación, el objeto sale de la memoria entre mensajes: lo que haya en sus campos se pierde. El servicio de salas guarda todo en el adjunto de cada conexión (`serializeAttachment`) y encuentra las conexiones por etiquetas.
 - **Lo que deja `wrangler dev` al pararlo.** Su runtime (`workerd`) se queda vivo y bloquea `.wrangler/`. Hay que cerrar el árbol de procesos de wrangler; `.wrangler/` está en `.gitignore`.
+- **Girar un brazo casi 180° de golpe.** Para llevar la mano de colgando a por encima de la cabeza (el disparo a ciegas), `setFromUnitVectors` entre dos direcciones casi opuestas no tiene un eje definido: el brazo volteaba de un fotograma a otro (un salto de 1.800 en la medida de tirones). Se hace en dos tramos, primero al frente y de ahí al objetivo. El tirón solo se vio midiendo, no en las capturas.
+- **Dos barridos de la cámara con esferas distintas.** El tramo cabeza → hombro usaba una esfera menor que el siguiente: junto a una pared, el hombro quedaba a menos del radio del segundo barrido, este empezaba dentro de ella y la cámara se encogía hasta la cabeza (pasaba a cubierto contra una columna). `cameraRig.test.ts` lo vigila.
 - **Una conexión nueva fuera del origen.** La política de seguridad de contenido (`vite.config.ts`) solo permite conectar con el propio origen y el servicio de salas: otra dirección necesita su entrada en `connect-src`, o el navegador la bloquea sin más.
 - **Niveles:** escalones de más de 0,32 m o muebles sin `noWalk` rompen la navegación de los enemigos. Los tests de navegación lo detectan.
 

@@ -28,6 +28,8 @@ const SHOULDER_OFFSET = 0.7;
  * arma, la mira queda "bloqueada" a menudo (lo midió el bot 1vN). La distancia y el FOV dan el zoom.
  */
 const SHOULDER_OFFSET_AIM = 0.7;
+/** En el borde de una cobertura alta la cámara se abre hacia ese lado para ver lo que hay tras la esquina. */
+const SHOULDER_COVER_EXTRA = 0.32;
 const UP_OFFSET = 0.2;
 const DIST_NORMAL = 3.1;
 const DIST_AIM = 2.7;
@@ -72,6 +74,8 @@ export class CameraRig implements CombatCamera {
   shoulderSwaps = 0;
   /** Hombro impuesto por el juego (±1, 0 = el que elija el jugador): al asomarse por un borde, el de ese lado. */
   shoulderOverride = 0;
+  /** 0..1: cuánto se abre la cámara hacia el hombro impuesto (en el borde de una cobertura alta). */
+  coverLean = 0;
   readonly position = new Vector3();
   /** Punto de pivote (cabeza) del último frame. */
   readonly pivot = new Vector3();
@@ -79,6 +83,7 @@ export class CameraRig implements CombatCamera {
   /** Distancia efectiva cámara-cabeza del último frame (para transparentar al jugador). */
   distanceToHead = DIST_NORMAL;
   private shoulderCur = 1;
+  private leanCur = 0;
   private dist = DIST_NORMAL;
   private pivotH = PIVOT_STAND;
   private fovCur = 68;
@@ -147,6 +152,7 @@ export class CameraRig implements CombatCamera {
     this.aimK = damp(this.aimK, f.aiming ? 1 : 0, 14, dt);
     this.aimFovFactor = f.zoom ?? AIM_FOV_FACTOR;
     this.shoulderCur = damp(this.shoulderCur, this.shoulderOverride || this.shoulderSide, 10, dt);
+    this.leanCur = damp(this.leanCur, this.shoulderOverride ? this.coverLean : 0, 7, dt);
     this.pivotH = damp(this.pivotH, f.posture === 'crouch' ? PIVOT_CROUCH : PIVOT_STAND, 12, dt);
 
     _head.set(f.feet.x, f.feet.y + this.pivotH, f.feet.z);
@@ -160,11 +166,13 @@ export class CameraRig implements CombatCamera {
     this.forward.copy(_fwd);
 
     // 1) Hombro (lateral + algo arriba).
-    const side = (SHOULDER_OFFSET + (SHOULDER_OFFSET_AIM - SHOULDER_OFFSET) * this.aimK) * this.shoulderCur;
+    const side = (SHOULDER_OFFSET + (SHOULDER_OFFSET_AIM - SHOULDER_OFFSET) * this.aimK + SHOULDER_COVER_EXTRA * this.leanCur) * this.shoulderCur;
     _dir.copy(_right).multiplyScalar(Math.sign(side) || 1);
     let lateral = Math.abs(side);
     if (physics && lateral > 1e-3) {
-      const free = physics.sphereCast(_head, _dir, lateral, CAM_RADIUS * 0.8, QueryGroups.STATIC);
+      // Con la misma esfera que el tramo siguiente: con una menor, junto a una pared el hombro quedaba a menos de su
+      // radio, el barrido hacia atrás empezaba dentro de ella y la cámara se encogía hasta la cabeza.
+      const free = physics.sphereCast(_head, _dir, lateral, CAM_RADIUS, QueryGroups.STATIC);
       lateral = Math.max(0, free - MARGIN);
     }
     _shoulder.copy(_head).addScaledVector(_dir, lateral);

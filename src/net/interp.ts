@@ -2,7 +2,7 @@ import type { PlayerLook } from '../combat/playerLook';
 import { angleDelta, clamp, lerp } from '../core/math';
 import type { CivilianNet } from '../entities/Civilian';
 import type { EnemyNet } from '../entities/Enemy';
-import type { MoveNet } from '../entities/PlayerController';
+import { emptyCoverNet, type MoveNet } from '../entities/PlayerController';
 import { SNAPSHOT_TICKS } from './protocol';
 
 /**
@@ -63,12 +63,15 @@ export function lerpMove(a: MoveNet, b: MoveNet, t: number, out: MoveNet): MoveN
   out.vault = a.vault >= 0 && b.vault >= 0 ? lerp(a.vault, b.vault, t) : a.vault;
   out.dodges = a.dodges;
   if (a.cover) {
-    const c = (out.cover ??= { nx: 0, nz: 0, height: 'low', peekSide: 0, peekOffset: 0 });
+    const c = (out.cover ??= emptyCoverNet());
     c.nx = a.cover.nx;
     c.nz = a.cover.nz;
     c.height = a.cover.height;
     c.peekSide = a.cover.peekSide;
     c.peekOffset = b.cover ? lerp(a.cover.peekOffset, b.cover.peekOffset, t) : a.cover.peekOffset;
+    c.edgeNear = a.cover.edgeNear;
+    c.top = a.cover.top;
+    c.impact = a.cover.impact;
   } else out.cover = null;
   return out;
 }
@@ -118,6 +121,7 @@ export function lerpLook(a: PlayerLook, b: PlayerLook, t: number, out: PlayerLoo
   out.melee = lerp(a.melee, b.melee, t);
   out.slash = a.slash >= 0 && b.slash >= 0 ? lerp(a.slash, b.slash, t) : a.slash;
   out.takedown = a.takedown >= 0 && b.takedown >= 0 ? lerp(a.takedown, b.takedown, t) : a.takedown;
+  out.blind = a.blind;
   out.dead = a.dead;
   out.health = lerp(a.health, b.health, t);
   return out;

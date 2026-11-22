@@ -72,6 +72,7 @@ La lógica que no necesita three.js ni el DOM vive en archivos propios y tiene t
 | `hub/economy.ts` | Tienda, recompensas, multa del Excomunicado |
 | `hub/ExcommunicadoRules.ts` | Zona neutral → aviso → Excomunicado → oleadas → readmisión |
 | `entities/ai/EnemyBrain.ts` | Patrulla, sospecha, combate, cobertura, flanqueo, búsqueda |
+| `entities/coverSensor.ts` | Dónde puede cubrirse el jugador: la pared hacia donde anda o mira, que cubra, con sitio y alcanzable; sus bordes, sus rincones y cómo rodear una esquina |
 | `levels/nav/*` | Rejilla navegable y A* |
 | `core/Save.ts`, `core/Settings.ts` | Partida y ajustes versionados y validados; reasignación de teclas |
 | `missions/tutorial.ts`, `missions/gauntlet.ts` | Pasos del tutorial y composición de oleadas |

@@ -80,11 +80,20 @@ Cada contrato sigue el flujo **briefing** (3 líneas: objetivo, regla especial, 
 | Esquiva / voltereta | 0,5 s a 7,6 m/s con **i-frames de 0,05 a 0,36 s**; enfriamiento 0,35 s; en el aire es un "dive" (una vez por salto) |
 | Salto | 0,95 m de altura |
 | Vault | Con Espacio frente a obstáculos de 0,42 a 1,28 m de alto (a menos de 1 m) y hasta 1,6 m de fondo; si no hay espacio detrás, se sube encima |
-| Cobertura | C junto a una pared o caja. Te mueves pegado a ella y no te caes del final. En una baja, al apuntar te incorporas por encima. En una alta solo se dispara desde un borde: al apuntar sales de lado lo justo para despejar la esquina (0,55 m por la derecha y 0,75 m por la izquierda, porque el arma va en la mano derecha), quedas expuesto y al soltar vuelves a la pared. Las balas del frente hacen −50 % de daño. Las coberturas bajas miden al menos 1,2 m: tapan a alguien agachado |
+| Cobertura | Ver «Cobertura», debajo |
 | Levantarse | Solo si hay espacio sobre la cabeza (si no, sigues agachado: nunca quedas trabado en el techo) |
 
+**Cobertura** (`src/entities/PlayerController.ts`; las consultas al escenario, en `coverSensor.ts`):
+- **Entrar.** C pulsada busca la pared más cercana hacia donde andas o miras, a menos de 1,6 m y en un abanico de ±25°, y da el paso hasta ella. Mantener C 0,2 s corre hasta la cobertura que miras, a menos de 9 m (6,2 m/s, frenando justo antes): con una a la vista, un toque de C sigue siendo agacharse. Deslizarte contra una pared que cubre también te deja a cubierto. Al llegar corriendo, el cuerpo se apoya en la pared con un golpe que suena según su material.
+- **Dónde.** La pared tiene que medir al menos 0,85 m, tener sitio delante y suelo a la misma altura y, si está lejos, nada en medio a la altura de la rodilla. Si apuntas cerca de su final, te colocas 0,3 m hacia dentro para que te cubra entero.
+- **Marca.** Un trazo al pie de la pared y dos verticales (más altas en la alta) señalan adónde irías. Siempre en la cercana y a cubierto; la que miras, solo en combate.
+- **Moverse.** Pegado a ella a 2,1 m/s, sin caerte del final. En un rincón pasas a la pared de al lado sin soltarte, y si mantienes la dirección contra el borde de una esquina exterior (0,22 s), la rodeas por un arco hasta la cara lateral. Los cantos de los muros finos (menos de 0,85 m de fondo) no se rodean. Tras doblar una esquina sigues en la misma dirección mientras no cambies de tecla, aunque la cámara no haya girado.
+- **De una a otra.** A cubierto, mira otra cobertura y mantén C: corres hasta ella. Un toque de C sale de la cobertura, igual que echarse atrás o esprintar hacia un lado (esprintar contra la pared no te suelta).
+- **Disparar.** En una baja, al apuntar te incorporas por encima. En una alta se apunta desde un borde: sales de lado lo justo para despejar la esquina (0,55 m por la derecha y 0,75 m por la izquierda, porque el arma va en la mano derecha), quedas expuesto y al soltar vuelves a la pared; si apuntas a menos de 1,3 m de un borde, vas solo hasta él. **A ciegas:** disparar sin apuntar saca el arma por encima de la baja o por el borde de la alta sin asomar el cuerpo, con casi el triple de dispersión.
+- Las balas del frente hacen −50 % de daño. Las coberturas bajas miden al menos 1,2 m: tapan a alguien agachado.
+
 **Cámara:**
-- Pivote en la cabeza, desplazado 0,7 m sobre el hombro. V cambia de hombro; asomado por el borde de una cobertura, la cámara pasa sola al hombro de ese lado.
+- Pivote en la cabeza, desplazado 0,7 m sobre el hombro. V cambia de hombro. En el borde de una cobertura alta la cámara pasa sola al hombro de ese lado y se abre 0,32 m más para enseñar lo que hay tras la esquina.
 - Distancia de 3,1 m (2,7 m al apuntar y 3,4 m corriendo). FOV de 68° por defecto (ajustable), un 22 % menos al apuntar (el rifle de tirador tiene más aumento).
 - La colisión usa *sphere casts* de cabeza → hombro → cámara. Se acerca al instante si algo tapa y se aleja suavemente al despejarse.
 - El personaje se oculta si la cámara queda a menos de 0,55 m de la cabeza.
@@ -205,7 +214,7 @@ Hay cinco subnotas de 0 a 100: **tiempo** (frente al par), **precisión** (impac
   3. Vault sobre la caja.
   4. Deslizarse.
   5. Esquivar.
-  6. Cubrirse tras el muro alto.
+  6. Correr a cubrirse tras el muro alto (mantener C mirándolo).
   7. Cambiar la cámara de hombro.
   8. Apuntar y disparar en los carriles.
   9. Recargar (con la recarga perfecta explicada).
@@ -219,7 +228,7 @@ Hay cinco subnotas de 0 a 100: **tiempo** (frente al par), **precisión** (impac
   - Abajo a la derecha: arma, munición y slots.
   - Arriba a la derecha: zona, Style Meter y feed de acciones. A la izquierda: barra de Foco.
   - En el centro: mira dinámica, hit markers distintos para cuerpo, cabeza y baja, e indicadores direccionales de daño.
-- **Avisos contextuales** solo cuando aplican: "[E] Hablar con Charon", "[F] Takedown", "[C] Cubrirse".
+- **Avisos contextuales** solo cuando aplican: "[E] Hablar con Charon", "[F] Takedown", "[C] Cubrirse", "[Mantén C] Correr a cubierto (6 m)" en combate, y a cubierto lo que se puede hacer desde ella.
 - **Causa de muerte**, por ejemplo: "Te disparó un Tirador desde tu derecha (24 m)", con los marcadores restantes.
 - **Pausa:** Reanudar, Controles, Ajustes, Volver al Continental (fuera del hub) y Salir al título. H muestra los controles en cualquier momento y, manteniendo Tab, la Intel (objetivo, marcadores, reglas del contrato y leyenda de enemigos).
 - **Accesibilidad:**

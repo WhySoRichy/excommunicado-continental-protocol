@@ -1,4 +1,6 @@
 import type { WeaponId } from '../combat/weapons';
+import type { CoverSpot } from '../entities/coverSensor';
+import type { Vec3Like } from '../physics/Physics';
 import type { Action } from '../core/actions';
 import { wrapAngle } from '../core/math';
 import { HUB_TEXT } from '../hub/dialogue';
@@ -100,6 +102,11 @@ export interface PromptInput {
   yaw: number;
   moveX: number;
   moveY: number;
+  /** Rayo de la cámara: la cobertura a la que se correría manteniendo C. */
+  lookFrom: Vec3Like;
+  lookDir: Vec3Like;
+  /** En pleno combate (o en un nivel de práctica) se avisa también de la cobertura que se mira, no solo de la cercana. */
+  combat: boolean;
   label: (a: Action) => string;
 }
 
@@ -118,18 +125,32 @@ export function contextPrompt(s: LevelSession, i: PromptInput): PromptSpec | nul
     return { key: lab('interact'), text: near.prompt };
   }
   if (s.combat.takedownCandidate(s.ctx)) return { key: lab('takedown'), text: 'Takedown' };
+  const hint = p.peekContext(i.yaw, i.moveX, i.moveY, i.lookFrom, i.lookDir);
+  const far = hint.spot ? Math.max(1, Math.round(Math.hypot(hint.spot.x - p.feet.x, hint.spot.z - p.feet.z))) : 0;
   if (p.state === 'cover' && p.cover) {
-    const leave = `${lab('crouch')}: salir`;
-    if (p.cover.height === 'low') return { key: `${lab('aim')} / ${lab('jump')}`, text: `Asomarse por encima · saltarla  ·  ${leave}` };
-    // En la alta solo se asoma desde un borde.
-    const side = p.cover.peekSide || p.cover.edgeNear;
-    if (side !== 0) return { key: lab('aim'), text: `Asomarse por la ${side < 0 ? 'izquierda' : 'derecha'}  ·  ${leave}` };
-    return { key: `${lab('moveLeft')} / ${lab('moveRight')}`, text: `Ve hasta un borde para asomarte  ·  ${leave}` };
+    const c = p.cover;
+    if (c.wrap >= 0) return null;
+    const next = hint.spot ? `Mantén ${lab('crouch')}: a la cobertura que miras (${far} m)` : `${lab('crouch')}: salir`;
+    const shoot = `${lab('aim')} / ${lab('fire')}`;
+    if (c.height === 'low') return { key: shoot, text: `Asomarse · disparar a ciegas  ·  ${lab('jump')}: saltarla  ·  ${next}` };
+    // En la alta se asoma (o dispara a ciegas) desde un borde; lejos de él, al apuntar va solo al más cercano.
+    const side = c.peekSide || c.edgeNear;
+    if (side !== 0) return { key: shoot, text: `Asomarse por la ${side < 0 ? 'izquierda' : 'derecha'} · a ciegas  ·  ${next}` };
+    if (hint.edge !== 0) return { key: lab('aim'), text: `Asomarse por el borde ${hint.edge < 0 ? 'izquierdo' : 'derecho'}  ·  ${next}` };
+    return { key: `${lab('moveLeft')} / ${lab('moveRight')}`, text: `Ve hasta un borde para asomarte  ·  ${next}` };
   }
-  const ctx = p.peekContext(i.yaw, i.moveX, i.moveY);
-  if (ctx.vault) return { key: lab('jump'), text: ctx.vault === 'vault' ? 'Saltar por encima' : 'Subir' };
-  if (ctx.cover) return { key: lab('crouch'), text: ctx.cover === 'low' ? 'Cubrirse (cobertura baja)' : 'Cubrirse' };
+  if (hint.vault) return { key: lab('jump'), text: hint.vault === 'vault' ? 'Saltar por encima' : 'Subir' };
+  if (hint.cover) return { key: lab('crouch'), text: hint.cover === 'low' ? 'Cubrirse (cobertura baja)' : 'Cubrirse' };
+  if (hint.spot && i.combat) return { key: `Mantén ${lab('crouch')}`, text: `Correr a cubierto (${far} m)` };
   return null;
+}
+
+/** Dónde marcar la cobertura a la que iría C, o null: la cercana siempre; la que se mira, a cubierto o en combate. */
+export function coverMarkerSpot(s: LevelSession, combat: boolean): CoverSpot | null {
+  const p = s.player;
+  const h = p.moveHint;
+  if (!h.spot || (p.state !== 'cover' && p.state !== 'ground')) return null;
+  return h.cover || p.state === 'cover' || combat ? h.spot : null;
 }
 
 /** Panel de Intel: el contrato en curso, o el vestíbulo (neutral u hostil). */

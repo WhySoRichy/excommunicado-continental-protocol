@@ -32,7 +32,7 @@ describe('protocolo de red', () => {
     f.view = 1200.37;
     f.epoch = 2;
     Object.assign(f.move, { x: 1.23456, y: 0.5, z: -7.0001, yaw: 3.14159, state: 'cover', posture: 'crouch', aiming: true, dodges: 3 });
-    f.move.cover = { nx: 0, nz: -1, height: 'high', peekSide: 1, peekOffset: 0.42 };
+    f.move.cover = { nx: 0, nz: -1, height: 'high', peekSide: 1, peekOffset: 0.42, edgeNear: -1, top: 2.4, impact: 0.75 };
     f.fireHeld = true;
     f.firePressed = true;
     f.select = 'knife';
@@ -48,7 +48,7 @@ describe('protocolo de red', () => {
     expect(g.move.state).toBe('cover');
     expect(g.move.posture).toBe('crouch');
     expect(g.move.aiming).toBe(true);
-    expect(g.move.cover).toEqual({ nx: 0, nz: -1, height: 'high', peekSide: 1, peekOffset: 0.42 });
+    expect(g.move.cover).toEqual({ nx: 0, nz: -1, height: 'high', peekSide: 1, peekOffset: 0.42, edgeNear: -1, top: 2.4, impact: 0.75 });
     expect(g.fireHeld && g.firePressed && !g.reloadPressed).toBe(true);
     expect(g.select).toBe('knife');
     expect(g.cycle).toBe(-1);

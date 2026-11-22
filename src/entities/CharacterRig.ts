@@ -53,6 +53,9 @@ const _up = new Vector3(0, 1, 0);
 const _look = new Matrix4();
 const _qGun = new Quaternion();
 const _qFore = new Quaternion();
+const _qMid = new Quaternion();
+/** Al frente en el espacio del torso: paso intermedio para llevar el brazo por encima de la cabeza. */
+const FRONT = new Vector3(0, 0, -1);
 const _bounds = new Box3();
 /** Esfera de recorte generosa (cubre volteretas, caídas y brazos extendidos). */
 const CULL_CENTER = new Vector3(0, 0.9, 0);
@@ -178,6 +181,12 @@ export class CharacterRig {
   private readonly coverHighS: Spring = { x: 0, v: 0 };
   private readonly coverLowS: Spring = { x: 0, v: 0 };
   private readonly peekS: Spring = { x: 0, v: 0 };
+  /** Disparo a ciegas (el arma asoma sin el cuerpo) y apoyo contra la pared al llegar a una cobertura. */
+  private readonly blindS: Spring = { x: 0, v: 0 };
+  private readonly braceS: Spring = { x: 0, v: 0 };
+  /** Lado del último disparo a ciegas por el borde: se mantiene mientras la pose se apaga. */
+  private blindSide = 1;
+  private blindOver = 1;
   /** Cadencia del último paso (pasos/s): al parar, el paso en curso se termina a ese ritmo. */
   private cadenceHz = 1.7;
   /** Dirección de la marcha respecto al frente (coseno y seno), suavizada. */
@@ -383,7 +392,7 @@ export class CharacterRig {
     const long = model === 'rifle' || model === 'dmr' || model === 'smg' || model === 'shotgun' || model === 'shotgunTactical';
     const knife = model === 'knife';
 
-    const onFeet = st === 'ground' || st === 'cover' || st === 'locked';
+    const onFeet = st === 'ground' || st === 'toCover' || st === 'cover' || st === 'locked';
     const crouching = p.posture === 'crouch' && onFeet;
     const ck = this.blend(this.crouchS, crouching ? 1 : 0, 13, dt);
     const ak = this.blend(this.aimS, knife ? 0 : p.aim, 19, dt);
@@ -770,6 +779,37 @@ export class CharacterRig {
     }
     // Un `torsoZ` positivo ladea el torso a la izquierda (visto desde detrás); asomado por la derecha, a la derecha.
     torsoZ -= 0.22 * pk;
+    // Al llegar a la cobertura el cuerpo se va contra la pared y la mano izquierda se apoya en ella; se suelta enseguida.
+    const braceT = st === 'cover' ? p.brace * (1 - smooth(0.16, 0.5, p.stateTime)) : 0;
+    const bw = this.blend(this.braceS, braceT, 24, dt);
+    if (bw > 0.001) {
+      torsoX -= 0.16 * bw;
+      headX -= 0.06 * bw;
+      lsx = lerp(lsx, (p.cover === 'high' ? 1.35 : 1.0) - torsoX, bw);
+      lel = lerp(lel, 0.45, bw);
+      lsz = lerp(lsz, 0.12, bw);
+      grip *= 1 - bw;
+    }
+    // A ciegas: por encima de la baja, la cabeza agachada y el arma en alto; por el borde de la alta, el torso se
+    // ladea hacia ese lado y el brazo asoma tras la esquina. La mano se coloca por IK al final (como en el encare).
+    if (p.blind !== 0) {
+      this.blindOver = p.blind === 1 ? 1 : 0;
+      if (p.blind === 2 && p.coverSide !== 0) this.blindSide = p.coverSide;
+    }
+    const blk = this.blend(this.blindS, p.blind !== 0 && armed && !knife ? 1 : 0, 18, dt);
+    if (blk > 0.001) {
+      const over = this.blindOver;
+      const side = this.blindSide;
+      headX -= 0.32 * blk * over;
+      torsoX -= 0.08 * blk * over;
+      torsoZ -= 0.24 * side * blk * (1 - over);
+      torsoY += (side > 0 ? -0.15 : 0.45) * blk * (1 - over);
+      rsx = lerp(rsx, lerp(1.45, 2.5, over) - torsoX, blk);
+      rel = lerp(rel, lerp(0.15, 0.3, over), blk);
+      rsz = lerp(rsz, lerp(side > 0 ? 0.55 : -0.75, -0.1, over), blk);
+      // Con pistola, por el borde se dispara a una mano.
+      if (!long) grip *= 1 - blk * (1 - over);
+    }
     // Mano izquierda apoyada (deslizamiento: detrás, en el suelo; vault: sobre el obstáculo).
     if (plantL > 0) {
       const sliding = st === 'slide';
@@ -879,6 +919,33 @@ export class CharacterRig {
       _qGun.setFromRotationMatrix(_look.lookAt(_zero, _aim, _up));
       this.foreR.getWorldQuaternion(_qFore).invert().multiply(_qGun);
       this.weaponMount.quaternion.slerp(_qFore, shoulderW);
+    }
+    // A ciegas: la mano derecha va por IK por encima de la cabeza o tras la esquina y el arma mira hacia donde se apunta.
+    const blindW = blk * swapOff * (p.reload < 0 ? 1 : 0);
+    if (blindW > 0.01) {
+      this.root.updateWorldMatrix(true, true);
+      const pitch = clamp(p.aimPitch, -0.6, 0.5) + p.recoil * 0.08;
+      const yaw = clamp(p.lookYaw, -1.1, 1.1);
+      _aim.set(-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch)).transformDirection(this.root.matrixWorld);
+      const over = this.blindOver;
+      const side = this.blindSide;
+      // Dónde va la mano, en el espacio del personaje (pies en el origen, mirando a −Z): por encima del borde de la
+      // cobertura, justo pasada su cara, o tras la esquina a la altura del pecho.
+      const top = clamp(p.coverTop, 0.8, 1.6);
+      _pocket.set(lerp(side > 0 ? 0.6 : -0.45, 0.1, over), lerp(1.22, top + 0.1, over), lerp(-0.26, -0.42, over));
+      this.root.localToWorld(_pocket);
+      this.torso.worldToLocal(_pocket).sub(this.armR.position);
+      const ik = solveArm(_pocket.length(), -ELBOW_Y, -HAND_Y, this.armIkR);
+      // De la mano colgando a por encima de la cabeza hay casi 180°: el giro directo es ambiguo y el brazo volteaba de
+      // un fotograma a otro. Se hace en dos tramos estables, primero al frente y desde ahí hasta el objetivo.
+      _qMid.setFromUnitVectors(_hand.set(0, ik.hy, ik.hz).normalize(), FRONT);
+      _ikQ.setFromUnitVectors(FRONT, _pocket.normalize()).multiply(_qMid);
+      this.armR.quaternion.slerp(_ikQ, blindW);
+      this.foreR.rotation.x = lerp(this.foreR.rotation.x, ik.elbow, blindW);
+      this.foreR.updateWorldMatrix(true, false);
+      _qGun.setFromRotationMatrix(_look.lookAt(_zero, _aim, _up));
+      this.foreR.getWorldQuaternion(_qFore).invert().multiply(_qGun);
+      this.weaponMount.quaternion.slerp(_qFore, blindW);
     }
     // Mano de apoyo: con el brazo derecho ya colocado, la izquierda va por IK al arma.
     const gripAt = GRIP[model];
