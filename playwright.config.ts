@@ -6,8 +6,12 @@ const isCI = !!process.env.CI;
 // sean representativas. En CI (sin GPU) Chromium cae a SwiftShader y el FPS solo se registra.
 // El audio se mide en los tests (gate de mezcla): sin esperar gesto para el AudioContext.
 const audioArgs = ['--autoplay-policy=no-user-gesture-required'];
+// El cooperativo por WebRTC se prueba entre dos pestañas: con las IP locales tras nombres mDNS (lo normal en Chrome),
+// la conexión depende de que el sistema resuelva esos nombres, y en los runners de Linux no lo hace.
+const rtcArgs = ['--disable-features=WebRtcHideLocalIpsWithMdns'];
 const gpuArgs = (isCI ? ['--enable-unsafe-swiftshader', '--use-angle=swiftshader'] : ['--enable-gpu', '--ignore-gpu-blocklist', '--use-angle=d3d11']).concat(
   audioArgs,
+  rtcArgs,
 );
 
 export default defineConfig({

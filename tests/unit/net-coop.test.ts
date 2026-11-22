@@ -16,8 +16,8 @@ import { NavGrid } from '../../src/levels/nav/NavGrid';
 import type { LevelData } from '../../src/levels/types';
 import { FxRecorder } from '../../src/net/fx';
 import { TestNetwork, type TestNetworkOptions } from '../../src/net/link';
-import { NetGuest } from '../../src/net/NetGuest';
-import { type HostWorld, NetHost } from '../../src/net/NetHost';
+import { HOST_TIMEOUT, NetGuest } from '../../src/net/NetGuest';
+import { type HostWorld, NetHost, PEER_TIMEOUT } from '../../src/net/NetHost';
 import { FX } from '../../src/net/protocol';
 import { loadRapier, PhysicsWorld, type Rapier } from '../../src/physics/Physics';
 
@@ -121,17 +121,18 @@ function guestSide(level: LevelData, link: ReturnType<TestNetwork['pair']>[1], n
   const pickups = new Pickups();
   const shotRng = new Rng();
   const roster = new PlayerRoster({ physics, enemies, civilians: null, vfx, audio: SILENT_AUDIO, rng: new Rng(5), pickups });
-  const events = { spawned: 0, died: 0, closed: 0 };
+  const events = { spawned: 0, died: 0, closed: 0, byHost: false };
   const guest = new NetGuest(link, {
     now: () => net.now,
     upgrades,
-    vfx,
-    audio: SILENT_AUDIO,
     camera: STILL_CAMERA,
     events: {
       spawned: () => events.spawned++,
       died: () => events.died++,
-      closed: () => events.closed++,
+      closed: (byHost) => {
+        events.closed++;
+        events.byHost = byHost;
+      },
     },
   });
   let local: PlayerSlot | null = null;
@@ -150,6 +151,7 @@ function guestSide(level: LevelData, link: ReturnType<TestNetwork['pair']>[1], n
         enemies,
         civilians: null,
         pickups,
+        ports: { vfx, audio: SILENT_AUDIO },
         createReplica: (id, at) =>
           roster.add(new PlayerController(physics, new Vector3(at.x, at.y, at.z), at.yaw), new PlayerCombat(new Set()), { drive: 'replica', id }),
       },
@@ -198,7 +200,7 @@ function coop(opts: TestNetworkOptions = { latency: 40, jitter: 8, loss: 0.03 },
   // Hasta que el anfitrión lo coloca.
   for (let i = 0; i < 60 && g.events.spawned === 0; i++) tick();
   expect(g.events.spawned, 'el anfitrión lo coloca en el nivel').toBe(1);
-  return { net, h, g, tick };
+  return { net, h, g, tick, hostEnd, guestEnd };
 }
 
 /** Apunta el rayo de un jugador desde su cabeza hacia un punto. */
@@ -346,6 +348,35 @@ describe('cooperativo en red sin pantalla', () => {
     expect(h.roster.byId(1), 'su plaza ya no está').toBeNull();
     expect(h.left).toEqual([1]);
     expect(enemy.target?.id, 'el enemigo vuelve a por el anfitrión').toBe(0);
+  });
+
+  it('si uno de los dos deja de dar señales, el otro lo da por ido', () => {
+    // El anfitrión se cuelga: ni instantáneas ni respuestas a los latidos.
+    const a = coop();
+    a.hostEnd.onMessage = null;
+    for (let t = 0; t < HOST_TIMEOUT + 1500; t += 500) {
+      a.g.guest.tick();
+      a.net.advance(500);
+    }
+    expect(a.g.events.closed, 'el invitado da la conexión por perdida').toBe(1);
+    expect(a.g.events.byHost, 'no la cerró el anfitrión').toBe(false);
+
+    // Un invitado se cuelga: el anfitrión lo suelta y su personaje deja la partida.
+    const b = coop();
+    b.guestEnd.onMessage = null;
+    for (let t = 0; t < PEER_TIMEOUT + 1500; t += 500) {
+      b.h.host.tick();
+      b.net.advance(500);
+    }
+    expect(b.h.left).toEqual([1]);
+    expect(b.h.roster.byId(1)).toBeNull();
+
+    // Y si el anfitrión cierra la partida, el invitado lo sabe.
+    const c = coop();
+    c.h.host.close();
+    c.net.advance(200);
+    expect(c.g.events.closed).toBe(1);
+    expect(c.g.events.byHost).toBe(true);
   });
 
   it('una instantánea por cada tres pasos y entradas que caben en un canal modesto', () => {

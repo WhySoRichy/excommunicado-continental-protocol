@@ -61,7 +61,7 @@ export const ALL_UPGRADES: readonly UpgradeId[] = [
 export const GAUNTLET_TOP = 10;
 /** Fondos iniciales: la "cortesía del Continental" (DISENO §5.2). */
 export const STARTING_COINS = 8;
-const MAX_COINS = 9999;
+export const MAX_COINS = 9999;
 
 export function newProfile(now = Date.now()): Profile {
   return {

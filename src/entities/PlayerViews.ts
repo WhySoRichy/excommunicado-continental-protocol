@@ -1,4 +1,6 @@
-import type { Scene } from 'three';
+import { type Scene, type Sprite, type Vector3, Vector2 } from 'three';
+import { disposeSprite, makeTextSprite } from '../render/labels';
+import { playerName } from '../text/coop';
 import type { PlayerSlot } from '../combat/PlayerRoster';
 import type { WeaponId } from '../combat/weapons';
 import { FIXED_DT } from '../core/Loop';
@@ -15,6 +17,11 @@ export const WEAPON_MODEL: Record<WeaponId, WeaponModel> = {
   knife: 'knife',
 };
 
+/** El nombre de un aliado se desvanece a menos de esta distancia (m), en este tramo, y crece a partir de esta otra. */
+const LABEL_NEAR = 2.5;
+const LABEL_FADE = 2;
+const LABEL_GROW = 12;
+
 /** Los demás jugadores: el Huésped con traje gris marengo y contorno azul, para distinguirlos a simple vista. */
 const ALLY_LOOK: RigOptions = {
   ...PLAYER_LOOK,
@@ -30,6 +37,9 @@ const ALLY_LOOK: RigOptions = {
  */
 class PlayerView {
   private readonly rig: CharacterRig;
+  /** Su nombre sobre la cabeza (para saber quién es quién en cooperativo). */
+  private readonly label: Sprite;
+  private readonly labelSize = new Vector2();
   private readonly pose: RigPose = idlePose();
   private readonly visualYaw: BodyYaw = bodyYaw();
   private model: WeaponModel = 'none';
@@ -42,9 +52,13 @@ class PlayerView {
   ) {
     this.rig = new CharacterRig('ally', ALLY_LOOK);
     scene.add(this.rig.root);
+    this.label = makeTextSprite(playerName(slot.id), '#5aa9ff');
+    this.label.renderOrder = 19;
+    this.labelSize.set(this.label.scale.x, this.label.scale.y);
+    scene.add(this.label);
   }
 
-  update(alpha: number, dt: number): void {
+  update(alpha: number, dt: number, eye: Vector3): void {
     const p = this.slot.controller;
     const look = this.slot.look;
     const model: WeaponModel = look.weapon === 'none' ? 'none' : WEAPON_MODEL[look.weapon];
@@ -78,11 +92,29 @@ class PlayerView {
     pose.peek = p.peekAmount;
     pose.death = 1;
     this.rig.update(pose, dt);
+    const lp = root.position;
+    this.updateLabel(lp.x, lp.y + (p.posture === 'crouch' ? 1.55 : 2.15), lp.z, look.dead, eye);
+  }
+
+  /**
+   * El nombre se lee igual cerca y lejos: de cerca se desvanece (ya se ve quién es y taparía la pantalla) y de lejos
+   * crece un poco para no quedarse en un punto. Se ve a través de las paredes, como en los juegos de equipo.
+   */
+  private updateLabel(x: number, y: number, z: number, dead: boolean, eye: Vector3): void {
+    const l = this.label;
+    l.position.set(x, y, z);
+    const d = Math.hypot(x - eye.x, y - eye.y, z - eye.z);
+    const fade = Math.min(1, Math.max(0, (d - LABEL_NEAR) / LABEL_FADE));
+    l.visible = !dead && fade > 0.01;
+    l.material.opacity = fade;
+    const k = Math.max(1, d / LABEL_GROW);
+    l.scale.set(this.labelSize.x * k, this.labelSize.y * k, 1);
   }
 
   dispose(): void {
     this.rig.dispose();
-    this.scene.remove(this.rig.root);
+    this.scene.remove(this.rig.root, this.label);
+    disposeSprite(this.label);
   }
 }
 
@@ -93,7 +125,8 @@ export class PlayerViews {
 
   constructor(private readonly scene: Scene) {}
 
-  update(slots: readonly PlayerSlot[], alpha: number, dt: number): void {
+  /** `eye`: dónde está la cámara (para el tamaño de los nombres). */
+  update(slots: readonly PlayerSlot[], alpha: number, dt: number, eye: Vector3): void {
     const t = ++this.tick;
     for (const s of slots) {
       if (s.local) continue;
@@ -103,7 +136,7 @@ export class PlayerViews {
         this.views.set(s, v);
       }
       v.seen = t;
-      v.update(alpha, dt);
+      v.update(alpha, dt, eye);
     }
     // Quien se fue de la partida ya no está en la lista: su personaje se retira.
     for (const [s, v] of this.views) {

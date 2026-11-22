@@ -1,6 +1,7 @@
 import { h, keycap, setText, setVisible } from './dom';
 import { buildIntel, type IntelView } from './Intel';
 import type { MissionHud } from '../missions/ports';
+import { COOP_TEXT } from '../text/coop';
 
 export interface PromptSpec {
   key: string;
@@ -63,8 +64,20 @@ function sameFeed(a: ReadonlyArray<{ text: string; points: number }>, b: Readonl
   return true;
 }
 
+/** El equipo en cooperativo: cada jugador con su salud y, en un invitado, la latencia con el anfitrión. */
+export interface TeamView {
+  players: Array<{ name: string; you: boolean; health: number; down: boolean }>;
+  /** Ida y vuelta con el anfitrión (ms); null en el anfitrión. */
+  ping: number | null;
+}
+
 export class Hud implements MissionHud {
   readonly root: HTMLDivElement;
+  private readonly team: HTMLDivElement;
+  private readonly teamList: HTMLDivElement;
+  private readonly teamPing: HTMLDivElement;
+  private readonly teamRows: Array<{ row: HTMLDivElement; fill: HTMLDivElement; state: HTMLSpanElement }> = [];
+  private teamKey = '';
   private readonly crosshair: HTMLDivElement;
   private readonly hitmark: HTMLDivElement;
   private readonly prompt: HTMLDivElement;
@@ -208,6 +221,10 @@ export class Hud implements MissionHud {
 
     this.intel = h('div', { class: 'intel-wrap' });
     this.intel.hidden = true;
+    this.teamList = h('div', { class: 'team-list' });
+    this.teamPing = h('div', { class: 'team-ping' });
+    this.team = h('div', { class: 'team', ariaLabel: 'Equipo' }, [this.teamList, this.teamPing]);
+    this.team.hidden = true;
     this.root.append(
       this.focusTint,
       this.vignette,
@@ -226,6 +243,7 @@ export class Hud implements MissionHud {
       this.reloadBar,
       this.style,
       this.focusBox,
+      this.team,
       this.toast,
       this.death,
       this.intel,
@@ -236,6 +254,41 @@ export class Hud implements MissionHud {
 
   setVisible(v: boolean): void {
     setVisible(this.root, v);
+  }
+
+  /** Panel del equipo en cooperativo (null fuera de él). En cooperativo no hay Foco: su indicador se oculta. */
+  setTeam(t: TeamView | null): void {
+    this.root.classList.toggle('coop', !!t);
+    if (!t) {
+      setVisible(this.team, false);
+      return;
+    }
+    setVisible(this.team, true);
+    const key = t.players.map((p) => `${p.name}${p.you ? '*' : ''}`).join('|');
+    if (key !== this.teamKey) {
+      this.teamKey = key;
+      this.teamRows.length = 0;
+      this.teamList.replaceChildren(
+        ...t.players.map((p) => {
+          const fill = h('div', { class: 'team-fill' });
+          const state = h('span', { class: 'team-state' });
+          const row = h('div', { class: `team-row${p.you ? ' you' : ''}` }, [
+            h('span', { class: 'team-name', text: p.name }),
+            h('div', { class: 'team-bar' }, [fill]),
+            state,
+          ]);
+          this.teamRows.push({ row, fill, state });
+          return row;
+        }),
+      );
+    }
+    t.players.forEach((p, i) => {
+      const r = this.teamRows[i]!;
+      r.fill.style.width = `${Math.round(Math.max(0, Math.min(1, p.health)) * 100)}%`;
+      r.row.classList.toggle('down', p.down);
+      setText(r.state, p.down ? COOP_TEXT.down : '');
+    });
+    setText(this.teamPing, t.ping === null ? '' : `Ping ${COOP_TEXT.ping(t.ping)}`);
   }
 
   /** Muestra/oculta los paneles de combate (en el hub neutral no hacen falta). */

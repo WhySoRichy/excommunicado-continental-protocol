@@ -6,9 +6,12 @@ import { defaultSettings, type NumericSetting, type QualityPresetId, rebind, SET
 import { canBuy, SHOP } from '../hub/economy';
 import type { Dialogue } from '../hub/dialogue';
 import { MISSION_ORDER, type MissionDef, type MissionId, MISSIONS } from '../missions/types';
+import { COOP_TEXT } from '../text/coop';
+import { buildCoopJoin, buildCoopLobby, buildCoopMenu, type CoopScreenApi } from './coopScreens';
 import { button, h, keycap } from './dom';
 
-export type ScreenId = 'title' | 'confirmNew' | 'pause' | 'controls' | 'settings' | 'dialog' | 'shop' | 'contracts' | 'briefing' | 'results';
+export type ScreenId =
+  'title' | 'confirmNew' | 'pause' | 'controls' | 'settings' | 'dialog' | 'shop' | 'contracts' | 'briefing' | 'results' | 'coop' | 'coopJoin' | 'coopLobby';
 
 type SettingsTab = 'controls' | 'video' | 'access' | 'keys';
 type BoolSetting = 'invertY' | 'aimToggle' | 'dynamicResolution' | 'hints';
@@ -45,6 +48,8 @@ export interface ResultsView {
   styleScore: number;
   /** Gauntlet: oleadas, puesto en el top 10 (0 = fuera) y top actual. */
   gauntlet: { waves: number; position: number; top: Array<{ waves: number; score: number }> } | null;
+  /** En cooperativo: el botón de salida (volver a la sala o salir), si se puede repetir y una nota. */
+  coop?: { leave: string; retry: boolean; note: string | null };
 }
 
 export interface ScreenCallbacks {
@@ -64,6 +69,7 @@ export interface ScreenCallbacks {
   hasSave(): boolean;
   inHub(): boolean;
   profile(): Profile;
+  coop: CoopScreenApi;
 }
 
 /** Filas de la tabla de controles (acción → etiqueta). */
@@ -222,6 +228,12 @@ export class Screens {
         return this.buildBriefing();
       case 'results':
         return this.buildResults();
+      case 'coop':
+        return buildCoopMenu(this.cb.coop);
+      case 'coopJoin':
+        return buildCoopJoin(this.cb.coop);
+      case 'coopLobby':
+        return buildCoopLobby(this.cb.coop);
     }
   }
 
@@ -293,11 +305,18 @@ export class Screens {
         text: `Tiempo ${mm}:${String(ss).padStart(2, '0')} · Bajas ${r.kills} · Estilo ${r.styleScore.toLocaleString('es')} · Marcadores usados ${r.markersUsed}/${r.markersTotal}`,
       }),
       ...extras,
-      h('div', { class: 'menu menu-row' }, [
-        button('Volver al Continental', x.onHub, 'btn btn-primary'),
-        button(r.success ? 'Repetir contrato' : 'Reintentar', x.onRetry),
-      ]),
+      this.resultsMenu(r, x.onHub, x.onRetry, r.success ? 'Repetir contrato' : 'Reintentar'),
     ]);
+  }
+
+  /** Botones de los resultados (en cooperativo, los de la sala; el invitado no decide si se repite). */
+  private resultsMenu(r: ResultsView, onHub: () => void, onRetry: () => void, retryLabel: string): HTMLElement {
+    const c = r.coop;
+    const row = h('div', { class: 'menu menu-row' }, [
+      button(c ? c.leave : 'Volver al Continental', onHub, 'btn btn-primary'),
+      !c || c.retry ? button(retryLabel, onRetry) : null,
+    ]);
+    return c?.note ? h('div', {}, [h('p', { class: 'screen-hint', text: c.note }), row]) : row;
   }
 
   private buildGauntletResults(r: ResultsView, g: NonNullable<ResultsView['gauntlet']>, onRetry: () => void, onHub: () => void): HTMLElement {
@@ -330,7 +349,7 @@ export class Screens {
       ]),
       h('div', { class: 'results-line gauntlet-place', text: `${place} · Bajas ${r.kills} · Estilo ${r.styleScore.toLocaleString('es')}` }),
       ...extras,
-      h('div', { class: 'menu menu-row' }, [button('Volver al Continental', onHub, 'btn btn-primary'), button('Otra vez', onRetry)]),
+      this.resultsMenu(r, onHub, onRetry, 'Otra vez'),
     ]);
   }
 
@@ -354,6 +373,7 @@ export class Screens {
     const menu: HTMLElement[] = [];
     if (hasSave) menu.push(button('Continuar', () => this.cb.onContinue(), 'btn btn-primary'));
     menu.push(button('Nueva partida', () => (hasSave ? this.show('confirmNew') : this.cb.onNewGame()), hasSave ? 'btn' : 'btn btn-primary'));
+    menu.push(button(COOP_TEXT.menu, () => this.show('coop')));
     menu.push(button('Controles', () => this.show('controls')));
     menu.push(button('Ajustes', () => this.show('settings')));
     if (this.devButtons) {
@@ -382,6 +402,22 @@ export class Screens {
   }
 
   private buildPause(): HTMLElement {
+    const coop = this.cb.coop.view();
+    if (coop) {
+      // En cooperativo la partida sigue: la pausa es un menú, no se para el tiempo.
+      const menu = [
+        button('Reanudar', () => this.cb.onResume(), 'btn btn-primary'),
+        button('Controles', () => this.show('controls')),
+        button('Ajustes', () => this.show('settings')),
+      ];
+      if (coop.role === 'host') menu.push(button(COOP_TEXT.backToLobby, () => this.cb.coop.backToLobby()));
+      menu.push(button(coop.role === 'host' ? COOP_TEXT.leaveLobby : COOP_TEXT.leaveGame, () => this.cb.coop.leave(), 'btn btn-danger'));
+      return h('section', { class: 'screen screen-pause', role: 'dialog', ariaLabel: 'Pausa' }, [
+        h('h2', { class: 'screen-heading', text: 'PAUSA' }),
+        h('div', { class: 'menu' }, menu),
+        h('p', { class: 'screen-hint', text: COOP_TEXT.pauseHint }),
+      ]);
+    }
     const menu = [
       button('Reanudar', () => this.cb.onResume(), 'btn btn-primary'),
       button('Controles', () => this.show('controls')),

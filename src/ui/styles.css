@@ -1590,3 +1590,174 @@ body {
 .focus-tint.on {
   opacity: 1;
 }
+
+/* ===== Cooperativo ===== */
+.screen-coop {
+  width: min(560px, 94vw);
+}
+
+.coop-players {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.coop-player {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.45rem 0.75rem;
+  background: rgba(255, 255, 255, 0.04);
+  border-left: 3px solid var(--c-line);
+  border-radius: 4px;
+}
+
+.coop-player.you {
+  border-left-color: var(--c-gold);
+}
+
+.coop-name {
+  font-weight: 600;
+}
+
+.coop-you,
+.coop-status {
+  font-size: 0.8rem;
+  color: var(--c-text-dim);
+}
+
+.coop-status {
+  margin-left: auto;
+}
+
+.coop-modes {
+  width: 100%;
+}
+
+.coop-label {
+  align-self: flex-start;
+  font: 600 0.72rem var(--font-ui);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--c-text-dim);
+}
+
+.coop-code {
+  width: 100%;
+  min-height: 4.5rem;
+  padding: 0.5rem 0.6rem;
+  font:
+    0.72rem ui-monospace,
+    'Cascadia Mono',
+    Consolas,
+    monospace;
+  color: var(--c-text);
+  word-break: break-all;
+  resize: vertical;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--c-line);
+  border-radius: 4px;
+}
+
+.coop-code:focus-visible {
+  outline: 2px solid var(--c-gold);
+  outline-offset: 1px;
+}
+
+.coop-note {
+  max-width: 520px;
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  text-align: center;
+  color: var(--c-text-dim);
+  opacity: 0.85;
+}
+
+.coop-error {
+  margin: 0;
+  font-size: 0.85rem;
+  text-align: center;
+  color: var(--c-alarm);
+}
+
+/* Panel del equipo, donde va el Foco (en cooperativo no hay Foco). */
+#hud.coop .focus {
+  display: none;
+}
+
+.team {
+  position: absolute;
+  left: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  width: 190px;
+  padding: 0.5rem 0.65rem;
+  background: rgba(14, 16, 20, 0.62);
+  border-left: 3px solid #5aa9ff;
+  border-radius: 4px;
+}
+
+.team[hidden] {
+  display: none;
+}
+
+.team-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.team-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.15rem 0.4rem;
+  font-size: 0.75rem;
+}
+
+.team-name {
+  color: var(--c-text);
+}
+
+.team-row.you .team-name {
+  color: var(--c-gold-soft);
+}
+
+.team-state {
+  font-size: 0.68rem;
+  color: var(--c-alarm);
+}
+
+.team-bar {
+  grid-column: 1 / -1;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.team-fill {
+  height: 100%;
+  background: var(--c-ok);
+  transition: width 0.25s;
+}
+
+.team-row.down .team-fill {
+  background: var(--c-alarm);
+}
+
+.team-ping {
+  font-size: 0.66rem;
+  color: var(--c-text-dim);
+}
+
+.team-ping:empty {
+  display: none;
+}

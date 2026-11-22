@@ -17,7 +17,8 @@ El juego va a seguir creciendo en cuatro direcciones a la vez: gráficos, conten
 | Problema | Dato | Qué bloquea |
 |---|---|---|
 | Simulación y vista mezcladas | Al empezar la fase 1, 11 módulos de simulación importaban render, audio, interfaz o cámara. Tras la fase 1, ninguno (vigilado por lint) | Resuelto: la simulación corre sin pantalla |
-| Un solo jugador cableado | Al empezar la fase 2, `LevelSession` guardaba un `player`, un `combat` y un único `PlayerTarget`. Tras ella, un registro de plazas con un objetivo por jugador | Resuelto en la simulación: falta la red (fase 3) |
+| Un solo jugador cableado | Al empezar la fase 2, `LevelSession` guardaba un `player`, un `combat` y un único `PlayerTarget`. Tras ella, un registro de plazas con un objetivo por jugador; tras la fase 3, cooperativo en red | Resuelto |
+| Peso del juego | 275 KB comprimidos de un presupuesto de 300 (la red añadió unos 15) | Lo próximo grande conviene cargarlo aparte, como los niveles |
 | Módulos que concentran demasiado | `Game.ts` 1.330 líneas, `PlayerController.ts` 1.035, `CharacterRig.ts` 1.018 (su `update` ronda las 550) | Que dos frentes avancen a la vez sin pisarse |
 | Textos dentro del código | Cadenas en español repartidas por más de diez módulos de juego (armas, estilo, logros, diálogos) | Traducir y revisar textos sin tocar lógica |
 | Contenido sin validar fuera de los niveles | Armas, tipos de enemigo y diálogos no tienen comprobaciones como las de los niveles | Añadir contenido en volumen sin romper el equilibrio ni las referencias |
@@ -27,7 +28,7 @@ El juego va a seguir creciendo en cuatro direcciones a la vez: gráficos, conten
 
 ## 3. Reglas para crecer
 
-1. **Capas.** La *simulación* (reglas y estado) puede usar la matemática de three (`Vector3`, `Quaternion`) pero no escenas, mallas, materiales, DOM ni audio. La *vista* (render, sonido, interfaz) lee el estado y reacciona a eventos. El *contenido* son datos validados. La *red*, cuando llegue, solo transporta intenciones y estado.
+1. **Capas.** La *simulación* (reglas y estado) puede usar la matemática de three (`Vector3`, `Quaternion`) pero no escenas, mallas, materiales, DOM ni audio. La *vista* (render, sonido, interfaz) lee el estado y reacciona a eventos. El *contenido* son datos validados. La *red* (`src/net/`) solo transporta intenciones y estado, y entra en la misma regla de lint que la simulación.
 2. **La simulación avisa, no dibuja.** Disparos, impactos, muertes, ruidos y avisos se publican como eventos tipados; efectos, sonido y HUD se suscriben.
 3. **Toda entidad tiene un id estable** y un estado que se puede copiar a un objeto plano.
 4. **La simulación no lee teclado ni cámara.** Todo llega en la intención de cada jugador, incluido el rayo de apuntado.
@@ -63,11 +64,25 @@ Resultado: ningún módulo de simulación importa ya render, interfaz, audio, c�
 
 Queda para la fase 3: quién mueve a los demás jugadores (la red), y qué pasa cuando cae el local con otros vivos.
 
-### Fase 3 · Multijugador en red
-- Anfitrión con autoridad sobre WebRTC: el anfitrión simula y los invitados envían sus intenciones. El lockstep queda descartado porque la coma flotante no es idéntica entre navegadores.
-- Instantáneas a 20 Hz con interpolación; predicción del propio personaje con corrección.
-- Disparos con compensación de latencia (el anfitrión rebobina las posiciones al instante del disparo).
-- Un servicio mínimo de señalización, aparte del cliente estático, y sin datos personales.
+### Fase 3 · Multijugador en red · completada
+Cooperativo para hasta cuatro jugadores, sin servidor propio (título → Cooperativo). El lockstep quedó descartado porque la coma flotante no es idéntica entre navegadores: manda un anfitrión.
+
+- **Anfitrión con autoridad** (`net/NetHost.ts`). La partida corre en su equipo como siempre: enemigos, daño, munición, misión y muertes son suyos. Cada invitado le envía en cada paso su movimiento y lo que pide su combate; el anfitrión los aplica en orden, con una pequeña cola que amortigua la variación de la red.
+- **El movimiento lo decide su dueño y el anfitrión lo comprueba.** El invitado mueve a su personaje sin esperar a la red, así que no hay correcciones que se noten, y el anfitrión solo acepta lo creíble: velocidad, altura y sin meterse en una pared. Si no cuadra, lo devuelve a donde lo tenía. Es la «predicción con corrección» del plan llevada a lo que mejor se siente en un cooperativo, sin renunciar a no fiarse del cliente.
+- **El disparo del invitado se predice con la misma semilla.** Fogonazo, sonido, retroceso, trazadora y sangre salen al instante en su equipo; el anfitrión resuelve el mismo disparo con la misma dispersión (la semilla es el número del paso) y confirma impactos, estilo y bajas. Una prueba comprueba que el disparo predicho y el resuelto acaban en el mismo punto, y falla si las semillas no coinciden.
+- **Compensación de latencia** (`net/lagComp.ts`). El anfitrión guarda medio segundo de posiciones y resuelve cada disparo de un invitado contra lo que este tenía en pantalla. No mueve la física: sus consultas usan el árbol que refresca `world.step()`, así que el escenario se consulta a la física y cada personaje se prueba a mano, cápsula a cápsula, en su posición de entonces.
+- **Instantáneas a 20 Hz con interpolación** (`net/NetGuest.ts`, `net/interp.ts`). El invitado dibuja todo con 100 ms de retraso, entre las dos instantáneas que rodean ese instante, con los mismos `Enemy`, civiles, objetos y vistas que el anfitrión: son réplicas que no piensan. Los efectos (disparos, trazadoras, impactos, alertas) viajan con la instantánea y se reproducen a su hora; los suyos ya los predijo.
+- **Protocolo** (`net/protocol.ts`). Tuplas JSON con números redondeados (unos 3 KB por instantánea con veinte enemigos), un canal fiable para avisos y eventos y otro que puede perder para entradas e instantáneas. Todo lo que llega se valida y lo malformado se descarta entero; el compilador obliga a que cada estado del juego tenga su sitio en las tablas del protocolo.
+- **Transportes** (`net/transport/`). WebRTC con la señalización en dos códigos que los jugadores se pasan a mano: ni servidor propio ni datos personales (el STUN público solo le dice a cada equipo su dirección pública). Entre pestañas del mismo navegador, `BroadcastChannel`, que también usan las e2e. Un servicio de salas con nombre se podría añadir sin tocar la simulación.
+- **En el juego** (`game/Coop.ts`, `ui/coopScreens.ts`). Sala con invitación por código, la arena o cualquier contrato desbloqueado, sin briefing ni tutorial; panel del equipo con la salud de cada uno y la latencia; nombres sobre los aliados; reaparición automática a los 5 s, gastando un marcador del equipo por caída; sin Foco ni pausas de impacto (el tiempo del mundo es de todos); la pausa no para el mundo; el anfitrión sigue simulando con la pestaña oculta (un worker marca el tiempo, `game/HiddenTicker.ts`); los invitados cobran las monedas del contrato en su propia partida guardada. Los textos van al primer catálogo (`src/text/coop.ts`).
+- **Pruebas.** Sin pantalla: protocolo, rayo contra cápsula, rebobinado y una partida entre anfitrión e invitado con latencia, variación y pérdida (movimiento, daño, baja confirmada, misma dispersión, rechazo de lo imposible, reaparición, salida y latidos). En el juego real (`tests/e2e/coop-net.spec.ts`): dos pestañas juegan juntas, también con la del anfitrión oculta; un contrato con los textos de la misión replicados y la vuelta a la sala; y una conexión WebRTC de verdad con sus códigos.
+
+Queda, por orden de utilidad:
+- Un servidor de retransmisión (TURN) opcional para las redes que no permiten la conexión directa (algunas de empresa y móviles).
+- Que los invitados usen los objetos de la misión (terminales, paneles, ascensores): ahora solo los usa el anfitrión.
+- Volver a entrar tras un corte conservando la plaza, y que la partida siga si se va el anfitrión.
+- Cámara de espectador mientras se espera para reaparecer.
+- Compensación de latencia también para el cuchillo y los takedowns, que ahora usan la posición actual.
 
 ### Fase 4 · Contenido a escala
 - Registros validados de armas, enemigos, misiones y diálogos, con comprobaciones de referencias y de equilibrio.

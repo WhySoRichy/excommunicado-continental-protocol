@@ -128,7 +128,8 @@ export class NetHost {
   private world: HostWorld | null = null;
   private level: LevelId | null = null;
   private mission: MissionId | null = null;
-  private tick = 0;
+  /** Pasos simulados desde que empezó el nivel (el reloj de las instantáneas). */
+  private simTick = 0;
   private readonly history = new ShotHistory();
   /** Lo que el invitado necesita de la misión (lo rellena el juego). */
   readonly missionNet: MissionNet = emptyMissionNet();
@@ -192,11 +193,8 @@ export class NetHost {
     this.world = world;
     this.level = level;
     this.mission = mission;
-    this.tick = 0;
+    this.simTick = 0;
     this.history.clear();
-    this.hudState.objective = '';
-    this.hudState.zone = '';
-    this.hudState.combat = true;
     world.roster.onRevive = (s) => this.onRevive(s);
     for (const p of this.peers) {
       if (p.state === 'hello') continue;
@@ -213,6 +211,10 @@ export class NetHost {
     this.world = null;
     this.level = null;
     this.mission = null;
+    // Los textos de la misión eran de este nivel (el director del siguiente pondrá los suyos).
+    this.hudState.objective = '';
+    this.hudState.zone = '';
+    this.hudState.combat = true;
     for (const p of this.peers) {
       p.slot = null;
       if (p.state !== 'hello') p.state = 'lobby';
@@ -236,24 +238,23 @@ export class NetHost {
    * (o mantiene el último si aún no ha llegado) y simula su combate.
    */
   step(dt: number): void {
+    this.tick();
+    for (const p of this.peers) if (p.state === 'playing' && p.slot) this.stepPeer(p, dt);
+  }
+
+  /** Latido (también en la sala): suelta a quien lleva demasiado sin dar señales (una pestaña cerrada, un corte). */
+  tick(): void {
     const now = this.opts.now();
-    for (const p of this.peers.slice()) {
-      if (now - p.lastHeard > PEER_TIMEOUT) {
-        this.drop(p);
-        continue;
-      }
-      if (p.state !== 'playing' || !p.slot) continue;
-      this.stepPeer(p, dt);
-    }
+    for (const p of this.peers.slice()) if (now - p.lastHeard > PEER_TIMEOUT) this.drop(p);
   }
 
   /** Al terminar el paso: guarda el pasado para los disparos y, cada tres pasos, envía la instantánea. */
   endStep(): void {
     const w = this.world;
     if (!w) return;
-    this.tick++;
-    this.history.record(this.tick, w.enemies.enemies, w.civilians?.list ?? null);
-    if (this.tick % SNAPSHOT_TICKS === 0) this.sendSnapshots(w);
+    this.simTick++;
+    this.history.record(this.simTick, w.enemies.enemies, w.civilians?.list ?? null);
+    if (this.simTick % SNAPSHOT_TICKS === 0) this.sendSnapshots(w);
   }
 
   /** Los puertos del HUD de la misión, que además envían sus textos a los invitados. */
@@ -481,7 +482,7 @@ export class NetHost {
     for (let i = 0; i < cs.length; i++) civilians.push(cs[i]!.writeNet((this.civPool[i] ??= emptyCivilianNet())));
     const pickups: PickupNet[] = [];
     for (const it of w.pickups.items) if (!it.taken) pickups.push({ id: it.id, kind: it.kind, x: it.pos.x, y: it.pos.y, z: it.pos.z });
-    const body = encodeSnapshotBody({ tick: this.tick, players, enemies, civilians, pickups, fx, mission: this.missionNet });
+    const body = encodeSnapshotBody({ tick: this.simTick, players, enemies, civilians, pickups, fx, mission: this.missionNet });
     for (const p of playing) p.link.send('sim', withOwner(body, this.ownerOf(p)));
   }
 
@@ -532,7 +533,7 @@ export class NetHost {
 
   private broadcastLobby(): void {
     const ids = this.lobbyIds;
-    for (const p of this.peers) if (p.state !== 'hello') this.send(p, { t: 'lobby', ids });
+    for (const p of this.peers) if (p.state !== 'hello') this.send(p, { t: 'lobby', ids, level: this.level });
     this.opts.onPlayersChanged?.();
   }
 

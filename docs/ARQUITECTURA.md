@@ -45,8 +45,11 @@ src/
     nav/      rejilla de navegación 2.5D y A*
   hub/        reglas del Continental (Excomunicado), economía, diálogos
   missions/   director de misión, tutorial, Gauntlet, logros, catálogo de contratos
-  game/       Game (orquestador), sesión de nivel, cámara
-  ui/         HUD, pantallas (título, pausa, ajustes, tienda...), Intel, estilos
+  game/       Game (orquestador), sesión de nivel, cámara, cooperativo (Coop)
+  net/        cooperativo en red: protocolo, anfitrión, invitado, interpolación, compensación de latencia
+    transport/  WebRTC con señalización por códigos y BroadcastChannel entre pestañas
+  text/       catálogo de textos (el primero: el del cooperativo)
+  ui/         HUD, pantallas (título, pausa, ajustes, tienda, sala...), Intel, estilos
   audio/      motor de audio, patrones y reproductor de música
   render/     renderer, materiales, texturas procedurales, VFX, resolución dinámica
   debug/      overlay F3 y API de QA (window.__EXCOM__ con ?qa=1; fuera del build público)

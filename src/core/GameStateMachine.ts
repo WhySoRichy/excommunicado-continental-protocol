@@ -11,9 +11,10 @@ export const TRANSITIONS: Readonly<Record<GameStateId, readonly GameStateId[]>> 
   hub: ['hubMenu', 'paused', 'loading', 'playing', 'briefing', 'dead'],
   hubMenu: ['hub', 'briefing', 'loading'],
   briefing: ['loading', 'hub', 'playing'],
-  playing: ['paused', 'dead', 'results', 'loading', 'hub'],
+  // En cooperativo se vuelve a la sala (título) desde la partida: el anfitrión vuelve o se pierde la conexión.
+  playing: ['paused', 'dead', 'results', 'loading', 'hub', 'title'],
   paused: ['hub', 'playing', 'loading', 'title'],
-  dead: ['playing', 'hub', 'results', 'loading'],
+  dead: ['playing', 'hub', 'results', 'loading', 'title'],
   results: ['loading', 'title'],
 };
 

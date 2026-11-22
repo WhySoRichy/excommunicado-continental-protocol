@@ -6,6 +6,9 @@ import { FIXED_DT } from '../core/Loop';
 import { deleteProfile, type Profile } from '../core/Save';
 import { addCoins } from '../hub/economy';
 import type { Game } from '../game/Game';
+import { Coop, coopScreenApi } from '../game/Coop';
+import { findLocalHost, joinLocal } from '../net/transport/broadcast';
+import { answerInvite } from '../net/transport/rtc';
 import type { QaInvariants } from '../game/invariants';
 import type { MissionId } from '../missions/types';
 import type { Settings } from '../core/Settings';
@@ -155,6 +158,22 @@ export interface QaApi {
   spawnEnemy(type: 'thug' | 'escort' | 'marksman' | 'heavy' | 'boss', x: number, y: number, z: number, alert: boolean): string | null;
   /** Añade un jugador que no es el local, quieto (devuelve su id, o −1 sin partida). */
   addPlayer(x: number, y: number, z: number, yaw: number): number;
+  /** Cooperativo (fase 3): abre una sala en este equipo, como anfitrión. */
+  coopHost(): void;
+  /** Se une a la sala abierta en otra pestaña (false si no hay ninguna). */
+  coopJoinLocal(): Promise<boolean>;
+  /** Anfitrión: empieza la arena o un contrato con todos. */
+  coopStart(mode: 'arena' | 'practice' | 'nightclub' | 'docks' | 'rooftop' | 'gauntlet'): void;
+  coopState(): { role: 'host' | 'guest' | null; id: number; ids: number[]; inMatch: boolean; rtt: number; error: string | null };
+  /** Anfitrión: una invitación por código (WebRTC). */
+  coopInvite(): Promise<string | null>;
+  /** Invitado: la respuesta a una invitación; entra en la sala cuando el anfitrión la acepta. */
+  coopAnswer(code: string): Promise<string | null>;
+  /** Anfitrión: acepta la respuesta de un invitado. */
+  coopAccept(answer: string): Promise<boolean>;
+  coopLeave(): void;
+  /** Anfitrión: vuelve a la sala con todos. */
+  coopLobby(): void;
   /** Todos los jugadores de la partida (el local, id 0). */
   players(): Array<{ id: number; local: boolean; x: number; y: number; z: number; health: number; armor: number; dead: boolean }>;
   setGod(on: boolean): void;
@@ -258,6 +277,7 @@ declare global {
 
 export function installQa(game: Game): void {
   registerDebugCommands(game);
+  const coopUi = coopScreenApi(game);
   const holds: Action[] = ['sprint', 'aim'];
   const readHud = (): ReturnType<QaApi['hud']> => ({
     deathVisible: !document.querySelector<HTMLElement>('#hud .death')?.hidden,
@@ -439,6 +459,39 @@ export function installQa(game: Game): void {
         targetId: e.target?.id ?? -1,
       })),
     addPlayer: (x, y, z, yaw) => game.session?.addPlayer(x, y, z, yaw).id ?? -1,
+    coopHost: () => coopUi.create(),
+    coopJoinLocal: async () => {
+      const room = await findLocalHost();
+      if (!room) return false;
+      game.coop = Coop.createGuest(game, joinLocal(room));
+      game.screens.show('coopLobby');
+      return true;
+    },
+    coopStart: (mode) => game.coopStart(mode),
+    coopState: () => {
+      const v = game.coop?.view();
+      return {
+        role: v?.role ?? null,
+        id: v?.me ?? 0,
+        ids: v?.players.map((p) => p.id) ?? [],
+        inMatch: v?.inMatch ?? false,
+        rtt: game.coop?.rtt ?? 0,
+        error: game.coopError,
+      };
+    },
+    coopInvite: () => game.coop?.createInvite() ?? Promise.resolve(null),
+    coopAnswer: async (code) => {
+      const r = await answerInvite(code);
+      if (!r) return null;
+      void r.link.then((link) => {
+        game.coop = Coop.createGuest(game, link);
+        game.screens.show('coopLobby');
+      });
+      return r.answer;
+    },
+    coopAccept: (answer) => game.coop?.acceptAnswer(answer) ?? Promise.resolve(false),
+    coopLeave: () => game.coopLeave(),
+    coopLobby: () => game.coopBackToLobby(),
     players: () =>
       (game.session?.players ?? []).map((p) => ({
         id: p.id,

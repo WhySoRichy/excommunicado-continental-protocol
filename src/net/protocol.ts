@@ -677,8 +677,8 @@ export type GuestCtl =
 export type HostCtl =
   | { t: 'welcome'; id: number }
   | { t: 'reject'; why: RejectReason }
-  /** La sala: quién está (los ids de los jugadores). */
-  | { t: 'lobby'; ids: number[] }
+  /** La sala: quién está (los ids de los jugadores) y el nivel en juego (null: en la sala, sin partida). */
+  | { t: 'lobby'; ids: number[]; level: LevelId | null }
   | { t: 'start'; level: LevelId; mission: MissionId | null }
   | { t: 'hud'; k: 'toast'; text: string; seconds: number }
   | { t: 'hud'; k: 'objective' | 'zone'; text: string }
@@ -743,8 +743,11 @@ export function decodeHostCtl(s: string): HostCtl | null {
         if (why !== 'version' && why !== 'full' && why !== 'closed') throw MALFORMED;
         return { t: 'reject', why };
       }
-      case 'lobby':
-        return { t: 'lobby', ids: list(o.ids, MAX_PLAYERS).map((id) => intOf(id, 0, MAX_PLAYERS - 1)) };
+      case 'lobby': {
+        const level = o.level === null ? null : (str(o.level, 16) as LevelId);
+        if (level !== null && !LEVELS.includes(level)) throw MALFORMED;
+        return { t: 'lobby', ids: list(o.ids, MAX_PLAYERS).map((id) => intOf(id, 0, MAX_PLAYERS - 1)), level };
+      }
       case 'start': {
         const level = str(o.level, 16) as LevelId;
         if (!LEVELS.includes(level)) throw MALFORMED;

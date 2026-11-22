@@ -22,6 +22,11 @@ export class LevelAlarm implements AlarmPort {
     this.baseHemiIntensity = level.hemi.intensity;
   }
 
+  /** ¿Está sonando? (el anfitrión se lo cuenta a los invitados). */
+  get active(): boolean {
+    return this.on;
+  }
+
   set(on: boolean): void {
     if (on === this.on) return;
     this.on = on;

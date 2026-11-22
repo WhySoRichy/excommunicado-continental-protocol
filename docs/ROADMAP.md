@@ -86,5 +86,5 @@ Ya hay pausa de impacto y sacudida en cada baja, casquillos, humo en la boca del
 
 ## Ideas grandes (requieren replantear cosas)
 
-- **Cooperativo en línea:** el juego es de un jugador y toda la simulación corre en el navegador. Un modo cooperativo necesita un servidor con autoridad o sincronización entre pares; es un proyecto en sí mismo.
+- **Cooperativo en línea: hecho** (fase 3 de [ESCALABILIDAD.md](ESCALABILIDAD.md)), para hasta cuatro jugadores y sin servidor. Lo que falta para que sea redondo (retransmisión para redes cerradas, objetos de misión para los invitados, volver tras un corte) está al final de esa fase.
 - **Editor de niveles** dentro del juego, aprovechando que los niveles ya son datos.

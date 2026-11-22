@@ -3,13 +3,18 @@ import type { AudioEngine } from '../audio/AudioEngine';
 import { EnemyManager } from '../combat/EnemyManager';
 import { EnemyViews } from '../entities/EnemyView';
 import { Pickups } from '../combat/Pickups';
-import { PlayerRoster, type PlayerSlot } from '../combat/PlayerRoster';
+import { PlayerRoster, type PlayerSlot, type SlotPorts } from '../combat/PlayerRoster';
+import type { CombatAudio, CombatVfx } from '../combat/ports';
+import type { FxRecorder } from '../net/fx';
+import type { HostWorld } from '../net/NetHost';
+import type { GuestWorld } from '../net/NetGuest';
 import { LevelAlarm } from '../render/LevelAlarm';
 import { PickupViews } from '../render/PickupViews';
 import { PlayerViews } from '../entities/PlayerViews';
 import { type CombatCtx, PlayerCombat } from '../combat/PlayerCombat';
 import { loadoutFor, type UpgradeId } from '../combat/weapons';
 import type { Rng } from '../core/rng';
+import type { MoveNet } from '../entities/PlayerController';
 import type { Enemy, PlayerTarget } from '../entities/Enemy';
 import { CharacterRig, PLAYER_LOOK } from '../entities/CharacterRig';
 import { CivilianManager } from '../entities/Civilian';
@@ -38,14 +43,24 @@ export interface SessionDeps {
   onEnemyAlert?(e: Enemy): void;
   /** Un civil fue herido o abatido por el jugador. */
   onCivilianHurt?(killed: boolean): void;
+  /**
+   * Partida en red (fase 3 de docs/ESCALABILIDAD.md). En el anfitrión, los efectos del mundo y del jugador local pasan
+   * por el registro que se envía a los invitados. En un invitado, todo menos su jugador son réplicas: no aparecen
+   * enemigos ni objetos propios, y su jugador tiene el id que le dio el anfitrión y su propia semilla de disparo.
+   */
+  net?: { role: 'host'; recorder: FxRecorder } | { role: 'guest'; localId: number; shotRng: Rng };
 }
 
 /**
  * Todo lo que vive mientras un nivel está cargado. Se crea entero al entrar y se
  * libera entero al salir (mundo Rapier nuevo por nivel: sin fugas ni colliders viejos).
  */
-export class LevelSession {
+export class LevelSession implements HostWorld, GuestWorld {
   readonly physics: PhysicsWorld;
+  /** Los puertos de verdad de este equipo (sonido y efectos), sin el registro de la red. */
+  readonly ports: { vfx: CombatVfx; audio: CombatAudio };
+  /** En un invitado: lo que no es su jugador llega del anfitrión (no se simula aquí). */
+  readonly replica: boolean;
   readonly level: LevelRuntime;
   /** Cómo se ve la alarma del Continental (la activa el director del vestíbulo por su puerto). */
   readonly alarm: LevelAlarm;
@@ -90,16 +105,21 @@ export class LevelSession {
 
     scene.add(this.playerRig.root);
     this.vfx = new Vfx(scene, deps.quality.particles);
+    this.ports = { vfx: this.vfx, audio: deps.audio };
+    const net = deps.net;
+    this.replica = net?.role === 'guest';
+    // En el anfitrión, lo que pasa en el mundo se apunta para los invitados (autor −1: el mundo).
+    const world = net?.role === 'host' ? net.recorder.tee(-1, this.vfx, deps.audio) : this.ports;
     this.pickups = new Pickups();
     this.pickupViews = new PickupViews(scene);
-    for (const p of data.pickups) this.pickups.add(p.kind, new Vector3(p.pos[0], p.pos[1], p.pos[2]));
+    if (!this.replica) for (const p of data.pickups) this.pickups.add(p.kind, new Vector3(p.pos[0], p.pos[1], p.pos[2]));
     this.combat = new PlayerCombat(deps.upgrades, loadoutFor(deps.upgrades));
     this.enemies = new EnemyManager({
       level: data,
       physics: this.physics,
       nav: this.nav,
-      vfx: this.vfx,
-      audio: deps.audio,
+      vfx: world.vfx,
+      audio: world.audio,
       rng: deps.rng,
       accuracyMult: deps.accuracyMult,
       damageMult: deps.damageMult,
@@ -113,12 +133,24 @@ export class LevelSession {
       physics: this.physics,
       enemies: this.enemies,
       civilians: this.civilians,
-      vfx: this.vfx,
-      audio: deps.audio,
+      vfx: world.vfx,
+      audio: world.audio,
       rng: deps.rng,
       pickups: this.pickups,
     });
-    this.local = this.roster.add(this.player, this.combat, { local: true, camera: deps.camera });
+    let localPorts: SlotPorts | undefined;
+    if (net?.role === 'host') {
+      // Su disparo suena en primera persona aquí; para los invitados, desde su cabeza.
+      const head = new Vector3();
+      const p = this.player;
+      localPorts = net.recorder.tee(0, this.vfx, deps.audio, () => head.set(p.feet.x, p.feet.y + 1.5, p.feet.z));
+    } else if (net?.role === 'guest') localPorts = { rng: net.shotRng };
+    this.local = this.roster.add(this.player, this.combat, {
+      local: true,
+      camera: deps.camera,
+      id: net?.role === 'guest' ? net.localId : 0,
+      ports: localPorts,
+    });
     this.roster.respawn.pos.set(s[0], s[1], s[2]);
     this.roster.respawn.yaw = data.spawn.yaw;
     this.playerViews = new PlayerViews(scene);
@@ -132,7 +164,7 @@ export class LevelSession {
       const yaw = box?.rotY ?? npcYawTowardRoom(it);
       this.npcs.push(new Npc({ id: it.id, pos: new Vector3(it.pos[0], it.pos[1], it.pos[2]), yaw, ...look }, scene));
     }
-    this.enemies.spawnInitial();
+    if (!this.replica) this.enemies.spawnInitial();
     // Vistas creadas ya, antes de precompilar los shaders del nivel (no en mitad de la partida).
     this.enemyViews = new EnemyViews(scene);
     this.enemyViews.sync(this.enemies.enemies);
@@ -149,6 +181,35 @@ export class LevelSession {
     const controller = new PlayerController(this.physics, new Vector3(x, y + 0.02, z), yaw);
     controller.killY = this.data.killY;
     return this.roster.add(controller, new PlayerCombat(this.deps.upgrades, loadoutFor(this.deps.upgrades)));
+  }
+
+  // ======================================================== red (fase 3)
+  /** El cuerpo y el combate de un invitado, con sus mejoras (el anfitrión lo añade al registro). */
+  createPlayer(at: Vector3, yaw: number, upgrades: ReadonlySet<UpgradeId>): { controller: PlayerController; combat: PlayerCombat } {
+    const controller = new PlayerController(this.physics, new Vector3(at.x, at.y + 0.02, at.z), yaw);
+    controller.killY = this.data.killY;
+    return { controller, combat: new PlayerCombat(upgrades, loadoutFor(upgrades)) };
+  }
+
+  /** Punto libre cerca de `base` para el jugador `index`: a un lado y a otro, sobre la rejilla de navegación. */
+  spawnNear(base: Vector3, yaw: number, index: number, out: Vector3): Vector3 {
+    const rx = Math.cos(yaw);
+    const rz = -Math.sin(yaw);
+    const side = index % 2 === 1 ? 1 : -1;
+    const d = 1.3 * Math.ceil(index / 2);
+    for (const k of [1, 0.6, -1]) {
+      const x = base.x + rx * side * d * k;
+      const z = base.z + rz * side * d * k;
+      const n = this.nav.nearestNode(x, base.y, z, 1.2);
+      if (n >= 0) return this.nav.pos(n, out);
+    }
+    return out.copy(base);
+  }
+
+  /** Plaza para dibujar a otro jugador en un invitado (lo mueve lo que llega del anfitrión). */
+  createReplica(id: number, at: MoveNet): PlayerSlot {
+    const controller = new PlayerController(this.physics, new Vector3(at.x, at.y, at.z), at.yaw);
+    return this.roster.add(controller, new PlayerCombat(new Set()), { drive: 'replica', id });
   }
 
   /** God mode de debug: los disparos enemigos no hacen daño. */

@@ -109,7 +109,8 @@ describe('protocolo de red', () => {
     expect(hello).toEqual({ t: 'hello', v: PROTOCOL, tables: TABLES_HASH, upgrades: ['extMag', 'suit2'] });
     const msgs: HostCtl[] = [
       { t: 'welcome', id: 2 },
-      { t: 'lobby', ids: [0, 2] },
+      { t: 'lobby', ids: [0, 2], level: null },
+      { t: 'lobby', ids: [0, 1, 2], level: 'nightclub' },
       { t: 'start', level: 'docks', mission: 'docks' },
       { t: 'start', level: 'arena', mission: null },
       { t: 'hud', k: 'toast', text: '¡Refuerzos!', seconds: 2.5 },

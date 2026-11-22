@@ -45,6 +45,8 @@ export interface GuestWorld {
   readonly enemies: EnemyManager;
   readonly civilians: CivilianManager | null;
   readonly pickups: Pickups;
+  /** Sonido y efectos de este equipo (lo que pasa en la partida se ve y se oye con ellos). */
+  readonly ports: { vfx: CombatVfx; audio: CombatAudio };
   /** Plaza para dibujar a otro jugador (lo mueve lo que llega del anfitrión). */
   createReplica(id: number, at: MoveNet): PlayerSlot;
 }
@@ -53,24 +55,23 @@ export interface GuestWorld {
 export interface GuestEvents {
   welcome?(id: number): void;
   reject?(why: RejectReason): void;
-  lobby?(ids: number[]): void;
+  /** Quién está en la sala y el nivel en juego (null: la partida volvió a la sala). */
+  lobby?(ids: number[], level: LevelId | null): void;
   start?(level: LevelId, mission: MissionId | null): void;
   hud?(m: Extract<HostCtl, { t: 'hud' }>): void;
   /** El anfitrión le colocó (al entrar o al reaparecer): la cámara se recoloca. */
   spawned?(revived: boolean): void;
   died?(): void;
   results?(r: CoopResults): void;
-  /** Se cortó la conexión o el anfitrión cerró. */
-  closed?(): void;
+  /** Se acabó la conexión: `byHost` si el anfitrión cerró la partida; si no, se perdió. */
+  closed?(byHost: boolean): void;
 }
 
 export interface GuestOptions {
   now(): number;
   upgrades: ReadonlySet<UpgradeId>;
   events: GuestEvents;
-  /** Puertos de este equipo para lo que pasa en la partida (sonido, efectos y cámara del local). */
-  vfx: CombatVfx;
-  audio: CombatAudio;
+  /** La cámara del jugador local (sacudidas de los impactos y el daño que confirma el anfitrión). */
   camera: CombatCamera;
 }
 
@@ -78,6 +79,8 @@ export interface GuestOptions {
 const MAX_SNAPSHOTS = 32;
 /** Cada cuánto se mide la latencia (ms). */
 const PING_EVERY = 1000;
+/** Sin noticias del anfitrión durante este tiempo (ms), se da la conexión por perdida. */
+export const HOST_TIMEOUT = 10_000;
 /** Pasos de los que se recuerda la munición predicha (para corregirla con la del anfitrión). */
 const AMMO_HISTORY = 256;
 
@@ -111,6 +114,7 @@ export class NetGuest {
   private readonly ammo: AmmoEntry[] = [];
   private lastOwnerTick = -1;
   private lastPing = -1e9;
+  private lastHeard: number;
   private pingN = 0;
   private readonly pingAt = new Map<number, number>();
   private readonly enemyTmp: EnemyNet = emptyEnemyNet();
@@ -123,12 +127,13 @@ export class NetGuest {
     private readonly link: Link,
     private readonly opts: GuestOptions,
   ) {
-    link.onMessage = (ch, data) => (ch === 'ctl' ? this.onCtl(data) : this.onSim(data));
-    link.onClose = () => {
-      if (this.closed) return;
-      this.closed = true;
-      this.opts.events.closed?.();
+    this.lastHeard = opts.now();
+    link.onMessage = (ch, data) => {
+      this.lastHeard = this.opts.now();
+      if (ch === 'ctl') this.onCtl(data);
+      else this.onSim(data);
     };
+    link.onClose = () => this.end(false);
     this.send({ t: 'hello', v: PROTOCOL, tables: TABLES_HASH, upgrades: [...opts.upgrades] });
   }
 
@@ -171,18 +176,39 @@ export class NetGuest {
    * dispersión de este paso (la misma que usará el anfitrión al resolverlo).
    */
   preStep(): number {
-    const now = this.opts.now();
-    if (now - this.lastPing > PING_EVERY && this.connected) {
-      this.lastPing = now;
-      this.pingAt.set(++this.pingN, now);
-      this.send({ t: 'ping', n: this.pingN });
-    }
     const w = this.world;
     if (w) {
       this.clock.advance();
       this.applyReplicas(w);
     }
     return shotSeed(this.id, this.seq + 1);
+  }
+
+  /**
+   * Latido (lo llama el juego cada medio segundo, también en la sala y con la pestaña oculta): mide la latencia y, si
+   * el anfitrión lleva demasiado sin decir nada, da la conexión por perdida.
+   */
+  tick(): void {
+    if (this.closed) return;
+    const now = this.opts.now();
+    if (now - this.lastHeard > HOST_TIMEOUT) {
+      this.link.close();
+      this.end(false);
+      return;
+    }
+    if (now - this.lastPing > PING_EVERY && this.connected) {
+      this.lastPing = now;
+      this.pingAt.set(++this.pingN, now);
+      // Las que nunca volvieron no se acumulan.
+      for (const n of this.pingAt.keys()) if (n < this.pingN - 8) this.pingAt.delete(n);
+      this.send({ t: 'ping', n: this.pingN });
+    }
+  }
+
+  private end(byHost: boolean): void {
+    if (this.closed) return;
+    this.closed = true;
+    this.opts.events.closed?.(byHost);
   }
 
   /** Tras el paso del jugador local: envía el paso (con los anteriores, por si se perdieron). */
@@ -227,7 +253,7 @@ export class NetGuest {
         ev.reject?.(m.why);
         return;
       case 'lobby':
-        ev.lobby?.(m.ids);
+        ev.lobby?.(m.ids, m.level);
         return;
       case 'start':
         ev.start?.(m.level, m.mission);
@@ -251,9 +277,8 @@ export class NetGuest {
         return;
       }
       case 'bye':
-        this.closed = true;
+        this.end(true);
         this.link.close();
-        ev.closed?.();
         return;
     }
   }
@@ -283,20 +308,21 @@ export class NetGuest {
     if (!w) return;
     const c = w.local.combat;
     const o = this.opts;
+    const audio = w.ports.audio;
     switch (e.e) {
       case 'marker':
-        c.showMarker(e.kind, o.audio, o.camera);
+        c.showMarker(e.kind, audio, o.camera);
         return;
       case 'award':
         c.showAward(e.action, e.points);
         return;
       case 'pickup':
         c.showPickup(e.kind);
-        o.audio.ui('confirm');
+        audio.ui('confirm');
         return;
       case 'hurt': {
         const from = new Vector3(e.x, e.y, e.z);
-        c.showHurt(from, e.damage, o.audio, o.camera);
+        c.showHurt(from, e.damage, audio, o.camera);
         const def = ENEMY_TYPES[e.enemy];
         c.lastDamage = { label: def.label, type: def.type, from, distance: e.distance };
         return;
@@ -340,7 +366,7 @@ export class NetGuest {
     for (let i = 0; i <= ai; i++) {
       const s = snaps[i]!;
       if (s.fx.length === 0) continue;
-      for (const f of s.fx) if (f[1] !== this.id) playFx(f, this.opts.vfx, this.opts.audio);
+      for (const f of s.fx) if (f[1] !== this.id) playFx(f, w.ports.vfx, w.ports.audio);
       s.fx = [];
     }
     // Lo anterior a `a` ya no hace falta.

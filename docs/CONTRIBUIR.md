@@ -23,6 +23,9 @@ La primera vez que se ejecuten las e2e: `npx playwright install chromium firefox
 | IA de los enemigos | `src/entities/ai/EnemyBrain.ts`, `src/entities/Enemy.ts` (simulación), `src/combat/EnemyManager.ts` |
 | Cómo se ven los enemigos (animación, icono de alerta, láser) | `src/entities/EnemyView.ts`: lee el estado de `Enemy` y nunca lo cambia |
 | Varios jugadores (plazas, objetivos de los enemigos, reaparición) | `src/combat/PlayerRoster.ts`; cómo se ven los que no son el local, `src/entities/PlayerViews.ts` |
+| Cooperativo en red (protocolo, anfitrión, invitado, compensación de latencia) | `src/net/` (simulación: corre sin pantalla); en el juego, `src/game/Coop.ts` y sus pantallas, `src/ui/coopScreens.ts` |
+| Transportes del cooperativo (WebRTC con códigos, otra pestaña) | `src/net/transport/` |
+| Textos nuevos | `src/text/`: el catálogo (el primero, el del cooperativo) |
 | Un nivel o uno nuevo | `src/levels/data/` (y registrarlo en `src/levels/registry.ts`) |
 | Objetivos de un contrato | bloque `mission` del nivel; las reglas en `src/missions/objectives.ts` y su aplicación en `MissionDirector.ts` |
 | HUD, aviso contextual e Intel (qué se muestra) | `src/game/hudModel.ts`; cómo se dibuja, en `src/ui/` |
@@ -77,6 +80,9 @@ La primera vez que se ejecuten las e2e: `npx playwright install chromium firefox
 - **Suavizar con `damp` lo que cambia de golpe.** Un suavizado de primer orden sigue al objetivo, pero su velocidad salta en el mismo fotograma en que el objetivo cambia: al agacharse, apuntar o arrancar, todo el cuerpo daba un tirón. Los pesos de mezcla del rig van con un muelle crítico (`spring` en `rigMath.ts`) y la API de pruebas mide la aceleración de cada articulación con `rigMotion()`; una e2e de movimiento la acota.
 - **Empujar al personaje contra el suelo.** En el suelo se le daba una velocidad vertical de −1 m/s "para que no flotara". Con los pies dentro del margen de separación de la KCC, Rapier daba por bloqueados pasos sueltos en llano y al correr se perdía uno de cada 20 o 30: tirones del cuerpo y de la cámara que no se veían en ninguna captura. Lo pega `snapToGround`; las pruebas "sin tirones en llano" de `playerMovement.test.ts` lo vigilan.
 - **Medir por fotogramas lo que no depende de ellos.** El medidor de audio leía 46 ms de sonido en cada fotograma: en la CI, a unos 3 FPS, dos segundos eran seis muestras sueltas y la prueba de mezcla fallaba por azar (lo destapó una actualización de Playwright). Ahora cada lectura abarca unos 0,7 s y la música se mide en su propio bus, sin restar dos medidas tomadas en momentos distintos.
+- **Mover un collider y consultar en el mismo paso.** Los rayos y solapes de Rapier usan el árbol de colliders que refresca `world.step()`: lo que se movió después todavía no está ahí. Por eso la compensación de latencia no rebobina los cuerpos de la física, sino que prueba cada cápsula a mano (`net/lagComp.ts`).
+- **La pestaña oculta no tiene fotogramas.** El navegador para `requestAnimationFrame` y frena los temporizadores de la página. Lo que deba seguir corriendo, como el anfitrión de una partida en red, necesita otro reloj: el de un worker (`game/HiddenTicker.ts`).
+- **Una prueba de red que pasa a la primera.** Las del cooperativo se comprobaron rompiendo a propósito la semilla de la dispersión y la comprobación de plausibilidad: fallaron como debían. Una prueba que nunca se ha visto fallar no demuestra nada.
 - **Niveles:** escalones de más de 0,32 m o muebles sin `noWalk` rompen la navegación de los enemigos. Los tests de navegación lo detectan.
 
 ## Despliegue

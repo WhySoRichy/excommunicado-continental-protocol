@@ -3,6 +3,7 @@ import { Vector3 } from 'three';
 import { AudioEngine } from '../audio/AudioEngine';
 import { type IntensityInput, musicIntensity } from '../audio/music';
 import { type CombatIntent, emptyCombatIntent, SWITCH_TIME } from '../combat/PlayerCombat';
+import { REMOTE_RESPAWN } from '../combat/PlayerRoster';
 import { STYLE_RANKS } from '../combat/StyleMeter';
 import type { UpgradeId } from '../combat/weapons';
 import type { Action } from '../core/actions';
@@ -17,6 +18,7 @@ import {
   deleteProfile,
   type KeyValueStore,
   loadProfile,
+  MAX_COINS,
   newProfile,
   type Profile,
   PROFILE_KEY,
@@ -40,13 +42,17 @@ import { GAUNTLET_BLOCK } from '../missions/gauntlet';
 import { formatObjective } from '../missions/tutorial';
 import { MissionDirector, type MissionOutcome } from '../missions/MissionDirector';
 import { type MissionId, MISSIONS } from '../missions/types';
+import type { CoopResults, MissionNet } from '../net/protocol';
 import { loadRapier, type Rapier } from '../physics/Physics';
 import { GameRenderer, type QualityPreset } from '../render/Renderer';
 import { type FatalText, hideBoot, setBootProgress, showFatal } from '../ui/boot';
 import { button, h } from '../ui/dom';
-import { Hud, type HudData } from '../ui/Hud';
+import { Hud, type HudData, type TeamView } from '../ui/Hud';
 import { type ResultsView, Screens } from '../ui/Screens';
+import { COOP_TEXT, playerName } from '../text/coop';
 import { CameraRig, DEFAULT_CAMERA } from './CameraRig';
+import { Coop, type CoopMode, coopScreenApi } from './Coop';
+import { HiddenTicker } from './HiddenTicker';
 import { buildIntelView, contextPrompt, fillHudData, type HudView, type PromptInput } from './hudModel';
 import { checkCameraInvariants, checkCombatInvariants, checkPlayerInvariants, type QaInvariants } from './invariants';
 import { LevelSession } from './LevelSession';
@@ -127,6 +133,16 @@ export class Game {
   outcome: MissionOutcome | null = null;
   /** Interactivos de misión ya usados (no vuelven a mostrar prompt). */
   readonly usedInteractables = new Set<string>();
+  /** Partida cooperativa en red (null si se juega solo). Ver `Coop` y docs/ESCALABILIDAD.md, fase 3. */
+  coop: Coop | null = null;
+  /** Por qué terminó el último intento de cooperativo (lo muestra su menú). */
+  coopError: string | null = null;
+  /** La sesión cargada es de una partida en red (al salir del cooperativo hay que cargar otra). */
+  private sessionCoop = false;
+  /** Un nivel que pidió el anfitrión mientras se cargaba otro. */
+  private coopPending: { level: LevelId; mission: MissionId | null } | null = null;
+  /** Anfitrión con la pestaña oculta: la partida sigue para sus invitados. */
+  private readonly hiddenTicker = new HiddenTicker((dt) => this.tickHidden(dt));
 
   private readonly intent: PlayerIntent = emptyIntent();
   private readonly idleIntent: PlayerIntent = emptyIntent();
@@ -209,6 +225,7 @@ export class Game {
         hasSave: () => this.store.get(PROFILE_KEY) !== null,
         inHub: () => this.currentLevel === 'hub',
         profile: () => this.profile,
+        coop: coopScreenApi(this),
       },
       opts.qa,
     );
@@ -280,6 +297,7 @@ export class Game {
     window.addEventListener('pagehide', () => this.saveOnExit());
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden') this.saveOnExit();
+      this.updateHiddenTicker();
     });
     // F3 y teclas rápidas de debug (solo con el overlay abierto) fuera del mapa de acciones.
     window.addEventListener('keydown', (e) => {
@@ -326,7 +344,9 @@ export class Game {
       damageMult: 1,
       onEnemyAlert: (e) => this.mission?.onEnemyAlert(e),
       onCivilianHurt: (killed) => this.mission?.onCivilianHurt(killed),
+      net: this.coop?.sessionNet(),
     });
+    this.sessionCoop = !!this.coop;
     this.currentLevel = id;
     this.renderer.setExposure(data.ambient.exposure);
     this.camera.setYawPitch(data.spawn.yaw, -0.12);
@@ -431,7 +451,7 @@ export class Game {
     this.requestLock();
     this.fsm.go('loading');
     // Tras un contrato (o el Gauntlet sobre el propio hub) la sesión queda sucia: se recarga limpia.
-    if ((this.currentLevel !== 'hub' || !this.session || this.mission) && !(await this.tryLoadSession('hub'))) return;
+    if ((this.currentLevel !== 'hub' || !this.session || this.mission || this.sessionStale) && !(await this.tryLoadSession('hub'))) return;
     const s = this.session;
     if (!s) {
       this.loading = false;
@@ -468,7 +488,9 @@ export class Game {
     // El clic/tecla que llega aquí es un gesto del usuario: se pide el pointer lock antes del await.
     this.requestLock();
     this.fsm.go('loading');
-    if ((id !== this.currentLevel || !this.session || this.director || this.mission) && !(await this.tryLoadSession(id))) return;
+    // En cooperativo el nivel se carga siempre de nuevo: su sesión es la de la partida en red.
+    if ((id !== this.currentLevel || !this.session || this.director || this.mission || this.coop || this.sessionStale) && !(await this.tryLoadSession(id)))
+      return;
     const s = this.session;
     if (!s) {
       this.loading = false;
@@ -478,6 +500,7 @@ export class Game {
     s.respawnAt(new Vector3(sp.pos[0], sp.pos[1] + 0.02, sp.pos[2]), sp.yaw);
     s.combat.respawnReset();
     if (o.drill) s.enemies.spawnEvent('drill');
+    if (this.coop?.isHost) this.coop.levelStarted(s, id, null);
     this.camera.setYawPitch(sp.yaw, -0.12);
     this.camera.snap();
     this.setHintsFor(id);
@@ -513,7 +536,7 @@ export class Game {
       block: id === 'gauntlet' ? GAUNTLET_BLOCK : undefined,
       label: (a) => this.input.label(a),
       shoulderSwaps: () => this.camera.shoulderSwaps,
-      hud: this.hud,
+      hud: this.coop ? this.coop.hud(this.hud) : this.hud,
       audio: this.audio,
       profile: this.profile,
       save: () => this.saveNow(),
@@ -522,6 +545,15 @@ export class Game {
     this.hud.setMarkers(0, this.mission.markersTotal);
     // En el Gauntlet el hub es zona de combate: pistas de combate, no las de hablar o el ascensor.
     this.setHintsFor(id === 'gauntlet' ? 'practice' : s.data.id);
+    if (this.coop?.isHost) {
+      // En cooperativo no hay briefing ni tutorial: todos entran a la vez.
+      this.coop.levelStarted(s, MISSION_LEVEL[id], id);
+      this.fsm.go('briefing');
+      this.beginContract();
+      if (this.mission.current?.kind === 'learn') this.mission.skipLearn();
+      this.loading = false;
+      return;
+    }
     this.fsm.go('briefing');
     const hasTutorial = this.mission.current?.kind === 'learn';
     this.screens.showBriefing(
@@ -548,6 +580,17 @@ export class Game {
 
   private onMissionFinished(o: MissionOutcome): void {
     this.outcome = o;
+    const coop = this.coop;
+    coop?.host?.sendResults({
+      mission: o.mission,
+      success: o.success,
+      failReason: o.failReason,
+      rank: o.rank.rank,
+      total: o.rank.total,
+      timeSec: o.timeSec,
+      kills: o.kills,
+      coins: o.coinsReward,
+    });
     if (this.fsm.state === 'playing' || this.fsm.state === 'dead') this.fsm.go('results');
     const subs: ResultsView['subs'] = [
       { label: SUB_LABELS.time, value: o.rank.subs.time },
@@ -575,12 +618,13 @@ export class Game {
       gauntlet: o.gauntlet
         ? { waves: o.gauntlet.waves, position: o.gauntlet.position, top: o.gauntlet.top.map((g) => ({ waves: g.waves, score: g.score })) }
         : null,
+      coop: coop ? { leave: COOP_TEXT.backToLobby, retry: true, note: null } : undefined,
     };
     this.audio.ui(o.success ? 'coin' : 'error');
     this.screens.showResults(
       view,
-      () => void this.startContract(o.mission),
-      () => void this.goToHub(),
+      () => (coop ? this.coopStart(o.mission) : void this.startContract(o.mission)),
+      () => (coop ? this.coopBackToLobby() : void this.goToHub()),
     );
   }
 
@@ -617,7 +661,8 @@ export class Game {
         { key: lab('reload'), text: 'Recargar (otra vez en la zona dorada = perfecta)' },
         { key: slots, text: 'Carabina · pistola · cuchillo' },
         { key: lab('takedown'), text: 'Takedown (cerca del enemigo)' },
-        { key: lab('focus'), text: 'Foco: cámara lenta' },
+        // En cooperativo no hay Foco: el tiempo del mundo es de todos.
+        ...(this.coop ? [] : [{ key: lab('focus'), text: 'Foco: cámara lenta' }]),
         { key: lab('shoulder'), text: 'Cambiar de hombro' },
         { key: lab('intel'), text: 'Intel (mantener)' },
         { key: lab('help'), text: 'Controles' },
@@ -640,6 +685,10 @@ export class Game {
 
   private quitToTitle(): void {
     if (this.fsm.state !== 'paused') return;
+    if (this.coop) {
+      this.coopLeave();
+      return;
+    }
     this.saveNow();
     this.fsm.go('title');
   }
@@ -816,11 +865,13 @@ export class Game {
       s.combat.frameUpdate(realDt, this.audio);
       s.roster.frameUpdate(realDt);
       this.deathSlowmo = Math.max(0, this.deathSlowmo - realDt);
-      this.sim.timeScale = this.deathSlowmo > 0 ? 0.4 : s.combat.timeScale;
-      this.audio.setMuffle(s.combat.focusActive ? 0.55 : 0);
+      // En cooperativo el tiempo del mundo es de todos: ni Foco, ni pausa de impacto, ni cámara lenta al morir.
+      this.sim.timeScale = this.coop?.inMatch ? 1 : this.deathSlowmo > 0 ? 0.4 : s.combat.timeScale;
+      this.audio.setMuffle(!this.coop?.inMatch && s.combat.focusActive ? 0.55 : 0);
     }
     const tSim = this.profiling ? performance.now() : 0;
-    if (this.fsm.simulating && s && !this.manual) {
+    // Con la pestaña oculta simula el reloj del worker (`tickHidden`), nunca los dos a la vez.
+    if (this.simulationRuns && s && !this.manual && !this.hiddenTicker.running) {
       const n = this.sim.advance(realDt);
       for (let i = 0; i < n; i++) this.fixedUpdate(FIXED_DT);
     }
@@ -834,7 +885,7 @@ export class Game {
       s.enemyViews.update(s.enemies.enemies, alpha, scaledDt);
       s.civilianViews?.update(alpha, scaledDt);
       s.pickupViews.update(s.pickups.items, scaledDt);
-      s.playerViews.update(s.roster.slots, alpha, scaledDt);
+      s.playerViews.update(s.roster.slots, alpha, scaledDt, this.renderer.camera.position);
       s.vfx.update(scaledDt);
       s.renderNpcs(scaledDt);
       s.alarm.update(scaledDt);
@@ -868,8 +919,12 @@ export class Game {
     const s = this.session;
     const st = this.fsm.state;
     let mood: MusicMood | null = null;
+    // En un invitado, lo que dice el anfitrión de su misión.
+    const net = this.coop?.missionNet ?? null;
+    const missionId = this.mission?.id ?? this.coop?.mission ?? null;
     if (st === 'title') mood = 'hub';
-    else if (s && st !== 'boot' && st !== 'loading') mood = this.mission?.id === 'gauntlet' ? 'gauntlet' : this.director?.hostile ? 'tension' : s.data.music;
+    else if (s && st !== 'boot' && st !== 'loading')
+      mood = missionId === 'gauntlet' ? 'gauntlet' : this.director?.hostile || net?.hostile ? 'tension' : s.data.music;
     this.audio.setMusic(mood);
     const x = this.musicIn;
     x.fighting = 0;
@@ -882,11 +937,11 @@ export class Game {
         else if (a === 'search' || a === 'suspicious') x.searching++;
       }
     }
-    const o = this.mission?.current;
-    x.boss = o?.kind === 'boss';
-    x.escape = o?.kind === 'escape';
-    x.hostile = !!this.director?.hostile || (this.mission?.id === 'gauntlet' && this.mission.gauntletBreak <= 0);
-    x.onMission = !!this.mission || this.currentLevel === 'practice' || this.currentLevel === 'arena';
+    const kind = net ? net.objective : this.mission?.current?.kind;
+    x.boss = kind === 'boss';
+    x.escape = kind === 'escape';
+    x.hostile = net ? net.hostile : !!this.director?.hostile || (this.mission?.id === 'gauntlet' && this.mission.gauntletBreak <= 0);
+    x.onMission = !!this.mission || !!this.coop?.inMatch || this.currentLevel === 'practice' || this.currentLevel === 'arena';
     const menu = st === 'paused' || st === 'results' || st === 'briefing' || st === 'hubMenu' || st === 'title';
     this.audio.setMusicIntensity(menu ? Math.min(0.2, musicIntensity(x)) : musicIntensity(x));
     this.audio.duckMusic(menu);
@@ -923,6 +978,11 @@ export class Game {
     if (this.fsm.state === 'briefing' || this.fsm.state === 'results') return;
     if (this.fsm.state === 'dead') {
       this.deathTimer += realDt;
+      // En cooperativo se reaparece solo: el anfitrión a los 5 s; el invitado, cuando el anfitrión lo coloca.
+      if (this.coop?.inMatch) {
+        if (this.coop.isHost && this.deathTimer >= REMOTE_RESPAWN) this.respawn(true);
+        return;
+      }
       if (this.deathTimer >= DEATH_MIN && (inp.pressed('jump') || inp.pressed('fire') || inp.pressed('interact'))) {
         inp.consume('jump');
         inp.consume('fire');
@@ -978,6 +1038,7 @@ export class Game {
     c.reloadPressed = inp.pressed('reload');
     c.takedownPressed = inp.pressed('takedown');
     c.focusPressed = inp.pressed('focus');
+    if (c.focusPressed && this.coop?.inMatch) this.hud.showToast(COOP_TEXT.noFocus, 1.8);
     c.select = inp.pressed('weapon1') ? 'carbine' : inp.pressed('weapon2') ? 'pistol' : inp.pressed('weapon3') ? 'knife' : null;
     c.cycle = inp.pressed('weaponNext') ? 1 : inp.pressed('weaponPrev') ? -1 : 0;
     return c;
@@ -987,6 +1048,9 @@ export class Game {
     const s = this.session;
     if (!s) return;
     const tStep = this.profiling ? performance.now() : 0;
+    const guest = this.coop?.isGuest === true;
+    // Invitado: lo que se ve del resto, al día, y la semilla de su disparo (la que usará el anfitrión).
+    if (guest) this.coop!.guestPreStep();
     const controlling = this.fsm.controlling;
     // Interactuar (E) tiene prioridad sobre saltar cuando hay algo delante (comparten botón A en gamepad).
     const near = this.nearInteractable;
@@ -1033,6 +1097,10 @@ export class Game {
     ci.aimDir.copy(this.camera.forward);
     if (s.infiniteAmmo) s.combat.weapon.mag = Math.max(s.combat.weapon.mag, 1);
     s.combat.fixedUpdate(dt, ci, s.ctx);
+    if (guest) {
+      this.guestFixedUpdate(s, ci);
+      return;
+    }
     // El resto de jugadores (si los hay) se simulan con lo que pide su intención y reaparecen en el último punto de
     // control de la misión.
     if (this.mission) {
@@ -1040,6 +1108,8 @@ export class Game {
       s.roster.respawn.yaw = this.mission.respawnYaw;
     }
     s.roster.step(dt);
+    // Anfitrión: el paso de cada invitado (su movimiento y su combate).
+    this.coop?.host?.step(dt);
     s.roster.updateLooks();
     const tE = this.profiling ? performance.now() : 0;
     s.enemies.fixedUpdate(dt, s.updateTargets(dt));
@@ -1051,6 +1121,11 @@ export class Game {
     if (this.fsm.state === 'playing') this.mission?.fixedUpdate(dt);
     const tPh = this.profiling ? performance.now() : 0;
     s.physics.step();
+    const host = this.coop?.host;
+    if (host) {
+      this.fillMissionNet(s, host.missionNet);
+      host.endStep();
+    }
     if (this.profiling) {
       const p = this.prof;
       const end = performance.now();
@@ -1069,14 +1144,35 @@ export class Game {
     this.input.endStep();
   }
 
-  /** Sin interacciones con un hub hostil: ni durante el Excomunicado ni durante el Gauntlet. */
+  /**
+   * Sin interacciones con un hub hostil (ni durante el Excomunicado ni durante el Gauntlet). En cooperativo, las de la
+   * misión las hace el anfitrión: el invitado no ve sus avisos.
+   */
   private get interactionsAllowed(): boolean {
-    return !this.director?.hostile && this.mission?.id !== 'gauntlet';
+    return !this.director?.hostile && this.mission?.id !== 'gauntlet' && !this.coop?.isGuest;
+  }
+
+  /** La simulación avanza: en los estados de juego y, en cooperativo, también con la pausa abierta. */
+  private get simulationRuns(): boolean {
+    return this.fsm.simulating || (!!this.coop?.inMatch && this.fsm.state === 'paused');
   }
 
   private onPlayerDeath(): void {
     const s = this.session;
     if (!s) return;
+    if (this.coop?.inMatch) {
+      // En cooperativo no se espera a nadie: se reaparece solo y cada caída gasta un marcador del equipo.
+      this.deathReturn = 'playing';
+      this.fsm.go('dead');
+      this.deathTimer = 0;
+      if (this.coop.isHost && this.mission) {
+        const canRespawn = this.mission.onPlayerDied();
+        this.hud.setMarkers(this.mission.markersUsed, this.mission.markersTotal);
+        if (!canRespawn) return;
+      }
+      this.hud.showDeath(s.combat.deathCause(this.camera.yaw), this.coop.isHost ? COOP_TEXT.respawnIn(REMOTE_RESPAWN) : COOP_TEXT.respawnHost);
+      return;
+    }
     this.deathReturn = this.fsm.state === 'hub' ? 'hub' : 'playing';
     this.fsm.go('dead');
     this.deathTimer = 0;
@@ -1097,7 +1193,8 @@ export class Game {
     this.hud.showDeath(s.combat.deathCause(this.camera.yaw), `Pulsa ${lab} o clic para reaparecer`);
   }
 
-  private respawn(): void {
+  /** Reaparece en el último punto de control. En cooperativo (`keepWorld`) el mundo sigue como está: hay otros jugando. */
+  private respawn(keepWorld = false): void {
     const s = this.session;
     if (!s || this.fsm.state !== 'dead') return;
     const m = this.mission;
@@ -1105,8 +1202,10 @@ export class Game {
     const yaw = m ? m.respawnYaw : s.data.spawn.yaw;
     s.respawnAt(new Vector3(pos.x, pos.y + 0.02, pos.z), yaw);
     s.combat.respawnReset();
-    s.enemies.resetAlive();
-    m?.onPlayerRespawned();
+    if (!keepWorld) {
+      s.enemies.resetAlive();
+      m?.onPlayerRespawned();
+    }
     this.aimLatched = false;
     this.camera.setYawPitch(yaw, -0.12);
     this.camera.snap();
@@ -1114,11 +1213,244 @@ export class Game {
     this.fsm.go(this.deathReturn);
   }
 
+  // =========================================================== cooperativo (fase 3)
+  /** El anfitrión de una partida en red sigue simulando con la pestaña oculta (si no, se congela para todos). */
+  updateHiddenTicker(): void {
+    const want = document.visibilityState === 'hidden' && !!this.coop?.isHost && this.coop.inMatch;
+    if (want) this.hiddenTicker.start();
+    else this.hiddenTicker.stop();
+  }
+
+  private tickHidden(realDt: number): void {
+    if (document.visibilityState !== 'hidden' || !this.coop?.isHost) {
+      this.hiddenTicker.stop();
+      return;
+    }
+    if (!this.session || !this.simulationRuns || this.manual) return;
+    const n = this.sim.advance(realDt);
+    for (let i = 0; i < n; i++) this.fixedUpdate(FIXED_DT);
+  }
+
+  /** La sesión cargada no es del modo en que se juega ahora (en red o solo): hay que cargar otra. */
+  private get sessionStale(): boolean {
+    return this.sessionCoop !== !!this.coop;
+  }
+
+  /** Invitado: el resto del paso. Lo demás lo simula el anfitrión: aquí se envía el paso y avanza la física. */
+  private guestFixedUpdate(s: LevelSession, ci: CombatIntent): void {
+    const coop = this.coop!;
+    coop.guestPostStep(ci);
+    const net = coop.missionNet;
+    if (net) s.alarm.set(net.alarm);
+    s.physics.step();
+    this.steps++;
+    if (this.opts.qa) {
+      checkPlayerInvariants(s, this.invariants);
+      this.combatInconsistencies += checkCombatInvariants(s, this.invariants);
+    }
+    if (s.combat.dead && this.fsm.controlling) this.onPlayerDeath();
+    this.input.endStep();
+  }
+
+  /** Anfitrión: lo que el invitado necesita de la misión para su pantalla y su música. */
+  private fillMissionNet(s: LevelSession, mn: MissionNet): void {
+    const m = this.mission;
+    if (m && m.beacon(_beacon)) {
+      const b = (mn.beacon ??= { x: 0, y: 0, z: 0 });
+      b.x = _beacon.x;
+      b.y = _beacon.y;
+      b.z = _beacon.z;
+    } else mn.beacon = null;
+    mn.markersUsed = m?.markersUsed ?? 0;
+    mn.markersTotal = m?.markersTotal ?? 0;
+    mn.objective = m?.current?.kind ?? null;
+    mn.hostile = !!this.director?.hostile || (m?.id === 'gauntlet' && m.gauntletBreak <= 0);
+    mn.alarm = s.alarm.active;
+  }
+
+  /** El equipo para el HUD: cada jugador con su salud, y la latencia si se es invitado. */
+  private teamView(s: LevelSession): TeamView {
+    return {
+      players: [...s.roster.slots]
+        .sort((a, b) => a.id - b.id)
+        .map((p) => ({
+          name: playerName(p.id),
+          you: p.local,
+          health: p.local ? p.combat.vitals.health / Math.max(1, p.combat.vitals.maxHealth) : p.look.health,
+          down: p.local ? p.combat.dead : p.look.dead,
+        })),
+      // Hasta la primera medida, sin latencia en pantalla.
+      ping: this.coop?.isGuest && this.coop.rtt > 0 ? this.coop.rtt : null,
+    };
+  }
+
+  /** Anfitrión: empieza lo elegido en la sala (todos los invitados lo cargan con él). */
+  coopStart(mode: CoopMode): void {
+    if (!this.coop?.isHost || this.loading) return;
+    this.coopError = null;
+    if (mode === 'arena') void this.playLevel('arena');
+    else void this.startContract(mode);
+  }
+
+  /** Anfitrión: vuelve a la sala con todos. */
+  coopBackToLobby(): void {
+    if (!this.coop?.isHost) return;
+    this.coop.backToLobby();
+    this.coopToLobby();
+  }
+
+  /** Sale del cooperativo (el invitado se va; el anfitrión cierra la sala para todos). */
+  coopLeave(): void {
+    const c = this.coop;
+    if (!c) return;
+    this.coop = null;
+    this.coopPending = null;
+    c.close();
+    this.leaveLevelScreens();
+    if (this.fsm.state !== 'title') this.fsm.go('title');
+    else this.screens.show('title');
+  }
+
+  /** Invitado: carga el nivel que eligió el anfitrión y entra en él. */
+  async coopGuestStart(level: LevelId, mission: MissionId | null): Promise<void> {
+    const c = this.coop;
+    if (!c?.isGuest) return;
+    if (this.loading) {
+      // Se está cargando otro: este va después.
+      this.coopPending = { level, mission };
+      return;
+    }
+    this.loading = true;
+    this.audio.init();
+    this.screens.hide();
+    this.hud.hideDeath();
+    if (this.fsm.state === 'paused') this.fsm.go('playing');
+    if (this.fsm.state !== 'loading') this.fsm.go('loading');
+    if (!(await this.tryLoadSession(level))) return;
+    const s = this.session;
+    const pending = this.coopPending;
+    this.coopPending = null;
+    if (!s || this.coop !== c) {
+      this.loading = false;
+      return;
+    }
+    this.mission = null;
+    this.outcome = null;
+    const sp = s.data.spawn;
+    s.respawnAt(new Vector3(sp.pos[0], sp.pos[1] + 0.02, sp.pos[2]), sp.yaw);
+    s.combat.respawnReset();
+    this.camera.setYawPitch(sp.yaw, -0.12);
+    this.camera.snap();
+    this.setHintsFor(mission === 'gauntlet' ? 'practice' : level);
+    this.hud.setMarkers(0, 0);
+    c.levelStarted(s, level, mission);
+    this.fsm.go('playing');
+    this.loading = false;
+    if (pending && (pending.level !== level || pending.mission !== mission)) void this.coopGuestStart(pending.level, pending.mission);
+  }
+
+  /** De vuelta en la sala (el anfitrión volvió a ella). */
+  coopToLobby(): void {
+    this.leaveLevelScreens();
+    if (this.fsm.state === 'paused') this.fsm.go('playing');
+    if (this.fsm.state !== 'title') this.fsm.go('title');
+    this.screens.show('coopLobby');
+  }
+
+  /** Invitado: el anfitrión lo colocó (al entrar o al reaparecer): la cámara va con él. */
+  coopSpawned(revived: boolean): void {
+    const s = this.session;
+    if (!s) return;
+    this.camera.setYawPitch(s.player.yaw, -0.12);
+    this.camera.snap();
+    if (revived && this.fsm.state === 'dead') {
+      this.hud.hideDeath();
+      this.aimLatched = false;
+      this.fsm.go(this.deathReturn);
+    }
+  }
+
+  /** Invitado: la misión terminó. Las monedas del contrato también van a su partida guardada. */
+  coopResults(r: CoopResults): void {
+    if (!this.coop?.isGuest) return;
+    const coins = r.success ? Math.min(r.coins, MAX_COINS - this.profile.coins) : 0;
+    if (coins > 0) {
+      this.profile.coins += coins;
+      this.saveNow();
+    }
+    const net = this.coop.missionNet;
+    const view: ResultsView = {
+      missionName: `${MISSIONS[r.mission].name} · ${COOP_TEXT.teamResult}`,
+      success: r.success,
+      failReason: r.failReason,
+      rank: r.rank,
+      total: r.total,
+      capped: false,
+      subs: [],
+      timeSec: r.timeSec,
+      kills: r.kills,
+      markersUsed: net?.markersUsed ?? 0,
+      markersTotal: net?.markersTotal ?? 0,
+      coins,
+      achievements: [],
+      newBest: false,
+      styleScore: this.session?.combat.style.score ?? 0,
+      gauntlet: null,
+      coop: { leave: COOP_TEXT.leaveGame, retry: false, note: COOP_TEXT.waitingNext },
+    };
+    this.hud.hideDeath();
+    if (this.fsm.state === 'paused') this.fsm.go('playing');
+    if (this.fsm.state === 'playing' || this.fsm.state === 'dead') this.fsm.go('results');
+    this.audio.ui(r.success ? 'coin' : 'error');
+    this.screens.showResults(
+      view,
+      () => undefined,
+      () => this.coopLeave(),
+    );
+  }
+
+  /** Anfitrión: cayó un invitado. Gasta un marcador del equipo; sin marcadores, el contrato termina. */
+  coopGuestDied(): void {
+    const m = this.mission;
+    if (!m) return;
+    m.onPlayerDied();
+    this.hud.setMarkers(m.markersUsed, m.markersTotal);
+  }
+
+  /** Algo cambió en la sala: se repinta si está a la vista. */
+  coopChanged(): void {
+    if (this.screens.current === 'coopLobby') this.screens.refresh();
+  }
+
+  /** El cooperativo terminó sin que este jugador lo eligiera (versión distinta, sala llena, conexión perdida). */
+  coopEnded(message: string): void {
+    if (!this.coop) return;
+    this.coop = null;
+    this.coopPending = null;
+    this.coopError = message;
+    this.leaveLevelScreens();
+    if (this.fsm.state === 'paused') this.fsm.go('playing');
+    if (this.fsm.state !== 'title') this.fsm.go('title');
+    this.screens.show('coop');
+  }
+
+  /** Al dejar un nivel del cooperativo: sin pantalla de muerte, sin equipo en el HUD y sin misión. */
+  private leaveLevelScreens(): void {
+    this.updateHiddenTicker();
+    this.mission = null;
+    this.hud.hideDeath();
+    this.hud.setTeam(null);
+    this.hud.setMarkers(0, 0);
+  }
+
   /** Baliza del objetivo: proyecta el punto a pantalla; fuera de vista, flecha en el borde. */
   private updateBeacon(): void {
     const s = this.session;
     const m = this.mission;
-    if (!s || !m || !m.beacon(_beacon)) {
+    const net = this.coop?.missionNet;
+    const b = net?.beacon;
+    if (b) _beacon.set(b.x, b.y, b.z);
+    if (!s || (net ? !b : !m || !m.beacon(_beacon))) {
       this.hud.setBeacon(null);
       return;
     }
@@ -1223,6 +1555,8 @@ export class Game {
     fillHudData(this.hudData, s, v);
     this.hud.update(this.hudData, dt);
     this.hud.setCrosshairVisible(!c.holstered);
+    const net = this.coop?.missionNet;
+    if (net) this.hud.setMarkers(net.markersUsed, net.markersTotal);
     this.peekTimer -= dt;
     if (this.peekTimer <= 0) {
       this.peekTimer = 0.1;
@@ -1236,6 +1570,7 @@ export class Game {
       pi.moveX = this.move.x;
       pi.moveY = this.move.y;
       this.hud.setPrompt(this.fsm.controlling ? contextPrompt(s, pi) : null);
+      this.hud.setTeam(this.coop?.inMatch ? this.teamView(s) : null);
     }
   }
 
