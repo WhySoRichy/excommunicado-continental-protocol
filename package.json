@@ -38,6 +38,7 @@
     "media": "npm run build:qa && playwright test -c playwright.media.config.ts && node scripts/make-gif.mjs",
     "poses": "node scripts/poses.mjs",
     "sheets": "node scripts/sheets.mjs",
+    "textures": "node scripts/textures.mjs",
     "lint": "oxlint && prettier --check . && knip",
     "format": "prettier --write ."
   },

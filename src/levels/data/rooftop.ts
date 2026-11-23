@@ -30,7 +30,8 @@ export const rooftop: LevelData = {
     // La torre domina la ciudad: el horizonte queda muy por debajo de la azotea.
     skyline: { y: -30 },
   },
-  key: { color: 0xc8d8ff, intensity: 1.6, dir: [-0.35, 1, 0.25], shadow: true, shadowArea: 44 },
+  // Luna fuerte: el hormigón fotoescaneado de las azoteas es oscuro y sin ella quedaban por debajo de la claridad mínima.
+  key: { color: 0xc8d8ff, intensity: 2.3, dir: [-0.35, 1, 0.25], shadow: true, shadowArea: 44 },
   lights: [
     { pos: [0, 4, 6], color: 0xffd0a0, intensity: 60, distance: 24 },
     { pos: [-16, B + 3.5, -13], color: 0xffd0a0, intensity: 50, distance: 20 },

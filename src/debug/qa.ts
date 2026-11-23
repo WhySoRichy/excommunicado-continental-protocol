@@ -149,6 +149,8 @@ export interface QaApi {
   input(): { held: number; locked: boolean; capturing: boolean };
   lagSpike(ms: number): void;
   camera(): { x: number; y: number; z: number; dist: number; fov: number; yaw: number; pitch: number };
+  /** Qué dibuja la oclusión ambiental: 0 la escena con ella, 4 solo la oclusión, 5 la oclusión filtrada. */
+  aoOutput(mode: number): boolean;
   canvas(): { cssW: number; cssH: number; bufW: number; bufH: number; pixelRatio: number };
   prompt(): string;
   combat(): CombatSnapshot | null;
@@ -301,6 +303,7 @@ export function installQa(game: Game): void {
       return game.ready;
     },
     luminance: () => game.renderer.sampleLuminance(),
+    aoOutput: (mode: number) => game.renderer.setAoOutput(mode),
     fps: () => game.stats.fps(60),
     measureFps: (seconds: number) =>
       new Promise((resolve) => {

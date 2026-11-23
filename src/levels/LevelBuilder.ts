@@ -31,6 +31,17 @@ import type { DecorDef, DecorProp, LevelData, MaterialId } from './types';
 
 export type { OrientedBox } from './levelPhysics';
 
+/** Materiales de los muebles y objetos de decorado (`buildProp`), que no salen de las cajas del nivel. */
+const PROP_MATERIALS: readonly MaterialId[] = ['brass', 'gold', 'leather', 'metal', 'metalDark'];
+
+/** Todos los materiales que usará un nivel: los de sus cajas y rampas, y los de los muebles. */
+export function levelMaterials(data: LevelData): Set<MaterialId> {
+  const out = new Set<MaterialId>(PROP_MATERIALS);
+  for (const b of data.boxes) out.add(b.mat);
+  for (const r of data.ramps) out.add(r.mat);
+  return out;
+}
+
 const FACES: ReadonlyArray<{ n: readonly [number, number, number]; u: readonly [number, number, number]; v: readonly [number, number, number] }> = [
   { n: [1, 0, 0], u: [0, 1, 0], v: [0, 0, 1] },
   { n: [-1, 0, 0], u: [0, 0, 1], v: [0, 1, 0] },
@@ -46,8 +57,14 @@ const CORNERS: ReadonlyArray<readonly [number, number]> = [
   [-1, 1],
 ];
 
+/** Chaflán de las aristas de las cajas del nivel (m): atrapa la luz como un canto real. Solo el dibujo; la física no cambia. */
+const CHAMFER = 0.03;
+
+const AXES = [0, 1, 2] as const;
+const SIGNS = [1, -1] as const;
+
 /** Acumula cajas en una geometría fusionada con UV en metros (mundo). */
-class GeoAccumulator {
+export class GeoAccumulator {
   private readonly pos: number[] = [];
   private readonly nor: number[] = [];
   private readonly uv: number[] = [];
@@ -55,8 +72,118 @@ class GeoAccumulator {
   private verts = 0;
   private readonly tmpL = new Vector3();
   private readonly tmpN = new Vector3();
+  private readonly loc = [new Vector3(), new Vector3(), new Vector3(), new Vector3()];
+  private readonly ln = new Vector3();
+  private readonly e1 = new Vector3();
+  private readonly e2 = new Vector3();
 
-  appendBox(ob: OrientedBox, texScale: number): void {
+  appendBox(ob: OrientedBox, texScale: number, chamfer = 0): void {
+    const h = ob.half;
+    const c = Math.min(chamfer, 0.3 * Math.min(h.x, h.y, h.z));
+    if (c < 0.004) {
+      this.appendPlainBox(ob, texScale);
+      return;
+    }
+    const hv = [h.x, h.y, h.z];
+    const iv = [h.x - c, h.y - c, h.z - c];
+    const [p0, p1, p2, p3] = this.loc as [Vector3, Vector3, Vector3, Vector3];
+    // Caras, encogidas por el chaflán.
+    for (const a of AXES) {
+      const b = (a + 1) % 3;
+      const k = (a + 2) % 3;
+      for (const s of SIGNS) {
+        p0.setComponent(a, s * hv[a]!)
+          .setComponent(b, -iv[b]!)
+          .setComponent(k, -iv[k]!);
+        p1.setComponent(a, s * hv[a]!)
+          .setComponent(b, iv[b]!)
+          .setComponent(k, -iv[k]!);
+        p2.setComponent(a, s * hv[a]!)
+          .setComponent(b, iv[b]!)
+          .setComponent(k, iv[k]!);
+        p3.setComponent(a, s * hv[a]!)
+          .setComponent(b, -iv[b]!)
+          .setComponent(k, iv[k]!);
+        this.ln.set(0, 0, 0).setComponent(a, s);
+        this.quad(ob, texScale);
+      }
+    }
+    // Aristas: una tira a 45° entre cada par de caras.
+    for (const a of AXES) {
+      const b = (a + 1) % 3;
+      const k = (a + 2) % 3;
+      for (const sa of SIGNS) {
+        for (const sb of SIGNS) {
+          p0.setComponent(a, sa * hv[a]!)
+            .setComponent(b, sb * iv[b]!)
+            .setComponent(k, -iv[k]!);
+          p1.setComponent(a, sa * hv[a]!)
+            .setComponent(b, sb * iv[b]!)
+            .setComponent(k, iv[k]!);
+          p2.setComponent(a, sa * iv[a]!)
+            .setComponent(b, sb * hv[b]!)
+            .setComponent(k, iv[k]!);
+          p3.setComponent(a, sa * iv[a]!)
+            .setComponent(b, sb * hv[b]!)
+            .setComponent(k, -iv[k]!);
+          this.ln.set(0, 0, 0).setComponent(a, sa).setComponent(b, sb).normalize();
+          this.quad(ob, texScale);
+        }
+      }
+    }
+    // Esquinas: un triángulo que cierra las tres tiras.
+    for (const sx of SIGNS) {
+      for (const sy of SIGNS) {
+        for (const sz of SIGNS) {
+          p0.set(sx * hv[0]!, sy * iv[1]!, sz * iv[2]!);
+          p1.set(sx * iv[0]!, sy * hv[1]!, sz * iv[2]!);
+          p2.set(sx * iv[0]!, sy * iv[1]!, sz * hv[2]!);
+          this.ln.set(sx, sy, sz).normalize();
+          this.tri(ob, texScale);
+        }
+      }
+    }
+  }
+
+  /** Coloca un vértice (local → mundo) con la normal de su pieza y UV en metros según hacia dónde mira. */
+  private vertex(local: Vector3, ob: OrientedBox, texScale: number): void {
+    const wn = this.tmpN;
+    const p = this.tmpL.copy(local).applyQuaternion(ob.quat).add(ob.center);
+    this.pos.push(p.x, p.y, p.z);
+    this.nor.push(wn.x, wn.y, wn.z);
+    if (Math.abs(wn.y) > 0.7) this.uv.push(p.x / texScale, p.z / texScale);
+    else {
+      const l = Math.hypot(wn.z, wn.x) || 1;
+      this.uv.push((p.x * wn.z - p.z * wn.x) / l / texScale, p.y / texScale);
+    }
+  }
+
+  /** ¿Los vértices locales a, b, c giran al revés respecto a la normal local? */
+  private flipped(a: Vector3, b: Vector3, c: Vector3): boolean {
+    return this.e1.subVectors(b, a).cross(this.e2.subVectors(c, a)).dot(this.ln) < 0;
+  }
+
+  private quad(ob: OrientedBox, texScale: number): void {
+    const [p0, p1, p2, p3] = this.loc as [Vector3, Vector3, Vector3, Vector3];
+    this.tmpN.copy(this.ln).applyQuaternion(ob.quat);
+    const flip = this.flipped(p0, p1, p2);
+    for (const p of flip ? [p0, p3, p2, p1] : [p0, p1, p2, p3]) this.vertex(p, ob, texScale);
+    const v = this.verts;
+    this.idx.push(v, v + 1, v + 2, v, v + 2, v + 3);
+    this.verts += 4;
+  }
+
+  private tri(ob: OrientedBox, texScale: number): void {
+    const [p0, p1, p2] = this.loc as [Vector3, Vector3, Vector3];
+    this.tmpN.copy(this.ln).applyQuaternion(ob.quat);
+    const flip = this.flipped(p0, p1, p2);
+    for (const p of flip ? [p0, p2, p1] : [p0, p1, p2]) this.vertex(p, ob, texScale);
+    const v = this.verts;
+    this.idx.push(v, v + 1, v + 2);
+    this.verts += 3;
+  }
+
+  private appendPlainBox(ob: OrientedBox, texScale: number): void {
     const h = ob.half;
     for (const f of FACES) {
       const hn = Math.abs(f.n[0]) * h.x + Math.abs(f.n[1]) * h.y + Math.abs(f.n[2]) * h.z;
@@ -158,11 +285,11 @@ export function buildLevel(data: LevelData, scene: Scene, physics: PhysicsWorld,
   for (const b of data.boxes) {
     if (b.invisible) continue; // solo collider (NPC, barreras)
     const ob = boxToOriented(b);
-    accFor(b.mat, b.shadow ?? true, ob.center.x, ob.center.z).appendBox(ob, texScaleOf(b.mat));
+    accFor(b.mat, b.shadow ?? true, ob.center.x, ob.center.z).appendBox(ob, texScaleOf(b.mat), CHAMFER);
   }
   for (const r of data.ramps) {
     const ob = rampToOriented(r);
-    accFor(r.mat, true, ob.center.x, ob.center.z).appendBox(ob, texScaleOf(r.mat));
+    accFor(r.mat, true, ob.center.x, ob.center.z).appendBox(ob, texScaleOf(r.mat), CHAMFER);
   }
   for (const g of groups.values()) {
     if (g.acc.empty) continue;

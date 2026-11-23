@@ -37,6 +37,10 @@ export function setMaxAnisotropy(v: number): void {
   maxAnisotropy = Math.max(1, Math.min(8, v));
 }
 
+export function getMaxAnisotropy(): number {
+  return maxAnisotropy;
+}
+
 function makeCanvas(size: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
   const c = document.createElement('canvas');
   c.width = size;

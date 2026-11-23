@@ -36,6 +36,7 @@ La primera vez que se ejecuten las e2e: `npx playwright install chromium firefox
 | HUD y menús | `src/ui/` |
 | Sonido y música | `src/audio/` |
 | Calidad gráfica y rendimiento | `src/render/` |
+| Materiales de los escenarios (qué foto usa cada uno, su tamaño real, el relieve) | `src/render/materials.ts`; la descarga, `src/render/pbrTextures.ts`; la oclusión ambiental, `src/render/ambientOcclusion.ts` |
 
 `src/game/Game.ts` es el orquestador: une entrada, simulación, vista y estados.
 
@@ -56,6 +57,7 @@ La primera vez que se ejecuten las e2e: `npx playwright install chromium firefox
 |---|---|
 | `npm run poses` | Capturas de perfil de cada pose del jugador en `qa-screenshots/poses/`, con el build de pruebas servido en otra terminal (`npm run build:qa && npm run preview:qa`). Imprescindible al tocar animaciones |
 | `npm run media` | Regenera las capturas y el GIF del README (necesita ffmpeg) |
+| `npm run textures` | Descarga de Poly Haven las texturas CC0 de los escenarios y las convierte a WebP en `public/textures/` (necesita ffmpeg). Solo para añadir o cambiar una: las convertidas se versionan. Si se añade, va también en `PBR_SETS` (`src/render/pbrTextures.ts`) y en [CREDITOS.md](CREDITOS.md) |
 | `npm run sheets` | Hojas de diseño con el motor del juego y luz de estudio: armas, efectos de disparo, cara del Huésped, Huésped y Sommelier, en `qa-screenshots/sheets/`. `npm run sheets -- armas cara` genera solo esas. Útiles para revisar un cambio de aspecto antes de enseñarlo |
 | F3 en el juego | FPS, draw calls y estado. Con `?qa=1`, también botones de depuración (colisiones, modo dios, matar enemigos...) |
 | `?qa=1` | API de pruebas y comandos del F3. Solo en desarrollo (`npm start`) y en el build de pruebas (`npm run build:qa`); la versión publicada no los incluye |
@@ -90,6 +92,9 @@ La primera vez que se ejecuten las e2e: `npx playwright install chromium firefox
 - **Lo que deja `wrangler dev` al pararlo.** Su runtime (`workerd`) se queda vivo y bloquea `.wrangler/`. Hay que cerrar el árbol de procesos de wrangler; `.wrangler/` está en `.gitignore`.
 - **Girar un brazo casi 180° de golpe.** Para llevar la mano de colgando a por encima de la cabeza (el disparo a ciegas), `setFromUnitVectors` entre dos direcciones casi opuestas no tiene un eje definido: el brazo volteaba de un fotograma a otro (un salto de 1.800 en la medida de tirones). Se hace en dos tramos, primero al frente y de ahí al objetivo. El tirón solo se vio midiendo, no en las capturas.
 - **Dos barridos de la cámara con esferas distintas.** El tramo cabeza → hombro usaba una esfera menor que el siguiente: junto a una pared, el hombro quedaba a menos del radio del segundo barrido, este empezaba dentro de ella y la cámara se encogía hasta la cabeza (pasaba a cubierto contra una columna). `cameraRig.test.ts` lo vigila.
+- **Una foto que se repite deja ver su cuadrícula.** El asfalto mostraba las mismas grietas cada 3 m. Los materiales con foto la muestrean sin repetición (`NO_TILE_GLSL` en `render/materials.ts`); en los dibujos procedurales solo el relieve, porque desplazar su color rompería el diseño.
+- **Una foto más oscura que la textura a la que sustituye.** El hormigón fotoescaneado tiene un color medio de 87 sobre 255, y la textura procedural era mucho más clara: con el mismo tinte oscuro, las azoteas de Torre Meridian perdieron la mitad de luz y la prueba de claridad falló. Al cambiar la textura de un material hay que revisar su tinte (o su `gain`) y pasar la prueba de claridad; `checkpoint-shots.mjs` (herramientas de trabajo) compara la luminancia por checkpoint entre dos builds.
+- **La oclusión ambiental de three solo oculta puntos y líneas** en su pase de normales: los fogonazos, el humo y los cristales dejaban halos oscuros. `render/ambientOcclusion.ts` oculta también lo transparente.
 - **Una conexión nueva fuera del origen.** La política de seguridad de contenido (`vite.config.ts`) solo permite conectar con el propio origen y el servicio de salas: otra dirección necesita su entrada en `connect-src`, o el navegador la bloquea sin más.
 - **Niveles:** escalones de más de 0,32 m o muebles sin `noWalk` rompen la navegación de los enemigos. Los tests de navegación lo detectan.
 

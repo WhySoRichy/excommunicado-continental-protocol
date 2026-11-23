@@ -18,6 +18,8 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { clamp } from '../core/math';
+import { AmbientOcclusionPass } from './ambientOcclusion';
+import { setMaterialDetail } from './materials';
 import { setMaxAnisotropy } from './textures';
 
 export type QualityPreset = 'low' | 'medium' | 'high';
@@ -36,13 +38,50 @@ export interface QualitySettings {
   particles: number;
   /** Cada cuántos frames se regenera el mapa de sombras (2 = a 30 Hz con 60 FPS). */
   shadowInterval: number;
+  /** Oclusión ambiental (necesita el posprocesado del bloom). */
+  ao: boolean;
+  /** Relieve y rugosidad de las texturas fotoescaneadas (sin él, solo su color). */
+  materialDetail: boolean;
 }
 
 export const QUALITY: Record<QualityPreset, QualitySettings> = {
-  low: { pixelRatioCap: 1, baseScale: 0.75, shadows: false, shadowMapSize: 512, bloom: false, antialias: false, particles: 0.5, shadowInterval: 1 },
+  low: {
+    pixelRatioCap: 1,
+    baseScale: 0.75,
+    shadows: false,
+    shadowMapSize: 512,
+    bloom: false,
+    antialias: false,
+    particles: 0.5,
+    shadowInterval: 1,
+    ao: false,
+    materialDetail: false,
+  },
   // Medio: la sombra (el mayor coste de CPU tras las draw calls) se regenera en frames alternos.
-  medium: { pixelRatioCap: 1.25, baseScale: 1, shadows: true, shadowMapSize: 1024, bloom: true, antialias: true, particles: 1, shadowInterval: 2 },
-  high: { pixelRatioCap: 1.75, baseScale: 1, shadows: true, shadowMapSize: 2048, bloom: true, antialias: true, particles: 1, shadowInterval: 1 },
+  medium: {
+    pixelRatioCap: 1.25,
+    baseScale: 1,
+    shadows: true,
+    shadowMapSize: 1024,
+    bloom: true,
+    antialias: true,
+    particles: 1,
+    shadowInterval: 2,
+    ao: false,
+    materialDetail: true,
+  },
+  high: {
+    pixelRatioCap: 1.75,
+    baseScale: 1,
+    shadows: true,
+    shadowMapSize: 2048,
+    bloom: true,
+    antialias: true,
+    particles: 1,
+    shadowInterval: 1,
+    ao: true,
+    materialDetail: true,
+  },
 };
 
 /** Oscurecimiento máximo de las esquinas (0 = sin viñeta). */
@@ -114,6 +153,7 @@ export class GameRenderer {
     r.shadowMap.type = PCFShadowMap;
     r.info.autoReset = false;
     setMaxAnisotropy(r.capabilities.getMaxAnisotropy());
+    setMaterialDetail(q.materialDetail);
 
     this.canvas = r.domElement;
     this.canvas.id = 'game-canvas';
@@ -145,6 +185,9 @@ export class GameRenderer {
     const q = QUALITY[preset];
     this.renderer.shadowMap.enabled = q.shadows;
     this.updateShadowMaps(q);
+    setMaterialDetail(q.materialDetail);
+    // El compositor se rehace: la oclusión ambiental depende del preset.
+    this.disposeComposer();
     this.setBloom(q.bloom);
     this.dyn.reset();
     this.resize();
@@ -174,6 +217,7 @@ export class GameRenderer {
       const target = new WebGLRenderTarget(Math.max(1, size.x), Math.max(1, size.y), { type: HalfFloatType, samples: this.quality.antialias ? 4 : 0 });
       this.composer = new EffectComposer(this.renderer, target);
       this.composer.addPass(new RenderPass(this.scene, this.camera));
+      if (this.quality.ao) this.composer.addPass(new AmbientOcclusionPass(this.scene, this.camera, Math.max(1, size.x), Math.max(1, size.y)));
       // Bloom moderado: el umbral queda por encima de cualquier superficie iluminada, así que solo
       // brillan los emisores en HDR (neones, carteles, fogonazos).
       const bloomPass = new UnrealBloomPass(size, 0.36, 0.45, BLOOM_THRESHOLD);
@@ -189,6 +233,14 @@ export class GameRenderer {
       this.composer.addPass(out);
       this.resize();
     }
+  }
+
+  /** QA: qué muestra la oclusión ambiental (0 la escena con ella, 4 solo la oclusión, 5 filtrada); false si no hay. */
+  setAoOutput(mode: number): boolean {
+    const ao = this.composer?.passes.find((p) => p instanceof AmbientOcclusionPass);
+    if (!ao) return false;
+    ao.output = mode;
+    return true;
   }
 
   private disposeComposer(): void {

@@ -27,6 +27,8 @@ import {
 } from '../core/Save';
 import { loadSettings, saveSettings, type Settings, suggestPreset } from '../core/Settings';
 import { probeGpu } from '../render/gpu';
+import { pbrSetsOf } from '../render/materials';
+import { preloadPbr } from '../render/pbrTextures';
 import { CollisionDebugView, DebugOverlay } from '../debug/DebugOverlay';
 import { FrameStats } from '../debug/FrameStats';
 import { idlePose, type RigPose, type WeaponModel } from '../entities/CharacterRig';
@@ -36,6 +38,7 @@ import { emptyIntent, type PlayerIntent } from '../entities/PlayerController';
 import { DIALOGUE, HUB_TEXT, rulesPlaque } from '../hub/dialogue';
 import { buy } from '../hub/economy';
 import { HubDirector } from '../hub/HubDirector';
+import { levelMaterials } from '../levels/LevelBuilder';
 import { loadLevelData } from '../levels/registry';
 import type { InteractableDef, LevelId, MusicMood } from '../levels/types';
 import { GAUNTLET_BLOCK } from '../missions/gauntlet';
@@ -343,6 +346,8 @@ export class Game {
   async loadSession(id: LevelId): Promise<void> {
     if (!this.R) throw new Error('loadSession antes de boot()');
     const data = await loadLevelData(id);
+    // Las texturas fotoescaneadas del nivel, antes de construirlo (sin ellas, el material se queda con la procedural).
+    await preloadPbr(pbrSetsOf(levelMaterials(data)));
     this.director?.dispose();
     this.director = null;
     this.mission = null;

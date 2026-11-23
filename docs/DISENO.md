@@ -1,6 +1,6 @@
 # Diseño del juego
 
-**EXCOMMUNICADO: CONTINENTAL PROTOCOL** es un juego de acción en tercera persona para el navegador. Inspirado en el universo de John Wick. Modelos, música y texturas son propios y procedurales.
+**EXCOMMUNICADO: CONTINENTAL PROTOCOL** es un juego de acción en tercera persona para el navegador. Inspirado en el universo de John Wick. Modelos y música son propios y procedurales; las superficies de los escenarios usan texturas fotoescaneadas libres (CC0, ver [CREDITOS.md](CREDITOS.md)).
 
 La parte técnica está en [ARQUITECTURA.md](ARQUITECTURA.md).
 
