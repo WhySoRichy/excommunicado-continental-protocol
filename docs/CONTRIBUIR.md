@@ -19,7 +19,7 @@ La primera vez que se ejecuten las e2e: `npx playwright install chromium firefox
 | Movimiento del jugador | `src/entities/PlayerController.ts` |
 | Cobertura (entrar, recorrerla, esquinas, de una a otra, a ciegas) | `src/entities/PlayerController.ts` (los estados `toCover` y `cover`) y `coverSensor.ts` (las consultas al escenario); el disparo a ciegas, en `src/combat/PlayerCombat.ts` (`blindMode`); su marca, en `src/render/CoverMarker.ts` |
 | Animaciones | `src/entities/CharacterRig.ts` (huesos y poses) y `rigMath.ts` |
-| Aspecto de personajes y armas | `src/entities/rig/`: `body.ts` (torso, cabeza, pelo, prendas, miembros), `weapons.ts` (modelos y agarre), `geometry.ts` (primitivas), `skeleton.ts` (medidas) y `types.ts` |
+| Aspecto de personajes y armas | `src/entities/rig/`: `body.ts` (torso, cabeza, pelo, prendas, miembros), `weapons.ts` (los modelos de las armas, su agarre y su acabado, `WeaponFinish`), `weaponParts.ts` (piezas de arma: perfiles extruidos con bisel, torneados, tubos), `geometry.ts` (primitivas), `skeleton.ts` (medidas) y `types.ts`; el material de las armas, `src/render/weaponMaterial.ts` |
 | Armas, daño, estilo, rango | `src/combat/` |
 | IA de los enemigos | `src/entities/ai/EnemyBrain.ts`, `src/entities/Enemy.ts` (simulación), `src/combat/EnemyManager.ts` |
 | Cómo se ven los enemigos (animación, icono de alerta, láser) | `src/entities/EnemyView.ts`: lee el estado de `Enemy` y nunca lo cambia |

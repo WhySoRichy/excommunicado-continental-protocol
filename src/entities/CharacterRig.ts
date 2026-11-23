@@ -16,6 +16,7 @@ import {
 } from 'three';
 import { clamp, damp, lerp } from '../core/math';
 import { addRim, type RimUniforms } from '../render/materials';
+import { weaponMaterial } from '../render/weaponMaterial';
 import { forearmGeometry, footGeometry, headGeometry, shinGeometry, thighGeometry, torsoGeometry, upperArmGeometry } from './rig/body';
 import { acquire, merge, release, type SharedGeometry } from './rig/geometry';
 import { ANKLE_Y, ELBOW_Y, HAND_Y, HIP_CROUCH, HIP_KNEEL, HIP_SLIDE, HIP_STAND, NECK_Y, SHOULDER_Y, SPIN_Y } from './rig/skeleton';
@@ -157,6 +158,8 @@ export class CharacterRig {
   private skeleton: Skeleton | null = null;
   readonly weaponMount = new Group();
   private weaponMesh: Mesh | null = null;
+  /** Color de acento del arma (el del tipo de enemigo; en el jugador, el suyo). */
+  private accent = 0x888888;
   private weaponModel: WeaponModel = 'none';
   /** Claves de la geometría compartida que usa (cuerpo y arma). */
   private bodyKey = '';
@@ -284,7 +287,8 @@ export class CharacterRig {
     this.spin.add(this.hips);
     this.root.add(this.spin);
     this.buildSkin(appearanceKey(o));
-    this.setWeapon(o.weapon, c.accent);
+    this.accent = c.accent;
+    this.setWeapon(o.weapon);
   }
 
   /** Registra una pieza; su geometría solo se construye si ese aspecto aún no existe (`buildSkin`). */
@@ -349,7 +353,7 @@ export class CharacterRig {
   }
 
   /** Cambia el arma visible. La misma arma del mismo color se comparte entre personajes. */
-  setWeapon(model: WeaponModel, accent = 0x888888): void {
+  setWeapon(model: WeaponModel, accent = this.accent): void {
     if (this.weaponMesh) {
       this.weaponMount.remove(this.weaponMesh);
       release(weaponGeometries, this.weaponKey);
@@ -360,7 +364,7 @@ export class CharacterRig {
     this.weaponKey = `${model}|${accent}`;
     this.weaponMesh = new Mesh(
       acquire(weaponGeometries, this.weaponKey, () => weaponGeometry(model, accent)),
-      this.material,
+      weaponMaterial(),
     );
     this.weaponMesh.castShadow = true;
     this.weaponMount.add(this.weaponMesh);

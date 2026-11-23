@@ -19,8 +19,11 @@ const BUDGET = {
   cpuMs: 4,
   /** CPU por frame con la CPU frenada 2× (portátil con gráfica integrada): deja ~6,7 ms a la GPU. */
   cpuMsThrottled: 10,
-  /** JS inicial del juego (gzip) y del motor de física (gzip), en KB. */
-  appGzKb: 300,
+  /**
+   * JS inicial del juego (gzip) y del motor de física (gzip), en KB. El del juego subió de 300 a 320 con las armas de
+   * piezas reales (bloque 2): las extrusiones, los torneados y la triangulación de contornos de three, unos 8 KB.
+   */
+  appGzKb: 320,
   rapierGzKb: 1800,
 };
 

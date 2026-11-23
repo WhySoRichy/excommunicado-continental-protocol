@@ -21,6 +21,7 @@ import { clamp } from '../core/math';
 import { AmbientOcclusionPass } from './ambientOcclusion';
 import { setMaterialDetail } from './materials';
 import { setMaxAnisotropy } from './textures';
+import { setWeaponEnvironment } from './weaponMaterial';
 
 export type QualityPreset = 'low' | 'medium' | 'high';
 
@@ -257,6 +258,7 @@ export class GameRenderer {
     this.envTarget?.dispose();
     this.envTarget = pmrem.fromScene(env, 0.04);
     this.scene.environment = this.envTarget.texture;
+    setWeaponEnvironment(this.envTarget.texture);
     env.dispose();
     pmrem.dispose();
   }
