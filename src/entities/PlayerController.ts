@@ -459,6 +459,12 @@ export class PlayerController {
     this.invulnerable = false;
   }
 
+  /** Empuja el cuerpo caído (un escopetazo a quemarropa). */
+  shove(vx: number, vz: number): void {
+    this.velocity.x = vx;
+    this.velocity.z = vz;
+  }
+
   revive(feet: Vector3, yaw: number): void {
     this.state = 'ground';
     this.teleport(feet, yaw);

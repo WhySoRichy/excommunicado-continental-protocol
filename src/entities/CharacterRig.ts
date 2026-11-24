@@ -122,6 +122,14 @@ export interface DetailView {
   limit: number;
 }
 
+/** Lo que dura cada forma de caer (s; ver `hitReaction.ts`). */
+const DEATH_TIME = [0.55, 0.55, 0.55, 0.7, 0.6, 1.15] as const;
+
+/** Altura del centro del cuerpo al caer rígido un ángulo (con los pies en el suelo), hasta quedar tendido a `rest`. */
+function fallHeight(angle: number, rest: number): number {
+  return Math.max(rest, SPIN_Y * Math.cos(angle));
+}
+
 const materialCache = new Map<string, { mat: MeshStandardMaterial; rim: RimUniforms }>();
 
 /** Material por tipo de personaje (el rim es uniform por material). `unique` no se cachea. */
@@ -205,6 +213,9 @@ export class CharacterRig {
   private readonly braceS: Spring = { x: 0, v: 0 };
   /** Aturdido por un destello (entra de golpe, sale despacio). */
   private readonly dazeS: Spring = { x: 0, v: 0 };
+  /** Descolocado por un impacto y cojeando (con signo: − izquierda, + derecha). */
+  private readonly staggerS: Spring = { x: 0, v: 0 };
+  private readonly limpS: Spring = { x: 0, v: 0 };
   /** La granada en la mano izquierda (se crea la primera vez que lanza). */
   private gearMesh: Mesh | null = null;
   /** Lado del último disparo a ciegas por el borde: se mantiene mientras la pose se apaga. */
@@ -442,16 +453,25 @@ export class CharacterRig {
     // La cadera baja al apoyar los dos pies y sube a mitad de paso (con coseno al cuadrado: sin pico arriba).
     const cph = Math.cos(ph);
     let hipY = lerp(HIP_STAND - 0.02 * ak, HIP_CROUCH, ck) - 0.03 * amp * cph * cph;
-    let lF = sL.along * cf + stance;
-    let rF = sR.along * cf - stance;
-    let lSide = sL.along * cr;
-    let rSide = sR.along * cr;
-    let lDown = hipY - sL.lift;
-    let rDown = hipY - sR.lift;
+    // Cojea: la pierna herida da pasos cortos, apenas se levanta y el cuerpo se vence hacia ella cuando la carga.
+    const limp = spring(this.limpS, p.limp, 12, dt);
+    const limpL = clamp(-limp, 0, 1) * amp;
+    const limpR = clamp(limp, 0, 1) * amp;
+    const loadL = limpL * Math.max(0, Math.cos(ph));
+    const loadR = limpR * Math.max(0, -Math.cos(ph));
+    hipY -= 0.07 * (loadL + loadR);
+    const kL = 1 - 0.5 * limpL;
+    const kR = 1 - 0.5 * limpR;
+    let lF = sL.along * cf * kL + stance;
+    let rF = sR.along * cf * kR - stance;
+    let lSide = sL.along * cr * kL;
+    let rSide = sR.along * cr * kR;
+    let lDown = hipY - sL.lift * kL;
+    let rDown = hipY - sR.lift * kR;
     let hipLocal = hipY - SPIN_Y;
 
     let torsoX = lerp(-0.04 - 0.08 * speedN - 0.24 * sk, -0.7, ck);
-    let torsoZ = -cr * 0.07 * amp;
+    let torsoZ = -cr * 0.07 * amp + 0.16 * (loadL - loadR) + 0.05 * (limpL - limpR);
     let torsoY = lead * cf * 0.16 * (armed ? 0.35 + 0.65 * sk : 1);
     let hipsYaw = -lead * cf * 0.12;
     // Arma larga: de perfil. En marcha la cadera sigue el paso y solo gira el torso.
@@ -470,6 +490,8 @@ export class CharacterRig {
     let lFootP = footPitch(ph) * amp;
     let rFootP = footPitch(ph + Math.PI) * amp;
     let footWorld = 1;
+    /** Muere de rodillas: cuánto las tiene dobladas. */
+    let kneeFold = 0;
     // Agachado, el pie de atrás se apoya en la punta.
     const tiptoe = ck * (1 - amp);
     rFootP -= 0.55 * tiptoe;
@@ -545,7 +567,7 @@ export class CharacterRig {
         break;
       }
       case 'dead': {
-        const t = clamp(p.stateTime / 0.55, 0, 1);
+        const t = clamp(p.stateTime / DEATH_TIME[p.death], 0, 1);
         lSide = -0.08;
         rSide = 0.1;
         hipLocal = 0.02;
@@ -555,9 +577,9 @@ export class CharacterRig {
         if (p.death === 1) {
           // De espaldas: el impacto lo tumba hacia atrás con las piernas abiertas.
           spinX = HALF_PI * t * t;
-          spinY = lerp(SPIN_Y, 0.15, t);
-          lF = 0.2;
-          rF = -0.02;
+          spinY = fallHeight(spinX, 0.15);
+          lF = lerp(0.2, 0.02, t);
+          rF = lerp(0.08, -0.02, t);
           lDown = 0.86;
           rDown = 0.92;
           lSide = -0.16;
@@ -573,18 +595,61 @@ export class CharacterRig {
           spinY = lerp(SPIN_Y, 0.2, t);
           lF = 0.3;
           rF = 0.16;
-          lDown = lerp(0.9, 0.5, buckle);
-          rDown = lerp(0.9, 0.62, buckle);
-          torsoX = -0.5 * buckle;
+          lDown = lerp(0.9, lerp(0.5, 0.66, fall), buckle);
+          rDown = lerp(0.9, lerp(0.62, 0.78, fall), buckle);
+          torsoX = -0.5 * buckle + 0.15 * fall;
           headX = -0.3;
+        } else if (p.death === 3) {
+          // En seco: se apagan las piernas, baja a plomo sobre los talones y cae hacia atrás con las rodillas dobladas.
+          const drop = smooth(0, 0.55, t);
+          const fall = smooth(0.42, 1, t);
+          spinX = HALF_PI * fall * fall;
+          spinZ = 0.14 * fall;
+          spinY = lerp(lerp(SPIN_Y, 0.52, drop), 0.15, fall);
+          lF = lerp(0.1, lerp(0.3, 0.06, fall), drop);
+          rF = lerp(-0.05, lerp(0.38, 0.0, fall), drop);
+          lDown = lerp(0.9, lerp(0.42, 0.74, fall), drop);
+          rDown = lerp(0.9, lerp(0.36, 0.86, fall), drop);
+          lSide = -0.14;
+          rSide = 0.22 * fall;
+          torsoX = -0.35 * drop * (1 - fall) + 0.1 * fall;
+          headX = -0.5 * drop * (1 - fall) + 0.2 * fall;
+        } else if (p.death === 4) {
+          // Despedido: el tronco sale hacia atrás, los brazos y las piernas se quedan por delante y aterriza de espaldas.
+          const fly = smoother(0, 0.85, t);
+          const trail = bell(clamp(t * 1.15, 0, 1));
+          spinX = HALF_PI * fly;
+          spinY = fallHeight(spinX, 0.15) + 0.07 * trail;
+          lF = lerp(0.1, 0.02, t) + 0.22 * trail;
+          rF = lerp(0.02, -0.02, t) + 0.3 * trail;
+          lDown = 0.87 - 0.1 * trail;
+          rDown = 0.91 - 0.06 * trail;
+          lSide = -0.2;
+          rSide = 0.24;
+          torsoX = -0.5 * trail + 0.12 * t;
+          headX = -0.5 * trail + 0.25 * t;
+        } else if (p.death === 5) {
+          // De rodillas: ceden las piernas, se queda un instante de rodillas y se va de bruces.
+          const kneel = smooth(0, 0.4, t);
+          const fall = smooth(0.52, 1, t);
+          spinX = -HALF_PI * fall * fall;
+          spinY = lerp(lerp(SPIN_Y, 0.53, kneel), 0.16, fall * fall);
+          // Muslos a plomo y espinillas hacia atrás; al caer, las piernas se estiran.
+          lF = lerp(-0.02, 0, kneel);
+          rF = lerp(0.06, -0.02, kneel);
+          lDown = lerp(0.9, lerp(0.54, 0.9, fall), kneel);
+          rDown = lerp(0.9, lerp(0.5, 0.88, fall), kneel);
+          torsoX = -0.3 * kneel * (1 - fall) + 0.05 * fall;
+          headX = -0.45 * kneel * (1 - fall) + 0.4 * fall;
+          kneeFold = kneel * (1 - fall);
         } else {
           // De bruces (en huesos que suben, el giro negativo es hacia delante).
           spinX = -HALF_PI * t * t;
-          spinY = lerp(SPIN_Y, 0.16, t);
-          lF = 0.05;
-          rF = 0.22;
-          lDown = 0.9;
-          rDown = 0.8;
+          spinY = fallHeight(spinX, 0.16);
+          lF = lerp(0.1, 0, t);
+          rF = lerp(0.02, -0.03, t);
+          lDown = 0.91;
+          rDown = 0.89;
           torsoX = 0.05;
           headX = 0.45;
         }
@@ -592,6 +657,25 @@ export class CharacterRig {
       }
       default:
         break;
+    }
+
+    // Descolocado: se dobla sobre el golpe con las rodillas flojas; los brazos, más abajo.
+    const sg = this.blend(this.staggerS, st === 'dead' ? 0 : clamp(p.stagger * 1.5, 0, 1), p.stagger > 0.6 ? 26 : 9, dt);
+    if (sg > 0.001) {
+      const back = p.flinchFront ? 1 : -1;
+      hipLocal -= 0.08 * sg;
+      lDown -= 0.08 * sg;
+      rDown -= 0.08 * sg;
+      lF += 0.1 * sg;
+      rF -= 0.12 * sg;
+      if (p.hitPart === 'head') {
+        torsoX += 0.2 * back * sg;
+        headX += 0.35 * back * sg;
+      } else if (p.hitPart === 'legL' || p.hitPart === 'legR') {
+        torsoX -= 0.42 * sg;
+        torsoZ += (p.hitPart === 'legL' ? 0.2 : -0.2) * sg;
+      } else torsoX -= 0.4 * back * sg;
+      torsoY += 0.2 * p.flinchSide * sg;
     }
 
     // Arrodillado (aturdido): rodilla derecha en el suelo, torso vencido.
@@ -626,6 +710,12 @@ export class CharacterRig {
     if (kk > 0.001) {
       thighR = lerp(thighR, -0.05, kk);
       shinR = lerp(shinR, -1.62, kk);
+    }
+    if (kneeFold > 0) {
+      legL.thigh = lerp(legL.thigh, 0.06, kneeFold);
+      legL.shin = lerp(legL.shin, -1.6, kneeFold);
+      thighR = lerp(thighR, -0.06, kneeFold);
+      shinR = lerp(shinR, -1.5, kneeFold);
     }
 
     // ------------------------------------------------------------- brazos
@@ -874,18 +964,96 @@ export class CharacterRig {
       lsz = 0.2;
       rsz = -0.2;
     } else if (st === 'dead') {
-      lsx = rsx = p.death === 1 ? 0.5 : -0.25;
-      lel = rel = p.death === 2 ? 0.9 : 0.35;
-      lsz = p.death === 2 ? -0.3 : -0.95;
-      rsz = p.death === 2 ? 0.5 : 0.95;
+      const t = clamp(p.stateTime / DEATH_TIME[p.death], 0, 1);
+      if (p.death === 4) {
+        // Los brazos se van hacia delante en el aire y caen abiertos.
+        const out = 1 - smooth(0.45, 1, t);
+        lsx = lerp(0.04, 1.4, out);
+        rsx = lerp(-0.02, 1.25, out);
+        lel = rel = lerp(0.15, 0.35, out);
+        lsz = lerp(-1.05, -0.3, out);
+        rsz = lerp(0.95, 0.35, out);
+      } else if (p.death === 3 || p.death === 5) {
+        // Cuelgan sin fuerza hasta que el cuerpo cae.
+        const down = smooth(0.5, 1, t);
+        lsx = lerp(0.12, p.death === 3 ? 0.05 : -0.2, down);
+        rsx = lerp(0.05, p.death === 3 ? 0 : -0.25, down);
+        lel = lerp(0.12, 0.4, down);
+        rel = lerp(0.15, 0.2, down);
+        lsz = lerp(-0.12, -0.8, down);
+        rsz = lerp(0.12, 0.65, down);
+      } else if (p.death === 2) {
+        // De lado: el brazo de arriba cae cruzado por delante.
+        const down = smooth(0.55, 1, t);
+        lsx = lerp(-0.1, 0.7, down);
+        rsx = lerp(-0.25, 0.75, down);
+        lel = lerp(0.7, 0.5, down);
+        rel = lerp(0.7, 0.35, down);
+        lsz = -0.2;
+        rsz = lerp(0.3, -0.45, down);
+      } else {
+        // De espaldas se abren y caen al suelo; de bruces quedan a los lados.
+        const down = smooth(0.45, 1, t);
+        lsx = p.death === 1 ? lerp(0.8, 0.05, down) : -0.2;
+        rsx = p.death === 1 ? lerp(0.6, -0.02, down) : -0.25;
+        lel = lerp(0.5, 0.25, down);
+        rel = lerp(0.5, 0.12, down);
+        lsz = -0.95;
+        rsz = 0.95;
+      }
     }
-    // Sacudida de impacto: el torso se vence hacia atrás y hacia el lado contrario al disparo.
+    // Sacudida de impacto: cada parte se mueve como le dieron, hacia atrás si vino de frente y al revés si de espaldas.
     if (p.flinch > 0 && st !== 'dead') {
-      torsoX += 0.34 * p.flinch;
-      torsoZ += 0.26 * p.flinch * p.flinchSide;
-      headX += 0.3 * p.flinch;
-      lel += 0.25 * p.flinch;
-      rel += 0.15 * p.flinch;
+      const f = p.flinch;
+      const back = p.flinchFront ? 1 : -1;
+      switch (p.hitPart) {
+        case 'head':
+          headX += 0.75 * back * f;
+          torsoX += 0.24 * back * f;
+          torsoZ += 0.2 * f * p.flinchSide;
+          break;
+        case 'armL':
+        case 'armR': {
+          // El hombro se va con la bala y la mano suelta lo que sujetaba.
+          const right = p.hitPart === 'armR';
+          torsoY += (right ? -0.5 : 0.5) * back * f;
+          torsoX += 0.14 * back * f;
+          if (right) {
+            rsx -= 0.5 * f;
+            rsz += 0.25 * f;
+            rel -= 0.2 * f;
+          } else {
+            lsx -= 0.7 * f;
+            lsz -= 0.35 * f;
+          }
+          grip *= 1 - f;
+          break;
+        }
+        case 'legL':
+        case 'legR':
+          // Se le va la pierna: el cuerpo se dobla y cae hacia ese lado.
+          torsoX -= 0.32 * f;
+          torsoZ += (p.hitPart === 'legL' ? 0.22 : -0.22) * f;
+          headX += 0.12 * f;
+          break;
+        default:
+          torsoX += 0.36 * back * f;
+          torsoZ += 0.26 * f * p.flinchSide;
+          headX += (back > 0 ? 0.3 : 0.22) * f;
+          lel += 0.25 * f;
+          rel += 0.15 * f;
+      }
+    }
+    if (sg > 0.001) {
+      // Descolocado: el arma baja y la izquierda va a donde le dieron.
+      rsx = lerp(rsx, 0.15 - torsoX, sg * 0.75);
+      rel = lerp(rel, 0.75, sg * 0.75);
+      rsz = lerp(rsz, -0.05, sg * 0.75);
+      const head = p.hitPart === 'head';
+      lsx = lerp(lsx, (head ? 1.75 : 0.22) - torsoX, sg * 0.9);
+      lel = lerp(lel, head ? 2.3 : 1.95, sg * 0.9);
+      lsz = lerp(lsz, head ? 0.55 : 0.85, sg * 0.9);
+      grip *= 1 - sg;
     }
     if (dz > 0.001) {
       // El antebrazo izquierdo tapa los ojos; el arma cuelga.
@@ -911,7 +1079,8 @@ export class CharacterRig {
 
     // ------------------------------------------------------------- aplicación suavizada
     const exact = st === 'roll' || st === 'dead';
-    const k = exact ? 40 : JOINT_K;
+    // Al morir, las articulaciones se sueltan sin saltar de la postura en la que estaban.
+    const k = st === 'roll' ? 40 : st === 'dead' ? lerp(10, 34, smooth(0, 0.28, p.stateTime)) : JOINT_K;
     const s = (cur: number, tgt: number): number => damp(cur, tgt, k, dt);
     this.thighL.rotation.x = s(this.thighL.rotation.x, legL.thigh);
     this.thighR.rotation.x = s(this.thighR.rotation.x, thighR);
@@ -947,7 +1116,7 @@ export class CharacterRig {
     this.lelS = damp(this.lelS, lel, kArmL, dt);
     this.armL.rotation.set(this.lsxS, 0, this.lszS);
     this.foreL.rotation.x = this.lelS;
-    const free = st === 'roll' || st === 'dead' || p.takedown >= 0 ? 0 : (1 - p.swap) * (1 - p.melee) * (1 - plantL) * (1 - kk) * (1 - dz);
+    const free = st === 'roll' || st === 'dead' || p.takedown >= 0 ? 0 : (1 - p.swap) * (1 - p.melee) * (1 - plantL) * (1 - kk) * (1 - dz) * (1 - sg);
     this.rsxS = damp(this.rsxS, rsx, kArm, dt);
     this.rsyS = s(this.rsyS, rsy * free);
     this.rszS = damp(this.rszS, rsz, kArm, dt);

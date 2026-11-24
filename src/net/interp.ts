@@ -88,6 +88,12 @@ export function lerpEnemy(a: EnemyNet, b: EnemyNet, t: number, out: EnemyNet): E
   out.recoilVis = lerp(a.recoilVis, b.recoilVis, t);
   out.flinch = lerp(a.flinch, b.flinch, t);
   out.flinchSide = a.flinchSide;
+  out.flinchFront = a.flinchFront;
+  out.hitPart = a.hitPart;
+  out.stagger = lerp(a.stagger, b.stagger, t);
+  out.limp = a.limp;
+  out.reload = a.reload >= 0 && b.reload >= 0 ? lerp(a.reload, b.reload, t) : a.reload;
+  out.hidden = a.hidden;
   out.deathStyle = a.deathStyle;
   out.deathFallStart = a.deathFallStart;
   out.thrownT = a.thrownT >= 0 && b.thrownT >= 0 ? lerp(a.thrownT, b.thrownT, t) : a.thrownT;

@@ -1,7 +1,7 @@
 // Hojas de diseño: armas, personajes y efectos dibujados con el motor del juego, aislados y con luz de
 // estudio, para revisar el aspecto sin entrar en el juego.
 // Uso: `npm run sheets` (todas) o `npm run sheets -- armas cara`. Salida: qa-screenshots/sheets/ (no se versiona).
-// Hojas: armas, efectos, cara, wick, sommelier. Arranca su propio servidor de desarrollo de Vite en el puerto 5173.
+// Hojas: armas, efectos, cara, huesped, enemigos, golpes, caidas, civiles, hotel... Arranca su propio servidor de desarrollo de Vite en el puerto 5173.
 import { spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -13,7 +13,51 @@ const URL = 'http://localhost:5173';
 
 // Vistas. `target`: 'body' | 'head' | 'chest' | [x, y, z]; `cam`: desplazamiento de la cámara desde el objetivo.
 const W = (model, d, zc) => ({ label: model, show: [`w:${model}`], target: [0, 1, zc], cam: [d, 0, 0], fov: 30 });
+/** Un golpe (o una caída) en varios instantes: `t` en segundos desde que le dan. */
+const HIT = (label, o, times) =>
+  times.map((t) => ({
+    label: `${label} ${t.toFixed(2)} s`,
+    show: [o.type ?? 'thug'],
+    aim: 1,
+    hit: { ...o, t },
+    target: 'body',
+    cam: [3.9, 0.35, -2.1],
+    fov: 34,
+  }));
+const FALL = (label, o, times) => HIT(label, o, times).map((v) => ({ ...v, target: [0, 0.75, 0.25], cam: [4.4, 0.6, -1.5] }));
+const HIT_T = [0.03, 0.09, 0.2, 0.4, 0.65];
+const FALL_T = [0.1, 0.22, 0.36, 0.55, 0.8, 1.2];
 const SHEETS = {
+  golpes: {
+    tile: [260, 330],
+    cols: 5,
+    views: [
+      ...HIT('torso', { part: 'torso' }, HIT_T),
+      ...HIT('torso, por detrás', { part: 'torso', back: true }, HIT_T),
+      ...HIT('cabeza', { part: 'head', stagger: true }, HIT_T),
+      ...HIT('brazo derecho', { part: 'armR', disarm: true }, HIT_T),
+      ...HIT('brazo izquierdo', { part: 'armL', disarm: true }, HIT_T),
+      ...HIT('pierna', { part: 'legR', stagger: true, limp: 1 }, HIT_T),
+      ...HIT('descolocado', { part: 'torso', stagger: true }, HIT_T),
+    ],
+  },
+  cojo: {
+    tile: [260, 330],
+    cols: 6,
+    views: [0.1, 0.3, 0.5, 0.7, 0.9, 1.1].flatMap((t) => HIT('cojea', { part: 'legL', limp: -1, walk: 2.2 }, [t])),
+  },
+  caidas: {
+    tile: [260, 260],
+    cols: 6,
+    views: [
+      ...FALL('de bruces', { fall: 0 }, FALL_T),
+      ...FALL('de espaldas', { fall: 1 }, FALL_T),
+      ...FALL('de lado', { fall: 2 }, FALL_T),
+      ...FALL('en seco', { fall: 3 }, FALL_T),
+      ...FALL('despedido', { fall: 4 }, FALL_T),
+      ...FALL('de rodillas', { fall: 5 }, FALL_T),
+    ],
+  },
   armas: {
     tile: [420, 300],
     cols: 2,
@@ -248,7 +292,37 @@ try {
           if (v.weapon !== undefined) a.rig.setWeapon(v.weapon);
           const p = Rig.idlePose();
           p.aim = v.aim ?? 0;
+          if (v.hit?.walk) p.speed = v.hit.walk;
           for (let k = 0; k < 120; k++) a.rig.update(p, 1 / 60);
+          a.rig.root.position.set(0, 0, 0);
+          if (v.hit) {
+            // El golpe, paso a paso, como lo hace la simulación (decaimientos de `Enemy`).
+            const h = v.hit;
+            let flinch = 1;
+            let stagger = h.stagger ? 1 : 0;
+            let vz = h.fall === 4 ? 5.5 : 0;
+            p.flinchFront = !h.back;
+            p.flinchSide = 1;
+            p.hitPart = h.part ?? 'torso';
+            p.limp = h.limp ?? 0;
+            if (h.disarm) p.aim = 0;
+            for (let k = 0, n = Math.round(h.t * 60); k < n; k++) {
+              if (h.fall !== undefined) {
+                p.state = 'dead';
+                p.death = h.fall;
+                p.stateTime = (k + 1) / 60;
+                a.rig.root.position.z += vz / 60;
+                vz *= 0.85;
+              } else if (!h.walk) {
+                p.flinch = flinch * flinch;
+                p.stagger = stagger;
+                p.aim = h.disarm || stagger > 0.35 ? 0 : 1;
+                flinch = Math.max(0, flinch - 4.5 / 60);
+                stagger = Math.max(0, stagger - 1.9 / 60);
+              }
+              a.rig.update(p, 1 / 60);
+            }
+          }
         }
         scene.updateMatrixWorld(true);
         const muzzleAt = () => a.rig.weaponMount.localToWorld(new THREE.Vector3(0, 0.035, -0.635));

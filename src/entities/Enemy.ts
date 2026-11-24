@@ -2,12 +2,14 @@ import type { Collider } from '@dimforge/rapier3d-compat';
 import { Vector3 } from 'three';
 import type { CombatAudio, CombatVfx, ShotSound } from '../combat/ports';
 import { applyDamage, type DamageResult, type HitZone, makeVitals, restoreVitals, type Vitals } from '../combat/damage';
+import { type DeathStyle, deathStyle, type HitInfo, type HitPart, hitPart, POISE_RECOVERY, type Reaction, reactTo } from '../combat/hitReaction';
+import type { SquadMember } from './ai/squad';
 import { FIXED_DT } from '../core/Loop';
 import { clamp, wrapAngle } from '../core/math';
 import type { Rng } from '../core/rng';
 import type { NavGrid } from '../levels/nav/NavGrid';
 import type { EnemySpawnDef, EnemyType } from '../levels/types';
-import { Groups, type PhysicsWorld, QueryGroups } from '../physics/Physics';
+import { createRayHit, Groups, type PhysicsWorld, QueryGroups } from '../physics/Physics';
 
 import { type AiState, EnemyBrain, emptyCommand, emptyPerception, type Tactics } from './ai/EnemyBrain';
 import { ENEMY_TYPES, type EnemyTypeDef } from './ai/enemyTypes';
@@ -31,11 +33,21 @@ export interface EnemyNet {
   recoilVis: number;
   flinch: number;
   flinchSide: number;
-  deathStyle: 0 | 1 | 2;
+  /** El impacto vino de frente (o de espaldas) y en qué parte. */
+  flinchFront: boolean;
+  hitPart: HitPart;
+  /** Descolocado (0..1) y cojeando (−1 pierna izquierda, +1 derecha, 0 no). */
+  stagger: number;
+  limp: number;
+  /** Recarga 0..1 (−1: no recarga). */
+  reload: number;
+  /** Escondido tras una cobertura. */
+  hidden: boolean;
+  deathStyle: DeathStyle;
   deathFallStart: number;
   thrownT: number;
   targetRise: number;
-  icon: 'none' | 'suspicious' | 'alert';
+  icon: 'none' | 'suspicious' | 'alert' | 'flank';
   detection: number;
   telegraph: number;
   hasLook: boolean;
@@ -62,6 +74,12 @@ export function emptyEnemyNet(): EnemyNet {
     recoilVis: 0,
     flinch: 0,
     flinchSide: 0,
+    flinchFront: true,
+    hitPart: 'torso',
+    stagger: 0,
+    limp: 0,
+    reload: -1,
+    hidden: false,
     deathStyle: 0,
     deathFallStart: 0,
     thrownT: -1,
@@ -149,10 +167,17 @@ const _eye = new Vector3();
 const _muzzle = new Vector3();
 const _dir = new Vector3();
 const _hitPt = new Vector3();
+const _ray = createRayHit();
 /** Lo que tarda el agarre del takedown en tumbar al enemigo (s). */
 export const THROW_DELAY = 0.1;
 /** Lo que un destello le corta el disparo a quien no se aturde (s). */
 const DAZZLE = 1.2;
+/** Lo que se tambalea hacia atrás (fracción de su marcha) y lo que frena una pierna herida. */
+const STAGGER_STEP = 0.42;
+const LIMP_SPEED = 0.55;
+/** Velocidad con la que sale despedido quien muere de un escopetazo (m/s). */
+const BLAST_SPEED = 5.5;
+const _react: Reaction = { stagger: 0, disarm: 0, limp: 0 };
 /** Tiempo tras la muerte en el que el cuerpo termina de caer; después ni se simula ni se anima (s). */
 export const CORPSE_SETTLE = 3;
 
@@ -207,8 +232,23 @@ export class Enemy {
   /** Sacudida al recibir un impacto (0..1) y lado del que vino. */
   flinch = 0;
   flinchSide = 0;
-  /** Forma de caer al morir: 0 de bruces, 1 de espaldas, 2 desplomado de lado. */
-  deathStyle: 0 | 1 | 2 = 0;
+  /** El impacto vino de frente y en qué parte del cuerpo dio. */
+  flinchFront = true;
+  hitPart: HitPart = 'torso';
+  /** Descolocado, 0..1 (decae con el tiempo que le queda). */
+  stagger = 0;
+  /** Cojea: lado de la pierna herida y lo que le queda (s). */
+  limpSide: -1 | 0 | 1 = 0;
+  private limpT = 0;
+  /** Daño encajado seguido: al pasar de su aguante se descoloca. */
+  private poiseHit = 0;
+  /** Hacia dónde lo empuja el último impacto (horizontal, unitario). */
+  private readonly push = new Vector3();
+  /** Lo que la escuadra lleva en cuenta de él. */
+  squadTurnT = 0;
+  squadWaitT = 0;
+  /** Forma de caer al morir (ver `hitReaction.ts`). */
+  deathStyle: DeathStyle = 0;
   /** Al morir proyectado en un takedown, lo que ya llevaba de caída (s). */
   deathFallStart = 0;
   /** Murió aturdido por un destello (puntúa distinto). */
@@ -246,9 +286,32 @@ export class Enemy {
     return this.focus;
   }
 
-  /** ¿Apunta ahora mismo? (su postura de apuntado). */
+  /** ¿Apunta ahora mismo? (su postura de apuntado; escondido, herido en el brazo o descolocado, baja el arma). */
   get aiming(): boolean {
-    return this.intent.aim;
+    return this.intent.aim && !this.cmd.hidden && !this.brain.disarmed && this.stagger <= 0.35;
+  }
+
+  /** Cojea (−1 pierna izquierda, +1 derecha, 0 no). */
+  get limping(): number {
+    return this.limpT > 0 ? this.limpSide : 0;
+  }
+
+  /** Lo que la escuadra necesita saber de él (ver `squad.ts`). */
+  squadInfo(out: SquadMember): SquadMember {
+    const s = this.brain.state;
+    const t = this.focus;
+    const f = this.mover.feet;
+    out.fighting = this.alive && (s === 'combat' || s === 'cover' || s === 'flank');
+    out.canSee = this.perception.canSee;
+    out.telegraphs = this.def.weapon.telegraph > 0;
+    out.canFlank = s === 'combat' && !this.spawnDef.stationary && this.def.canFlank && !this.brain.reloading && !this.brain.staggered;
+    out.flanker = this.def.flanker;
+    out.flanking = s === 'flank';
+    out.distance = this.perception.distance;
+    out.angle = t ? Math.atan2(f.x - t.feet.x, f.z - t.feet.z) : 0;
+    out.turnT = this.squadTurnT;
+    out.waitT = this.squadWaitT;
+    return out;
   }
 
   /** El tirador avisa con un láser antes de disparar. */
@@ -287,6 +350,9 @@ export class Enemy {
     this.hitFlash = Math.max(0, this.hitFlash - dt);
     this.recoilVis = Math.max(0, this.recoilVis - dt * 6);
     this.flinch = Math.max(0, this.flinch - dt * 4.5);
+    this.stagger = Math.max(0, this.stagger - dt * 1.9);
+    this.limpT = Math.max(0, this.limpT - dt);
+    this.poiseHit = Math.max(0, this.poiseHit - dt * POISE_RECOVERY);
     if (this.alive && this.thrownT >= 0) this.thrownT += dt;
     if (!this.alive) {
       // El cuerpo cae y se asienta; después ya no hace falta moverlo.
@@ -319,6 +385,7 @@ export class Enemy {
     this.mover.fixedUpdate(dt, this.intent);
     this.trackProgress(dt);
     if (this.cmd.fire && target.alive) this.shoot(target);
+    else if (this.cmd.suppress) this.suppressFire();
     this.updateTelegraph(dt, target);
   }
 
@@ -433,6 +500,16 @@ export class Enemy {
     it.aim = c.hasLook && engaged && (!c.hasMove || !c.run || this.faceTargetT > 0);
     it.camYaw = lookYaw;
     this.mover.setPosture(c.crouch ? 'crouch' : 'stand');
+    // Descolocado: da unos pasos hacia donde lo empuja el impacto, sin perderlo de vista.
+    if (this.brain.staggered && this.push.lengthSq() > 0.5) {
+      this.hasPath = false;
+      const k = STAGGER_STEP * clamp(this.stagger * 1.6, 0, 1) * this.def.walkScale;
+      const sy = Math.sin(it.camYaw);
+      const cy = Math.cos(it.camYaw);
+      it.moveY = (-sy * this.push.x - cy * this.push.z) * k;
+      it.moveX = (cy * this.push.x - sy * this.push.z) * k;
+      return;
+    }
     if (!c.hasMove) {
       this.hasPath = false;
       return;
@@ -463,7 +540,7 @@ export class Enemy {
     const dx = _v.x - f.x;
     const dz = _v.z - f.z;
     const l = Math.hypot(dx, dz) || 1;
-    const speed = c.run ? this.def.runScale : this.def.walkScale;
+    const speed = (c.run ? this.def.runScale : this.def.walkScale) * (this.limpT > 0 ? LIMP_SPEED : 1);
     // Dirección de movimiento expresada relativa al yaw de la mirada (permite moverse y apuntar a la vez).
     if (!it.aim) it.camYaw = yawFromDir(dx, dz);
     const yaw = it.camYaw;
@@ -541,7 +618,7 @@ export class Enemy {
     const distK = clamp(12 / Math.max(1, dist), 0.35, 1.3);
     const moveK = t.speed > 5 ? 0.6 : t.speed > 2 ? 0.82 : 1;
     const crouchK = t.crouched ? 0.85 : 1;
-    const chance = wd.accuracy * this.w.accuracyMult * aimK * distK * moveK * crouchK;
+    const chance = wd.accuracy * this.w.accuracyMult * aimK * distK * moveK * crouchK * (1 - this.brain.shaken);
     const rng = this.w.rng;
     let anyHit = false;
     let dmg = 0;
@@ -563,6 +640,24 @@ export class Enemy {
     this.w.onShotAtPlayer(this, t, anyHit, dmg);
   }
 
+  /** Fuego de cobertura: una bala hacia donde vio al jugador, que da en lo que haya delante. */
+  private suppressFire(): void {
+    const at = this.brain.lastKnown;
+    const rng = this.w.rng;
+    this.muzzlePos(_muzzle);
+    _hitPt.set(at.x + rng.range(-0.7, 0.7), at.y + rng.range(0.7, 1.7), at.z + rng.range(-0.7, 0.7));
+    _dir.subVectors(_hitPt, _muzzle).normalize();
+    if (this.w.physics.raycast(_muzzle, _dir, this.def.weapon.range, QueryGroups.STATIC, _ray)) {
+      _hitPt.copy(_ray.point);
+      this.w.vfx.impact(_hitPt, _ray.normal, 'spark', 4);
+    } else _hitPt.copy(_muzzle).addScaledVector(_dir, this.def.weapon.range);
+    this.w.vfx.tracer(_muzzle, _hitPt, 0xffb070, 0.022);
+    this.w.vfx.muzzle(_muzzle, _dir, false);
+    this.w.audio.shot(ENEMY_SHOT_SOUND[this.def.weapon.model] ?? 'enemyPistol', _muzzle);
+    this.recoilVis = 1;
+    this.faceTargetT = 0.6;
+  }
+
   /** Telégrafo del tirador: fija dónde apunta el láser y pita cada vez más deprisa. */
   private updateTelegraph(dt: number, t: PlayerTarget): void {
     if (!this.hasLaser) return;
@@ -580,8 +675,8 @@ export class Enemy {
   }
 
   // ======================================================== daño
-  /** Aplica un impacto. `pierce` = takedown/ejecución. */
-  applyHit(amount: number, zone: HitZone, from: Vector3, headMult: number, pierce = false): DamageResult {
+  /** Aplica un impacto. `pierce` = takedown/ejecución. `hit`: dónde dio (decide cómo reacciona). */
+  applyHit(amount: number, zone: HitZone, from: Vector3, headMult: number, pierce = false, hit: HitInfo | null = null): DamageResult {
     const r = applyDamage(this.vitals, amount, { zone, headMult, pierce });
     if (r.dealt <= 0) return r;
     this.hitFlash = 0.12;
@@ -597,12 +692,43 @@ export class Enemy {
     const right = Math.cos(yaw) * dx - Math.sin(yaw) * dz;
     this.flinch = 1;
     this.flinchSide = right > 0 ? -1 : 1;
+    this.flinchFront = front >= 0;
+    const point = hit?.point;
+    const lateral = point ? Math.cos(yaw) * (point.x - this.mover.feet.x) - Math.sin(yaw) * (point.z - this.mover.feet.z) : 0;
+    const part = hitPart(zone, lateral, point ? (point.y - this.mover.feet.y) / this.mover.height : 0.6);
+    this.hitPart = part;
+    const l = Math.hypot(dx, dz);
+    if (l > 1e-3) this.push.set(-dx / l, 0, -dz / l);
     if (r.killed) {
-      // Por la espalda cae de bruces; de frente, de espaldas (siempre si fue a la cabeza) o desplomado.
-      this.deathStyle = this.thrownT >= 0 ? 1 : front < 0 ? 0 : zone === 'head' || Math.abs(right) < Math.abs(front) * 0.35 ? 1 : 2;
+      this.deathStyle = this.thrownT >= 0 ? 1 : deathStyle(part, front, right, hit?.blast ?? false, this.w.rng.next());
+      const blast = this.thrownT < 0 && this.deathStyle === 4;
       this.die();
+      if (blast) this.mover.shove(this.push.x * BLAST_SPEED, this.push.z * BLAST_SPEED);
+      return r;
     }
+    this.react(part, r.dealt);
     return r;
+  }
+
+  /** Reacción a un impacto que no lo mata: se descoloca, baja el arma o cojea según dónde le dieron. */
+  private react(part: HitPart, amount: number): void {
+    if (this.thrownT >= 0 || this.brain.state === 'stunned') return;
+    this.poiseHit += amount;
+    const { reset } = reactTo(part, amount, this.poiseHit, this.def.poise, _react);
+    if (reset) this.poiseHit = 0;
+    if (_react.disarm > 0) {
+      this.brain.disarm(_react.disarm);
+      this.aimIn = 0;
+    }
+    if (_react.limp > 0) {
+      this.limpT = Math.max(this.limpT, _react.limp);
+      this.limpSide = part === 'legL' ? -1 : 1;
+    }
+    if (_react.stagger > 0) {
+      this.brain.stagger(_react.stagger);
+      this.stagger = 1;
+      this.aimIn = 0;
+    }
   }
 
   private die(): void {
@@ -656,9 +782,10 @@ export class Enemy {
   reset(): void {
     if (!this.alive) return;
     restoreVitals(this.vitals);
-    this.brain.state = 'patrol';
-    this.brain.detection = 0;
-    this.brain.hasLastKnown = false;
+    this.brain.reset();
+    this.stagger = 0;
+    this.limpT = 0;
+    this.poiseHit = 0;
     this.mover.setLocked(false);
     this.mover.revive(this.home, this.spawnDef.yaw);
     this.hasPath = false;
@@ -672,13 +799,19 @@ export class Enemy {
     out.type = this.def.type;
     this.mover.writeNet(out.move);
     out.ai = this.brain.state;
-    out.aim = this.intent.aim;
+    out.aim = this.aiming;
     out.health = this.vitals.health;
     out.alive = this.alive;
     out.hitFlash = this.hitFlash;
     out.recoilVis = this.recoilVis;
     out.flinch = this.flinch;
     out.flinchSide = this.flinchSide;
+    out.flinchFront = this.flinchFront;
+    out.hitPart = this.hitPart;
+    out.stagger = this.stagger;
+    out.limp = this.limping;
+    out.reload = this.cmd.reload;
+    out.hidden = this.cmd.hidden;
     out.deathStyle = this.deathStyle;
     out.deathFallStart = this.deathFallStart;
     out.thrownT = this.thrownT;
@@ -716,11 +849,18 @@ export class Enemy {
     this.recoilVis = s.recoilVis;
     this.flinch = s.flinch;
     this.flinchSide = s.flinchSide;
+    this.flinchFront = s.flinchFront;
+    this.hitPart = s.hitPart;
+    this.stagger = s.stagger;
+    this.limpSide = s.limp < 0 ? -1 : s.limp > 0 ? 1 : 0;
+    this.limpT = s.limp !== 0 ? 1 : 0;
     this.deathStyle = s.deathStyle;
     this.deathFallStart = s.deathFallStart;
     this.thrownT = s.thrownT;
     this.targetRise = s.targetRise;
     const c = this.cmd;
+    c.reload = s.reload;
+    c.hidden = s.hidden;
     c.icon = s.icon;
     c.detection = s.detection;
     c.telegraph = s.telegraph;

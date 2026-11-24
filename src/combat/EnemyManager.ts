@@ -2,7 +2,8 @@ import type { Collider } from '@dimforge/rapier3d-compat';
 import { Vector3 } from 'three';
 
 import type { Rng } from '../core/rng';
-import type { Tactics } from '../entities/ai/EnemyBrain';
+import type { CoverChoice, Tactics } from '../entities/ai/EnemyBrain';
+import { planSquad, type SquadMember, type SquadOrder } from '../entities/ai/squad';
 import { Enemy, type EnemyWorld, type PlayerTarget } from '../entities/Enemy';
 import type { MoveNet } from '../entities/PlayerController';
 import { boxToOriented } from '../levels/levelPhysics';
@@ -15,6 +16,9 @@ import type { CombatAudio, CombatVfx } from './ports';
 interface CoverPoint {
   pos: Vector3;
   normal: Vector3;
+  /** Alta: tapa de pie y se asoma de lado, por `peek`. Baja: se asoma poniéndose de pie donde está. */
+  high: boolean;
+  peek: Vector3;
   claimedBy: string | null;
 }
 
@@ -36,6 +40,40 @@ const _v = new Vector3();
 const _a = new Vector3();
 const _b = new Vector3();
 const SHOUT_RADIUS = 18;
+/** Cada cuánto reparte órdenes la escuadra y cuánto pasa entre un rodeo y el siguiente (s). */
+const SQUAD_PERIOD = 0.25;
+const FLANK_COOLDOWN = 6;
+/** Un disparo del jugador que pasa a menos de esto (m) pone nervioso; cuánto, por disparo. */
+const NEAR_MISS = 1.5;
+const SUPPRESS_SHOT = 0.28;
+/** A esta distancia de una granada se aparta, si le da tiempo a verla: cuánto tarda en verla (s) y con qué probabilidad. */
+const GRENADE_FEAR = 5;
+const GRENADE_NOTICE = 0.35;
+const GRENADE_EVADE = 0.6;
+/** Cada cuánto miran las patrullas si hay un compañero caído, y desde dónde lo ven (m). */
+const BODY_PERIOD = 0.5;
+const BODY_SIGHT = 12;
+/** Coberturas que comprueba con rayos en cada búsqueda. */
+const COVER_CHECKS = 8;
+/** De pie, la altura de los ojos y la del pecho; agachado, la de la cabeza (m). */
+const EYE = 1.5;
+const CHEST = 1.3;
+const DUCK = 0.85;
+/** Altura mínima de una cobertura baja y de una que tapa de pie (m). */
+const LOW_MIN = 0.8;
+const HIGH_MIN = 1.75;
+/** Cuánto sale de la esquina quien se asoma por un lado, y lo que se puede desviar ese sitio (m). */
+const PEEK_OUT = 0.6;
+const PEEK_SLACK = 0.45;
+
+interface Squad {
+  flankCooldown: number;
+  readonly enemies: Enemy[];
+}
+
+function member(): SquadMember {
+  return { fighting: false, canSee: false, telegraphs: false, canFlank: false, flanker: false, flanking: false, distance: 0, angle: 0, turnT: 0, waitT: 0 };
+}
 
 /**
  * Gestor de enemigos + consultas tácticas (implementa `Tactics` para los cerebros).
@@ -47,11 +85,22 @@ export class EnemyManager implements Tactics {
   /** Siguiente id de red: nunca se reutiliza en la partida, aunque se retiren enemigos. */
   private nextUid = 1;
   private readonly cover: CoverPoint[] = [];
+  private readonly candidates: Array<{ c: CoverPoint; score: number }> = [];
   private readonly world: EnemyWorld;
   private readonly deps: EnemyManagerDeps;
   private mainComp = -1;
   private currentId = '';
   private spawnCounter = 0;
+  /** Escuadras: los que pelean con un mismo jugador (por su plaza). */
+  private readonly squads = new Map<number, Squad>();
+  private squadT = 0;
+  private bodyT = 0;
+  private readonly members: SquadMember[] = [];
+  private readonly orders: SquadOrder[] = [];
+  /** Caídos que ya encontró alguien. */
+  private readonly foundBodies = new WeakSet<Enemy>();
+  /** Quién ha visto cada granada y cuánto lleva viéndola (s); −1, ya decidió. */
+  private readonly grenadeSeen = new Map<number, Map<number, number>>();
 
   constructor(deps: EnemyManagerDeps) {
     this.deps = deps;
@@ -167,6 +216,49 @@ export class EnemyManager implements Tactics {
     return n;
   }
 
+  /**
+   * Un disparo del jugador (de `from` en la dirección unitaria `dir`, hasta `length`): a quien le pasa cerca lo pone a
+   * cubierto y le estropea la puntería. `hit`: a quién dio (ese ya tiene bastante).
+   */
+  nearShot(from: Vector3, dir: Vector3, length: number, hit: Enemy | null): void {
+    for (const e of this.enemies) {
+      if (e === hit || !e.alive) continue;
+      const f = e.feet;
+      const x = f.x - from.x;
+      const y = f.y + e.height * 0.6 - from.y;
+      const z = f.z - from.z;
+      const along = x * dir.x + y * dir.y + z * dir.z;
+      if (along < 0 || along > length + 0.5) continue;
+      const d2 = x * x + y * y + z * z - along * along;
+      if (d2 < NEAR_MISS * NEAR_MISS) e.brain.suppress(e.def.poise > 100 ? SUPPRESS_SHOT * 0.4 : SUPPRESS_SHOT);
+    }
+  }
+
+  /** Una granada en juego, en cada paso: quien la ve cerca se aparta, si le da tiempo. */
+  grenadeNear(id: number, at: Vector3, dt: number): void {
+    let seen = this.grenadeSeen.get(id);
+    for (const e of this.enemies) {
+      if (!e.alive || e.feet.distanceToSquared(at) > GRENADE_FEAR * GRENADE_FEAR) continue;
+      const t = seen?.get(e.uid) ?? 0;
+      if (t < 0) continue;
+      _a.set(e.feet.x, e.feet.y + EYE, e.feet.z);
+      _b.set(at.x, at.y + 0.12, at.z);
+      if (!this.deps.physics.lineOfSight(_a, _b, QueryGroups.STATIC)) continue;
+      if (!seen) this.grenadeSeen.set(id, (seen = new Map()));
+      if (t + dt < GRENADE_NOTICE) {
+        seen.set(e.uid, t + dt);
+        continue;
+      }
+      seen.set(e.uid, -1);
+      if (this.deps.rng.chance(GRENADE_EVADE)) e.brain.evade(at, e.feet, this);
+    }
+  }
+
+  /** Una granada que ya no está. */
+  grenadeGone(id: number): void {
+    this.grenadeSeen.delete(id);
+  }
+
   /** Alerta a todos (alarma). */
   alertAll(at: Vector3): void {
     for (const e of this.enemies) if (e.alive) e.brain.alert(at);
@@ -174,6 +266,8 @@ export class EnemyManager implements Tactics {
 
   /** Un paso de todos los enemigos; cada uno elige a quién atacar entre `targets` (uno por jugador). */
   fixedUpdate(dt: number, targets: readonly PlayerTarget[]): void {
+    this.updateSquads(dt);
+    this.findBodies(dt);
     for (const e of this.enemies) {
       this.currentId = e.id;
       const wasAlert = e.state === 'combat' || e.state === 'cover' || e.state === 'flank';
@@ -184,10 +278,80 @@ export class EnemyManager implements Tactics {
         this.deps.audio.alert(e.feet);
         this.deps.onEnemyAlert?.(e);
       }
+      if (e.brain.callout) {
+        e.brain.callout = false;
+        this.deps.audio.alert(e.feet);
+      }
       // Libera la cobertura reservada al salir del estado.
       if (e.state !== 'cover') this.releaseCover(e.id);
     }
     this.currentId = '';
+  }
+
+  /** Reparte turnos de disparo y rodeos entre los que pelean con cada jugador. */
+  private updateSquads(dt: number): void {
+    for (const s of this.squads.values()) s.flankCooldown = Math.max(0, s.flankCooldown - dt);
+    for (const e of this.enemies) {
+      if (e.brain.mayFire) {
+        e.squadTurnT += dt;
+        e.squadWaitT = 0;
+      } else {
+        e.squadTurnT = 0;
+        e.squadWaitT += dt;
+      }
+    }
+    this.squadT -= dt;
+    if (this.squadT > 0) return;
+    this.squadT = SQUAD_PERIOD;
+    for (const s of this.squads.values()) s.enemies.length = 0;
+    for (const e of this.enemies) {
+      if (!e.alive) continue;
+      const id = e.target?.id ?? 0;
+      let s = this.squads.get(id);
+      // Empieza con el rodeo en espera: primero se planta cara.
+      if (!s) this.squads.set(id, (s = { flankCooldown: FLANK_COOLDOWN * 0.5, enemies: [] }));
+      s.enemies.push(e);
+    }
+    for (const s of this.squads.values()) {
+      const n = s.enemies.length;
+      if (n === 0) continue;
+      while (this.members.length < n) this.members.push(member());
+      this.members.length = n;
+      for (let i = 0; i < n; i++) s.enemies[i]!.squadInfo(this.members[i]!);
+      if (planSquad(this.members, s.flankCooldown <= 0, this.orders)) s.flankCooldown = FLANK_COOLDOWN;
+      for (let i = 0; i < n; i++) {
+        const b = s.enemies[i]!.brain;
+        const o = this.orders[i]!;
+        b.mayFire = o.mayFire;
+        b.covering = o.covering;
+        b.flankOrder = o.flank;
+      }
+    }
+  }
+
+  /** Una patrulla que ve a un compañero caído registra la zona. Cada cuerpo se encuentra una vez. */
+  private findBodies(dt: number): void {
+    this.bodyT -= dt;
+    if (this.bodyT > 0) return;
+    this.bodyT = BODY_PERIOD;
+    for (const body of this.enemies) {
+      if (body.alive || this.foundBodies.has(body)) continue;
+      for (const e of this.enemies) {
+        if (!e.alive || (e.state !== 'patrol' && e.state !== 'suspicious')) continue;
+        const dx = body.feet.x - e.feet.x;
+        const dz = body.feet.z - e.feet.z;
+        const d = Math.hypot(dx, dz);
+        if (d > BODY_SIGHT || Math.abs(body.feet.y - e.feet.y) > 2.5) continue;
+        const yaw = e.mover.yaw;
+        if (d > 2 && (-Math.sin(yaw) * dx - Math.cos(yaw) * dz) / d < 0.35) continue;
+        _a.set(e.feet.x, e.feet.y + EYE, e.feet.z);
+        _b.set(body.feet.x, body.feet.y + 0.35, body.feet.z);
+        if (!this.deps.physics.lineOfSight(_a, _b, QueryGroups.STATIC)) continue;
+        this.foundBodies.add(body);
+        e.brain.findBody(body.feet);
+        break;
+      }
+    }
   }
 
   private shout(from: Enemy, playerPos: Vector3): void {
@@ -204,6 +368,7 @@ export class EnemyManager implements Tactics {
     this.enemies.length = 0;
     this.byHandle.clear();
     this.byUid.clear();
+    this.squads.clear();
     for (const c of this.cover) c.claimedBy = null;
   }
 
@@ -286,7 +451,23 @@ export class EnemyManager implements Tactics {
           const n = nav.nearestNode(pos.x, pos.y, pos.z, 0.6);
           if (n < 0 || nav.comp[n] !== this.mainComp) continue;
           nav.pos(n, pos);
-          this.cover.push({ pos, normal: _a.clone(), claimedBy: null });
+          const top = ob.center.y + ob.half.y - pos.y;
+          if (top < LOW_MIN) continue;
+          if (top < HIGH_MIN) {
+            this.cover.push({ pos, normal: _a.clone(), high: false, peek: pos, claimedBy: null });
+            continue;
+          }
+          // Alta: solo sirven los extremos de la cara, con sitio para asomarse más allá de la esquina.
+          for (const side of [-1, 1]) {
+            if ((side < 0 && i > 0) || (side > 0 && i < steps - 1)) continue;
+            const t = (tangentHalf + PEEK_OUT) * side;
+            _v.set(ob.center.x + _a.x * (h + 0.75) + _b.x * t, pos.y, ob.center.z + _a.z * (h + 0.75) + _b.z * t);
+            const pn = nav.nearestNode(_v.x, _v.y, _v.z, 0.6, this.mainComp);
+            if (pn < 0) continue;
+            const peek = nav.pos(pn, new Vector3());
+            if (Math.hypot(peek.x - _v.x, peek.z - _v.z) > PEEK_SLACK || Math.abs(peek.y - pos.y) > 0.4) continue;
+            this.cover.push({ pos, normal: _a.clone(), high: true, peek, claimedBy: null });
+          }
         }
       }
     }
@@ -296,32 +477,42 @@ export class EnemyManager implements Tactics {
     for (const c of this.cover) if (c.claimedBy === id) c.claimedBy = null;
   }
 
-  findCover(self: Vector3, threat: Vector3, out: Vector3): boolean {
+  /**
+   * La mejor cobertura: cerca, con la caja entre ella y la amenaza y, comprobado con rayos, que tape de verdad a quien
+   * se esconde y que deje disparar a quien se asoma. Mejor si no obliga a acercarse al jugador.
+   */
+  findCover(self: Vector3, threat: Vector3, out: CoverChoice): boolean {
     const ph = this.deps.physics;
-    let checks = 0;
-    let best: CoverPoint | null = null;
-    let bestD = Number.POSITIVE_INFINITY;
-    // Candidatos ordenados por distancia (sin ordenar el array: búsqueda incremental de los 6 mejores).
+    const list = this.candidates;
+    list.length = 0;
+    const dt = self.distanceTo(threat);
     for (const c of this.cover) {
       if (c.claimedBy && c.claimedBy !== this.currentId) continue;
       const d = c.pos.distanceTo(self);
-      if (d > 16 || c.pos.distanceTo(threat) < 4) continue;
+      const away = c.pos.distanceTo(threat);
+      if (d > 16 || away < 4) continue;
       _v.subVectors(threat, c.pos).setY(0).normalize();
-      if (_v.dot(c.normal) > -0.35) continue; // la caja no queda entre la cobertura y la amenaza
-      if (d < bestD) {
-        // Verificación real: agachado tapado, de pie con línea de tiro.
-        if (checks++ > 6) break;
-        _a.set(c.pos.x, c.pos.y + 0.85, c.pos.z);
-        _b.set(threat.x, threat.y + 1.4, threat.z);
-        if (ph.lineOfSight(_a, _b, QueryGroups.STATIC)) continue;
-        best = c;
-        bestD = d;
-      }
+      const face = -_v.dot(c.normal);
+      if (face < 0.35) continue; // la caja no queda entre la cobertura y la amenaza
+      list.push({ c, score: -d - Math.max(0, dt - away) * 0.6 + face * 2 });
     }
-    if (!best) return false;
-    best.claimedBy = this.currentId;
-    out.copy(best.pos);
-    return true;
+    list.sort((a, b) => b.score - a.score);
+    _b.set(threat.x, threat.y + CHEST, threat.z);
+    for (let i = 0; i < list.length && i < COVER_CHECKS; i++) {
+      const c = list[i]!.c;
+      _a.set(c.pos.x, c.pos.y + (c.high ? CHEST : DUCK), c.pos.z);
+      if (ph.lineOfSight(_a, _b, QueryGroups.STATIC)) continue;
+      _a.set(c.peek.x, c.peek.y + EYE, c.peek.z);
+      if (!ph.lineOfSight(_a, _b, QueryGroups.STATIC)) continue;
+      this.releaseCover(this.currentId);
+      // Los dos extremos de una cara estrecha comparten sitio: se reservan juntos.
+      for (const o of this.cover) if (o.pos === c.pos) o.claimedBy = this.currentId;
+      out.pos.copy(c.pos);
+      out.peek.copy(c.peek);
+      out.high = c.high;
+      return true;
+    }
+    return false;
   }
 
   findFlank(self: Vector3, threat: Vector3, side: number, out: Vector3): boolean {

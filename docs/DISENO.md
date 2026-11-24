@@ -132,7 +132,7 @@ Cada contrato sigue el flujo **briefing** (3 líneas: objetivo, regla especial, 
 | Tipo | Color | Arma | Salud | Comportamiento | Telégrafo |
 |---|---|---|---|---|---|
 | Matón | Naranja | Pistola, 8 de daño | 80 | Avanza y dispara | Fogonazo previo y sonido de amartillar |
-| Escolta | Amarillo | SMG en ráfagas, 5 de daño | 90 | **Flanquea** | Grito "¡Por la izquierda!" e icono de flecha |
+| Escolta | Amarillo | SMG en ráfagas, 5 de daño | 90 | **Rodea** el primero cuando la escuadra lo manda | Voz de aviso e icono de flechas mientras rodea |
 | Tirador | Rojo | Rifle de tirador con mira, 35 de daño | 70 | Fijo en altura, cubre zonas | **Láser rojo visible 1,2 s** con pitido creciente antes del disparo |
 | Blindado | Azul acero | Escopeta táctica, 4×6 de daño | 120 + 150 de armadura | Avanza lento; el cuerpo recibe solo el 20 % del daño | Levanta el arma y parpadea en rojo 0,6 s |
 | Jefe | Magenta | Revólver en ráfagas | 420 + 120 de armadura | Fases: al 50 % y al 20 % se arrodilla e invoca escoltas | El rim se enciende antes de cada ráfaga |
@@ -142,8 +142,16 @@ Un headshot mata de un tiro a matón, escolta y tirador. Esa regla es simple y p
 **IA:** máquina de estados *patrulla → sospecha → combate → cobertura → flanqueo → búsqueda* (más aturdido y muerto).
 - **Percepción:** cono de 110° y 25 m con línea de visión. Agacharte reduce el alcance un 40 %. Los disparos se oyen a 30 m (8 m con silenciador).
 - **Medidor de detección** visible sobre la cabeza: "?" amarillo que se llena y pasa a "!" rojo.
+- **Escuadra** (`entities/ai/squad.ts`): los que pelean con un mismo jugador se reparten el trabajo. Solo unos pocos tienen turno de disparo a la vez (tres, y uno más por cada dos de más, hasta seis); el resto se cubre o se mueve, y el turno va pasando. Con tres o más, uno **rodea** por el lado en el que ya está, lo avisa, y los demás lo cubren disparando hacia donde vieron al jugador. Quien avisa antes de disparar (láser, alzar el arma) no gasta turno.
+- **Coberturas:** se esconden de verdad y se asoman para disparar: por encima de las bajas, por el lado de las altas. Antes de elegir una se comprueba con rayos que tape a quien se esconde y que deje disparar a quien se asoma. Si el jugador los ve escondidos, la cambian.
+- **Cargadores:** cada arma tiene el suyo. Recargando no disparan, y se esconden o al menos se agachan: es el momento de moverse.
+- **Fuego encima:** un disparo que les pasa a menos de 1,5 m los pone nerviosos: apuntan peor y, si siguen cayendo, no se asoman.
+- **Granadas y cuerpos:** quien ve caer una aturdidora cerca se aparta, si le da tiempo (por eso conviene lanzarla por encima de una cobertura). Una patrulla que encuentra a un compañero caído registra la zona.
+- **Búsqueda:** al perder al jugador registran varios sitios alrededor de donde lo vieron antes de volver a su ronda.
 - **Tiempo de reacción** de 0,5 a 0,8 s antes del primer disparo. La puntería empieza al 40 % y sube durante 2 s de visión continua. Si ruedas, falla.
 - **Navegación:** A* sobre la grilla del nivel. Si un enemigo avanza menos de 0,25 m en 1 s, replanifica; a los 3 atascos cambia de meta táctica.
+
+**Reacciones a los impactos** (`combat/hitReaction.ts`): cada parte se mueve y pierde lo suyo. En la cabeza o con varios impactos seguidos (su *aguante*) se descolocan y dan unos pasos atrás sin poder disparar; en un brazo bajan el arma casi un segundo; en una pierna cojean a la mitad de velocidad y, si el golpe es fuerte, tropiezan. El blindado y el Juez aguantan mucho más. Y caen según cómo mueren: de bruces por la espalda, de espaldas o de rodillas de frente, en seco de un tiro en la cabeza, desplomados de lado y despedidos hacia atrás por un escopetazo a quemarropa.
 
 ### 4.3 Civiles
 - Tienen rim verde azulado y no llevan armas. Sobre un civil la mira cambia a "NO DISPARAR".

@@ -1,5 +1,6 @@
 import { DirectionalLight, type Material, Vector3 } from 'three';
 import type { MeterBus } from '../audio/AudioEngine';
+import { zoneFromHeight } from '../combat/damage';
 import type { GearId, Loadout, LoadoutSlot, UpgradeId, WeaponId } from '../combat/weapons';
 import type { Action } from '../core/actions';
 import { FIXED_DT } from '../core/Loop';
@@ -90,6 +91,13 @@ export interface EnemySnapshot {
   headY: number;
   /** Jugador al que ataca (−1 si aún ninguno). */
   targetId: number;
+  /** Última parte alcanzada y cómo le afecta. */
+  hitPart: string;
+  stagger: number;
+  limp: number;
+  disarmed: boolean;
+  reload: number;
+  deathStyle: number;
 }
 
 export interface HubSnapshot {
@@ -139,6 +147,8 @@ export interface QaApi {
   weaponAim(): { yaw: number; pitch: number; roll: number } | null;
   /** Ángulos de las articulaciones y posición de manos y cabeza del jugador (pruebas de fluidez). */
   rigMotion(): Record<string, number> | null;
+  /** Muestra del movimiento del personaje de un enemigo (como `rigMotion`). */
+  enemyMotion(id: string): Record<string, number> | null;
   teleport(x: number, y: number, z: number, yaw: number): void;
   checkpoint(id: string): boolean;
   /** Ids de los checkpoints del nivel cargado. */
@@ -241,6 +251,11 @@ export interface QaApi {
   civilians(): Array<{ id: string; alive: boolean; state: string; x: number; z: number; health: number }>;
   /** Mata a un enemigo en silencio (sin ruido ni alerta): prepara escenarios. */
   killEnemy(id: string): boolean;
+  /**
+   * Impacto en un enemigo: `lateral` (m a su derecha), `height01` (0 pies, 1 coronilla) y desde dónde viene respecto a
+   * él (`fromDeg`: 0 de frente, 180 por la espalda, 90 por su derecha).
+   */
+  hitEnemy(id: string, hit: { damage: number; lateral?: number; height01?: number; fromDeg?: number; blast?: boolean }): boolean;
   /** Ajustes actuales y estado derivado (cámara, render, audio). */
   settings(): {
     settings: Settings;
@@ -373,6 +388,11 @@ export function installQa(game: Game): void {
     rigHeight: () => game.session?.playerRig.silhouetteHeight() ?? 0,
     weaponAim: () => game.session?.playerRig.weaponAim() ?? null,
     rigMotion: () => game.session?.playerRig.motionSample() ?? null,
+    enemyMotion: (id) => {
+      const s = game.session;
+      const e = s?.enemies.enemies.find((x) => x.id === id);
+      return (s && e && s.enemyViews.rigOf(e)?.motionSample()) ?? null;
+    },
     player: () => {
       const p = game.session?.player;
       if (!p) return null;
@@ -482,6 +502,12 @@ export function installQa(game: Game): void {
         health: e.vitals.health,
         headY: e.feet.y + e.height - 0.15,
         targetId: e.target?.id ?? -1,
+        hitPart: e.hitPart,
+        stagger: e.stagger,
+        limp: e.limping,
+        disarmed: e.brain.disarmed,
+        reload: e.cmd.reload,
+        deathStyle: e.deathStyle,
       })),
     addPlayer: (x, y, z, yaw) => game.session?.addPlayer(x, y, z, yaw).id ?? -1,
     coopHost: () => coopUi.create(),
@@ -752,6 +778,19 @@ export function installQa(game: Game): void {
       const e = s?.enemies.enemies.find((x) => x.id === id || x.id.startsWith(`${id}#`));
       if (!s || !e || !e.alive) return false;
       e.applyHit(9999, 'body', s.player.feet, 1, true);
+      return true;
+    },
+    hitEnemy: (id, o) => {
+      const e = game.session?.enemies.enemies.find((x) => x.id === id);
+      if (!e || !e.alive) return false;
+      const yaw = e.mover.yaw;
+      const f = e.feet;
+      const side = o.lateral ?? 0;
+      const point = new Vector3(f.x + Math.cos(yaw) * side, f.y + (o.height01 ?? 0.6) * e.height, f.z - Math.sin(yaw) * side);
+      // Girando a su derecha desde su frente (−Z con yaw 0).
+      const a = yaw - ((o.fromDeg ?? 0) * Math.PI) / 180;
+      const from = new Vector3(f.x - Math.sin(a) * 6, f.y, f.z - Math.cos(a) * 6);
+      e.applyHit(o.damage, zoneFromHeight(point.y, f.y, e.height), from, 1, false, { point, blast: o.blast ?? false });
       return true;
     },
     civilians: () =>

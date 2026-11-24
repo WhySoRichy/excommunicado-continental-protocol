@@ -11,6 +11,7 @@ import type { PickupKind } from '../levels/types';
 import { createRayHit, type PhysicsWorld, QueryGroups, type RayHit, type Vec3Like } from '../physics/Physics';
 
 import { applyDamage, falloff, heal, makeVitals, restoreVitals, tickVitals, type Vitals, zoneFromHeight } from './damage';
+import { BLAST_RANGE, type HitInfo } from './hitReaction';
 import type { EnemyManager } from './EnemyManager';
 import { type Grenades, throwVelocity } from './Grenades';
 import type { Pickups } from './Pickups';
@@ -177,6 +178,7 @@ const _dir = new Vector3();
 const _right = new Vector3();
 const _up = new Vector3();
 const _end = new Vector3();
+const _hit: HitInfo = { point: _end, blast: false };
 const _tmp = new Vector3();
 const _base = new Vector3();
 const rec: [number, number] = [0, 0];
@@ -751,6 +753,7 @@ export class PlayerCombat {
     _up.crossVectors(_right, base).normalize();
     const spread = w.spread(aiming, p.stepSpeed(1 / 60) / 4.6, p.posture === 'crouch') * DEG2RAD * (blind !== 0 ? BLIND_SPREAD : 1);
     let anyEnemyHit = false;
+    let struck: Enemy | null = null;
     for (let i = 0; i < Math.max(1, d.pellets); i++) {
       // Distribución uniforme en disco (más densa al centro de forma controlada).
       const a = ctx.rng.range(0, Math.PI * 2);
@@ -767,11 +770,13 @@ export class PlayerCombat {
         const civ = enemy ? null : ctx.civilians?.fromCollider(this.hit.collider);
         if (enemy && enemy.alive) {
           anyEnemyHit = true;
+          struck = enemy;
           ctx.vfx.impact(_end, this.hit.normal, 'blood', 5);
           if (this.authority) {
             const zone = zoneFromHeight(_end.y, enemy.feet.y, enemy.height);
             const dmg = d.damage * falloff(this.hit.distance, d.falloffStart, d.falloffEnd);
-            const res = enemy.applyHit(dmg, zone, p.feet, d.headMult);
+            _hit.blast = d.pellets > 1 && this.hit.distance < BLAST_RANGE;
+            const res = enemy.applyHit(dmg, zone, p.feet, d.headMult, false, _hit);
             this.onHit(enemy, zone, res.killed, res.toHeavyArmor > res.toHealth, this.hit.distance, 'gun', ctx);
           }
         } else if (civ && civ.alive && ctx.civilians) {
@@ -809,6 +814,7 @@ export class PlayerCombat {
     ctx.camera.addTrauma(d.id === 'shotgun' ? 0.22 : d.id === 'dmr' || d.id === 'revolver' ? 0.14 : 0.07);
     this.recoilVis = 1;
     if (!this.authority) return;
+    ctx.enemies.nearShot(_muzzle, base, Math.min(d.range, _muzzle.distanceTo(_aim) + 6), struck);
     ctx.enemies.noise(p.feet, d.noise);
     ctx.civilians?.noise(p.feet, Math.max(d.noise, 12));
   }

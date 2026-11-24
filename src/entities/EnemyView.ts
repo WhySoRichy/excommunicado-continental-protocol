@@ -17,6 +17,8 @@ const laserGeo = new BoxGeometry(1, 1, 1);
   const p = laserGeo.getAttribute('position');
   for (let i = 0; i < p.count; i++) if (p.getZ(i) > 0) p.setXY(i, p.getX(i) * 0.3, p.getY(i) * 0.3);
 }
+/** Rapidez con la que el cuerpo sigue al giro de la simulación. */
+const TURN_OMEGA = 22;
 const RED = new Color(0xff2233);
 const _muzzle = new Vector3();
 
@@ -96,7 +98,8 @@ export class EnemyView {
     const m = e.mover;
     const root = this.rig.root;
     m.renderFeet(alpha, root.position);
-    const yaw = updateBodyYaw(this.visualYaw, m.renderYaw(alpha), e.aiming, dt);
+    // Siempre con el muelle, también apuntando: a un enemigo no le hace falta el giro exacto y sus cambios de sentido se notaban.
+    const yaw = updateBodyYaw(this.visualYaw, m.renderYaw(alpha), false, dt, TURN_OMEGA);
     root.rotation.y = yaw;
     const pose = this.pose;
     pose.speed = m.stepSpeed(FIXED_DT);
@@ -113,6 +116,9 @@ export class EnemyView {
     pose.posture = m.posture;
     pose.grounded = m.grounded;
     pose.aim = e.aiming ? 1 : 0;
+    pose.reload = e.alive ? e.cmd.reload : -1;
+    // Escondido: pegado a la cobertura con el arma recogida.
+    pose.cover = e.alive && e.cmd.hidden ? (m.posture === 'crouch' ? 'low' : 'high') : 'none';
     this.updateLook(stunned || thrown, dt);
     if (!e.alive) this.deadFor += dt;
     pose.stateTime = thrown ? Math.max(0, e.thrownT - THROW_DELAY) : e.alive ? m.stateTime : this.deadFor;
@@ -120,6 +126,10 @@ export class EnemyView {
     pose.melee = 0;
     pose.flinch = e.flinch * e.flinch;
     pose.flinchSide = e.flinchSide;
+    pose.flinchFront = e.flinchFront;
+    pose.hitPart = e.hitPart;
+    pose.stagger = e.alive ? e.stagger : 0;
+    pose.limp = e.limping;
     pose.death = thrown ? 1 : e.deathStyle;
     this.rig.update(pose, dt);
     // Feedback de impacto y telégrafo del blindado/jefe: el rim se enciende.
@@ -139,9 +149,10 @@ export class EnemyView {
     // Icono de alerta (? / !) sobre la cabeza.
     if (dazed || (e.alive && e.cmd.icon !== 'none')) {
       this.icon.visible = true;
-      this.icon.material = alertIconMaterial(dazed ? 'stunned' : e.cmd.icon === 'alert' ? 'alert' : 'suspicious');
+      const kind = e.cmd.icon;
+      this.icon.material = alertIconMaterial(dazed ? 'stunned' : kind === 'alert' || kind === 'flank' ? kind : 'suspicious');
       this.icon.position.set(root.position.x, root.position.y + (m.posture === 'crouch' ? 1.55 : 2.2), root.position.z);
-      const s = dazed ? 0.42 : e.cmd.icon === 'alert' ? 0.5 : 0.32 + e.cmd.detection * 0.16;
+      const s = dazed ? 0.42 : kind === 'alert' || kind === 'flank' ? 0.5 : 0.32 + e.cmd.detection * 0.16;
       this.icon.scale.set(s, s, s);
     } else {
       this.icon.visible = false;
@@ -230,6 +241,11 @@ export class EnemyViews {
       v.update(alpha, dt, view);
     }
     this.sweep(enemies.length, t);
+  }
+
+  /** El personaje de un enemigo (para medir su animación en las pruebas). */
+  rigOf(e: Enemy): CharacterRig | null {
+    return this.views.get(e)?.rig ?? null;
   }
 
   dispose(): void {

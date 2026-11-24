@@ -665,8 +665,8 @@ function star(ctx: CanvasRenderingContext2D, x: number, y: number, r: number): v
 
 const iconMats = new Map<string, SpriteMaterial>();
 
-/** Icono sobre la cabeza de un enemigo: sospecha (?), alerta (!) o aturdido (estrellas). */
-export function alertIconMaterial(kind: 'suspicious' | 'alert' | 'stunned'): SpriteMaterial {
+/** Icono sobre la cabeza de un enemigo: sospecha (?), alerta (!), rodeando (flechas) o aturdido (estrellas). */
+export function alertIconMaterial(kind: 'suspicious' | 'alert' | 'flank' | 'stunned'): SpriteMaterial {
   const hit = iconMats.get(kind);
   if (hit) return hit;
   const c = document.createElement('canvas');
@@ -674,7 +674,7 @@ export function alertIconMaterial(kind: 'suspicious' | 'alert' | 'stunned'): Spr
   c.height = 64;
   const ctx = c.getContext('2d');
   if (!ctx) throw new Error('Canvas 2D no disponible');
-  const color = kind === 'alert' ? '#ff3344' : kind === 'stunned' ? '#cfe6ff' : '#ffd23f';
+  const color = kind === 'alert' ? '#ff3344' : kind === 'stunned' ? '#cfe6ff' : kind === 'flank' ? '#ff9a2e' : '#ffd23f';
   ctx.fillStyle = 'rgba(10,10,12,0.75)';
   ctx.beginPath();
   ctx.arc(32, 32, 28, 0, Math.PI * 2);
@@ -693,6 +693,19 @@ export function alertIconMaterial(kind: 'suspicious' | 'alert' | 'stunned'): Spr
       [45, 38, 8],
     ] as const)
       star(ctx, x, y, r);
+  } else if (kind === 'flank') {
+    // Dos puntas de flecha que se abren: viene por un lado.
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 6;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    for (const s of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(32 + s * 8, 20);
+      ctx.lineTo(32 + s * 19, 32);
+      ctx.lineTo(32 + s * 8, 44);
+      ctx.stroke();
+    }
   } else ctx.fillText(kind === 'alert' ? '!' : '?', 32, 35);
   const t = new CanvasTexture(c);
   t.colorSpace = SRGBColorSpace;

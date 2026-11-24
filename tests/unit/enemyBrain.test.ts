@@ -7,7 +7,9 @@ import { ENEMY_TYPES } from '../../src/entities/ai/enemyTypes';
 
 const tactics: Tactics = {
   findCover: (self, threat, out) => {
-    out.set(self.x + (self.x - threat.x > 0 ? 2 : -2), self.y, self.z);
+    out.pos.set(self.x + (self.x - threat.x > 0 ? 2 : -2), self.y, self.z);
+    out.peek.copy(out.pos);
+    out.high = false;
     return true;
   },
   findFlank: (self, threat, side, out) => {
@@ -134,9 +136,311 @@ describe('EnemyBrain', () => {
     p.canShoot = false;
     run(b, p, 2);
     expect(b.state).toBe('search');
+    // Llega donde lo perdió y registra varios sitios alrededor antes de dejarlo.
     p.selfPos.copy(b.lastKnown);
-    run(b, p, 6);
+    const lost = b.lastKnown.clone();
+    const visited = new Set<string>();
+    const cmd = emptyCommand();
+    let t = 0;
+    for (; t < 40 && b.state === 'search'; t += FIXED_DT) {
+      b.update(FIXED_DT, p, tactics, cmd);
+      if (cmd.hasMove) p.selfPos.copy(cmd.moveTo);
+      if (p.selfPos.distanceTo(lost) > 1) visited.add(p.selfPos.toArray().join());
+      expect(p.selfPos.distanceTo(lost), 'sin alejarse de ahí').toBeLessThan(8);
+    }
+    expect(visited.size).toBeGreaterThan(0);
     expect(b.state).toBe('patrol');
+    expect(t, 'no busca para siempre').toBeLessThan(25);
+  });
+
+  it('gasta el cargador, recarga sin disparar y busca dónde meterse; sin pelea, lo repone', () => {
+    const b = brain('thug');
+    const w = ENEMY_TYPES.thug.weapon;
+    const p = seeing(emptyPerception(), 10);
+    b.alert(p.playerPos);
+    const none: Tactics = { ...tactics, findCover: () => false };
+    const cmd = emptyCommand();
+    let shots = 0;
+    let t = 0;
+    for (; t < 20 && !b.reloading; t += FIXED_DT) {
+      b.update(FIXED_DT, p, none, cmd);
+      if (cmd.fire) shots++;
+    }
+    expect(shots, 'un cargador').toBe(w.mag);
+    // Sin cobertura a mano, al menos se agacha; no dispara hasta terminar.
+    let during = 0;
+    let crouched = true;
+    let left = 0;
+    for (; left < 5 && b.reloading; left += FIXED_DT) {
+      b.update(FIXED_DT, p, none, cmd);
+      if (!b.reloading) break;
+      if (cmd.fire) during++;
+      crouched &&= cmd.crouch;
+      expect(cmd.reload).toBeGreaterThanOrEqual(0);
+      expect(cmd.reload).toBeLessThanOrEqual(1);
+    }
+    expect(during).toBe(0);
+    expect(crouched).toBe(true);
+    expect(left).toBeGreaterThan(w.reload - 0.1);
+    expect(left).toBeLessThan(w.reload + 0.1);
+    b.update(FIXED_DT, p, none, cmd);
+    expect(cmd.reload).toBe(-1);
+    run(b, p, 3, (f) => (shots += f ? 1 : 0));
+    expect(shots).toBeGreaterThan(w.mag);
+
+    // Con cobertura, recargando se va a ella.
+    const c = brain('thug');
+    c.alert(p.playerPos);
+    let hid = false;
+    for (let i = 0; i < 1200 && !hid; i++) {
+      c.update(FIXED_DT, p, tactics, cmd);
+      hid = c.reloading && (c.state as string) === 'cover';
+    }
+    expect(hid).toBe(true);
+  });
+
+  it('sin turno no empieza otra ráfaga; con él, sí', () => {
+    const b = brain('thug');
+    const p = seeing(emptyPerception(), 10);
+    b.alert(p.playerPos);
+    b.mayFire = false;
+    const still: Tactics = { ...tactics, findCover: () => false };
+    const cmd = emptyCommand();
+    let shots = 0;
+    const go = (s: number): number => {
+      shots = 0;
+      for (let t = 0; t < s; t += FIXED_DT) {
+        b.update(FIXED_DT, p, still, cmd);
+        if (cmd.fire) shots++;
+      }
+      return shots;
+    };
+    expect(go(4)).toBe(0);
+    b.mayFire = true;
+    expect(go(2)).toBeGreaterThan(0);
+  });
+
+  it('el fuego encima lo mantiene escondido y le estropea la puntería; al rato se asoma', () => {
+    const b = brain('thug');
+    const p = seeing(emptyPerception(), 10);
+    b.alert(p.playerPos);
+    const cover = new Vector3(2, 0, 0);
+    const t: Tactics = {
+      ...tactics,
+      findCover: (_s, _t, out) => {
+        out.pos.copy(cover);
+        out.peek.copy(cover);
+        out.high = false;
+        return true;
+      },
+    };
+    const cmd = emptyCommand();
+    const step = (): void => b.update(FIXED_DT, p, t, cmd);
+    // En campo abierto, con fuego encima va a cubrirse.
+    for (let i = 0; i < 5; i++) b.suppress(0.28);
+    expect(b.shaken).toBeGreaterThan(0.3);
+    step();
+    expect(b.state).toBe('cover');
+    p.selfPos.copy(cover);
+    p.canSee = false;
+    p.canShoot = false;
+    for (let i = 0; i < 240; i++) {
+      b.suppress(0.02);
+      step();
+      if (i > 5) {
+        expect(cmd.crouch, `escondido en el paso ${i}`).toBe(true);
+        expect(cmd.hidden).toBe(true);
+      }
+    }
+    // Deja de caerle fuego encima: se asoma.
+    let up = false;
+    for (let i = 0; i < 240 && !up; i++) {
+      step();
+      up = !cmd.crouch && !cmd.hidden;
+    }
+    expect(up).toBe(true);
+    expect(b.shaken).toBeLessThan(0.35);
+  });
+
+  it('cobertura alta: se esconde, sale por el lado a disparar y vuelve', () => {
+    const b = brain('escort');
+    const p = seeing(emptyPerception(), 10);
+    b.alert(p.playerPos);
+    const pos = new Vector3(2, 0, 0);
+    const peek = new Vector3(2.9, 0, 0);
+    const t: Tactics = {
+      ...tactics,
+      findCover: (_s, _t, out) => {
+        out.pos.copy(pos);
+        out.peek.copy(peek);
+        out.high = true;
+        return true;
+      },
+    };
+    for (let i = 0; i < 5; i++) b.suppress(0.3);
+    const cmd = emptyCommand();
+    let shotsOut = 0;
+    let shotsIn = 0;
+    let trips = 0;
+    let out = false;
+    for (let i = 0; i < 600; i++) {
+      // Solo se le ve (y ve) fuera.
+      out = p.selfPos.distanceTo(peek) < 0.5;
+      p.canSee = out;
+      p.canShoot = out;
+      const was = out;
+      b.update(FIXED_DT, p, t, cmd);
+      if (b.state !== 'cover') break;
+      if (cmd.hasMove) p.selfPos.lerp(cmd.moveTo, 0.2);
+      expect(cmd.crouch, 'de pie: tapa entero').toBe(false);
+      if (cmd.fire) {
+        if (was) shotsOut++;
+        else shotsIn++;
+      }
+      if (!was && p.selfPos.distanceTo(peek) < 0.5) trips++;
+    }
+    expect(trips).toBeGreaterThan(1);
+    expect(shotsOut).toBeGreaterThan(1);
+    expect(shotsIn).toBe(0);
+  });
+
+  it('si lo ven estando escondido, cambia de cobertura', () => {
+    const b = brain('thug');
+    const p = seeing(emptyPerception(), 10);
+    b.alert(p.playerPos);
+    const spots = [new Vector3(2, 0, 0), new Vector3(-6, 0, 3)];
+    let n = 0;
+    const t: Tactics = {
+      ...tactics,
+      findCover: (_s, _t, out) => {
+        out.pos.copy(spots[Math.min(n++, 1)]!);
+        out.peek.copy(out.pos);
+        out.high = false;
+        return true;
+      },
+    };
+    for (let i = 0; i < 5; i++) b.suppress(0.3);
+    const cmd = emptyCommand();
+    b.update(FIXED_DT, p, t, cmd);
+    p.selfPos.copy(spots[0]!);
+    let moved = false;
+    for (let i = 0; i < 180 && !moved; i++) {
+      b.suppress(0.02);
+      b.update(FIXED_DT, p, t, cmd);
+      expect(b.state, 'directo de una a otra, sin salir a campo abierto').toBe('cover');
+      moved = cmd.hasMove && cmd.moveTo.distanceTo(spots[1]!) < 0.1;
+    }
+    expect(moved).toBe(true);
+  });
+
+  it('se aparta de una granada y luego sigue con lo suyo', () => {
+    const b = brain('thug');
+    const p = seeing(emptyPerception(), 10);
+    b.alert(p.playerPos);
+    run(b, p, 0.5);
+    const at = new Vector3(1, 0, 0);
+    b.evade(at, p.selfPos, { ...tactics, randomNear: (pos, _r, out) => (out.copy(pos), true) });
+    const cmd = emptyCommand();
+    b.update(FIXED_DT, p, tactics, cmd);
+    expect(cmd.hasMove && cmd.run).toBe(true);
+    expect(cmd.moveTo.distanceTo(at), 'lejos de ella').toBeGreaterThan(4);
+    expect(cmd.fire).toBe(false);
+    run(b, p, 1.5);
+    expect(b.state).toBe('combat');
+    // Quien no se mueve de su sitio no corre a ninguna parte.
+    const fixed = brain('marksman', [], true);
+    fixed.alert(p.playerPos);
+    fixed.evade(at, p.selfPos, tactics);
+    fixed.update(FIXED_DT, p, tactics, cmd);
+    expect(cmd.run).toBe(false);
+  });
+
+  it('descolocado no dispara ni se mueve por su cuenta; con el brazo herido no dispara', () => {
+    const b = brain('escort');
+    const p = seeing(emptyPerception(), 8);
+    b.alert(p.playerPos);
+    run(b, p, 1.5);
+    b.stagger(0.55);
+    let shots = 0;
+    const cmd = run(b, p, 0.5, (f) => (shots += f ? 1 : 0));
+    expect(b.staggered).toBe(true);
+    expect(shots).toBe(0);
+    expect(cmd.hasMove).toBe(false);
+    run(b, p, 0.3);
+    expect(b.staggered).toBe(false);
+    b.disarm(0.9);
+    shots = 0;
+    run(b, p, 0.85, (f) => (shots += f ? 1 : 0));
+    expect(shots).toBe(0);
+    run(b, p, 3, (f) => (shots += f ? 1 : 0));
+    expect(shots).toBeGreaterThan(0);
+  });
+
+  it('rodea cuando se lo manda la escuadra, lo avisa, y al llegar vuelve a combatir', () => {
+    const b = brain('escort');
+    const p = seeing(emptyPerception(), 10);
+    b.alert(p.playerPos);
+    run(b, p, 0.1);
+    b.flankOrder = 1;
+    const cmd = emptyCommand();
+    b.update(FIXED_DT, p, tactics, cmd);
+    expect(b.state).toBe('flank');
+    expect(b.callout).toBe(true);
+    expect(cmd.icon).toBe('flank');
+    b.update(FIXED_DT, p, tactics, cmd);
+    expect(cmd.moveTo.x, 'por el lado que le tocó').toBeGreaterThan(5);
+    p.selfPos.copy(cmd.moveTo);
+    b.update(FIXED_DT, p, tactics, cmd);
+    expect(b.state).toBe('combat');
+    // Por su cuenta, sin orden, no rodea.
+    const alone = brain('escort');
+    alone.alert(p.playerPos);
+    let flanked = false;
+    run(alone, p, 15, () => (flanked ||= alone.state === 'flank'));
+    expect(flanked).toBe(false);
+  });
+
+  it('cubriendo a un compañero, dispara un rato hacia donde vio al jugador sin avanzar', () => {
+    const b = brain('escort');
+    const p = seeing(emptyPerception(), 10);
+    b.alert(p.playerPos);
+    const still: Tactics = { ...tactics, findCover: () => false };
+    const cmd = emptyCommand();
+    for (let i = 0; i < 60; i++) b.update(FIXED_DT, p, still, cmd);
+    b.covering = true;
+    p.canSee = false;
+    p.canShoot = false;
+    let covering = 0;
+    let aimed = 0;
+    let moved = false;
+    for (let t = 0; t < 2.3; t += FIXED_DT) {
+      b.update(FIXED_DT, p, still, cmd);
+      if (cmd.suppress) covering++;
+      if (cmd.fire) aimed++;
+      moved ||= cmd.hasMove;
+    }
+    expect(covering).toBeGreaterThan(2);
+    expect(aimed, 'sin verlo no hay disparo dirigido').toBe(0);
+    expect(moved).toBe(false);
+    for (let t = 0; t < 2; t += FIXED_DT) b.update(FIXED_DT, p, still, cmd);
+    expect(b.state, 'y después lo busca').toBe('search');
+  });
+
+  it('encuentra un cuerpo: registra la zona, sin saber dónde está el jugador', () => {
+    const b = brain('thug', [new Vector3(3, 0, 0)]);
+    const p = emptyPerception();
+    run(b, p, 0.2);
+    b.findBody(new Vector3(4, 0, 4));
+    const cmd = run(b, p, 0.2);
+    expect(b.state).toBe('search');
+    expect(cmd.icon).toBe('suspicious');
+    expect(cmd.moveTo.distanceTo(new Vector3(4, 0, 4))).toBeLessThan(0.1);
+    // En plena pelea ya sabe de sobra lo que pasa.
+    const c = brain();
+    c.alert(new Vector3(5, 0, 5));
+    c.findBody(new Vector3(-9, 0, 0));
+    expect(c.state).toBe('combat');
+    expect(c.lastKnown.x).toBe(5);
   });
 
   it('recibir daño en patrulla lo pone en combate al instante', () => {

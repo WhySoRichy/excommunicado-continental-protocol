@@ -1,3 +1,4 @@
+import type { DeathStyle, HitPart } from '../../combat/hitReaction';
 import type { CoverHeight, MoveState, Posture } from '../PlayerController';
 
 /** Colores del personaje (van en los vértices: un solo material). */
@@ -118,8 +119,15 @@ export interface RigPose {
   flinch: number;
   /** Lado del que vino el impacto (−1 izquierda, +1 derecha): ladea el torso. */
   flinchSide: number;
-  /** Forma de caer al morir: 0 de bruces, 1 de espaldas, 2 desplomado de lado. */
-  death: 0 | 1 | 2;
+  /** El impacto vino de frente (si no, de espaldas) y en qué parte del cuerpo dio. */
+  flinchFront: boolean;
+  hitPart: HitPart;
+  /** 0..1 descolocado por un impacto: retrocede doblado, con el arma baja. */
+  stagger: number;
+  /** Cojea: −1 de la pierna izquierda, +1 de la derecha, 0 no. */
+  limp: number;
+  /** Forma de caer al morir: 0 de bruces, 1 de espaldas, 2 de lado, 3 en seco, 4 despedido y 5 de rodillas. */
+  death: DeathStyle;
   /** Tiempo dentro del takedown (s) de quien lo ejecuta; −1 si no hay. */
   takedown: number;
   /** Gesto de lanzar 0..1 (−1 = no lanza): hasta 0,4 arma el brazo izquierdo; después lanza y lo baja. */
@@ -163,6 +171,10 @@ export function idlePose(): RigPose {
     kneel: 0,
     flinch: 0,
     flinchSide: 0,
+    flinchFront: true,
+    hitPart: 'torso',
+    stagger: 0,
+    limp: 0,
     death: 0,
     takedown: -1,
     throw: -1,

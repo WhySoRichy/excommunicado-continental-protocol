@@ -239,8 +239,12 @@ export class Grenades {
       if (impact > QUIET && this.authority) this.w.audio.grenade('bounce', g.pos);
       g.fuse -= dt;
       const lost = g.pos.y < LOST_Y;
-      if (g.fuse > FUSE_EPS && !lost) continue;
+      if (g.fuse > FUSE_EPS && !lost) {
+        if (this.authority) this.w.enemies.grenadeNear(g.id, g.pos, dt);
+        continue;
+      }
       this.list.splice(i, 1);
+      if (this.authority) this.w.enemies.grenadeGone(g.id);
       if (this.authority && !lost) this.burst(g);
     }
   }
