@@ -18,7 +18,7 @@ export class AmbientOcclusionPass extends GTAOPass {
   constructor(scene: Scene, camera: Camera, width: number, height: number) {
     super(scene, camera, Math.max(1, Math.round(width * SCALE)), Math.max(1, Math.round(height * SCALE)));
     this.blendIntensity = INTENSITY;
-    this.updateGtaoMaterial({ radius: RADIUS, distanceExponent: 1.4, thickness: 2, scale: 1.8, samples: 12, distanceFallOff: 1 });
+    this.updateGtaoMaterial({ radius: RADIUS, distanceExponent: 1.4, thickness: 0.6, scale: 1.8, samples: 12, distanceFallOff: 1 });
     this.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 12 });
   }
 
