@@ -111,7 +111,7 @@ export function trunkParts(o: RigOptions): BodyPart[] {
   } else if (top === 'bomber') {
     bomber(o, b, add);
   } else if (top === 'coat') {
-    coat(o, rings, shell, add, bodySkin);
+    coat(o, rings, add);
   } else {
     fatigues(o, rings, shell, add, bodySkin);
   }
@@ -325,12 +325,11 @@ function bomber(o: RigOptions, b: number, add: (g: BufferGeometry, skin?: SkinFn
   add(
     loft(rings, hide, 24, {
       segs: 24,
-      mod: (p, a, y) => {
+      mod: (p, _a, y) => {
         // Acolchado: canalones horizontales suaves en el cuerpo y bombeo sobre el elástico.
         const q = 1 + 0.02 * Math.sin((y - 0.98) * 62) * bell01((y - 1.2) / 0.22) + 0.06 * bell01((y - 1.02) / 0.05);
         p.x *= q;
         p.z *= q;
-        void a;
       },
     }),
   );
@@ -411,7 +410,7 @@ function bomber(o: RigOptions, b: number, add: (g: BufferGeometry, skin?: SkinFn
 }
 
 /** Abrigo largo hasta la rodilla, con solapas anchas (el tirador lo lleva con capucha; el Juez, blanco). */
-function coat(o: RigOptions, rings: Ring[], shell: Shell, add: (g: BufferGeometry, skin?: SkinFn) => void, _bodySkin: SkinFn): void {
+function coat(o: RigOptions, rings: Ring[], add: (g: BufferGeometry, skin?: SkinFn) => void): void {
   const c = o.colors;
   const b = o.bulk ?? 1;
   const long: Ring[] = [
@@ -494,7 +493,6 @@ function coat(o: RigOptions, rings: Ring[], shell: Shell, add: (g: BufferGeometr
       { segs: 8, steps: 3, up: { x: 0, y: 1, z: -0.3 } },
     ),
   );
-  void shell;
 }
 
 /** Uniforme táctico: chaqueta de faena con bolsillos (escolta y blindado, debajo de sus placas). */

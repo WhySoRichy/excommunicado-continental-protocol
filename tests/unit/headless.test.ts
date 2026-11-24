@@ -1,25 +1,18 @@
+import { simWorld } from './support/world';
 import { Vector3 } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { EnemyManager } from '../../src/combat/EnemyManager';
-import { Grenades } from '../../src/combat/Grenades';
-import { Pickups } from '../../src/combat/Pickups';
-import { PlayerCombat } from '../../src/combat/PlayerCombat';
-import { PlayerRoster, type PlayerSlot, REMOTE_RESPAWN } from '../../src/combat/PlayerRoster';
-import { type CombatAudio, NO_VFX, SILENT_AUDIO } from '../../src/combat/ports';
+import { type PlayerSlot, REMOTE_RESPAWN } from '../../src/combat/PlayerRoster';
+import { type CombatAudio, SILENT_AUDIO } from '../../src/combat/ports';
 import { FIXED_DT } from '../../src/core/Loop';
 import { newProfile } from '../../src/core/Save';
-import { Rng } from '../../src/core/rng';
 import type { PlayerTarget } from '../../src/entities/Enemy';
-import { PlayerController } from '../../src/entities/PlayerController';
 import { arena } from '../../src/levels/data/arena';
 import { hub } from '../../src/levels/data/hub';
 import { practice } from '../../src/levels/data/practice';
-import { buildLevelPhysics } from '../../src/levels/levelPhysics';
-import { NavGrid } from '../../src/levels/nav/NavGrid';
 import type { LevelData } from '../../src/levels/types';
 import { GAUNTLET_BLOCK } from '../../src/missions/gauntlet';
 import { MissionDirector, type MissionOutcome } from '../../src/missions/MissionDirector';
-import { loadRapier, PhysicsWorld, type Rapier } from '../../src/physics/Physics';
+import { loadRapier, type Rapier } from '../../src/physics/Physics';
 
 /**
  * Simulación sin pantalla (docs/ESCALABILIDAD.md): física, jugadores, combate, IA y misión en Node, sin audio, sin
@@ -31,50 +24,16 @@ beforeAll(async () => {
   R = await loadRapier();
 });
 
-/** Mundo sin pantalla con el mismo registro de jugadores que la sesión. `onShot` ve cada disparo enemigo a un jugador. */
-function simWorld(level: LevelData, seed: number, onShot?: (target: PlayerTarget, hit: boolean) => void, audio: CombatAudio = SILENT_AUDIO) {
-  const physics = new PhysicsWorld(R);
-  buildLevelPhysics(level, physics);
-  physics.step();
-  const rng = new Rng(seed);
-  let roster: PlayerRoster | null = null;
-  const enemies = new EnemyManager({
-    level,
-    physics,
-    nav: NavGrid.build(level),
-    vfx: NO_VFX,
-    audio: SILENT_AUDIO,
-    rng,
-    accuracyMult: 1,
-    damageMult: 1,
-    onShotAtPlayer: (enemy, target, hit, dmg) => {
-      onShot?.(target, hit);
-      roster?.shotAt(enemy, target, hit, dmg);
-    },
-  });
-  enemies.spawnInitial();
-  const grenades = new Grenades({ physics, enemies, civilians: null, vfx: NO_VFX, audio });
-  const r = new PlayerRoster({ physics, enemies, civilians: null, vfx: NO_VFX, audio, rng, pickups: new Pickups(), grenades });
-  roster = r;
-  const join = (x: number, y: number, z: number, yaw = 0, local = false): PlayerSlot =>
-    r.add(new PlayerController(physics, new Vector3(x, y + 0.02, z), yaw), new PlayerCombat(new Set()), { local });
-  /** Un paso de todo: jugadores (con su intención), enemigos y física. */
-  const step = (n = 1): void => {
-    for (let i = 0; i < n; i++) {
-      r.step(FIXED_DT, true);
-      grenades.fixedUpdate(FIXED_DT);
-      r.updateLooks();
-      enemies.fixedUpdate(FIXED_DT, r.updateTargets(FIXED_DT));
-      physics.step();
-    }
-  };
-  return { physics, rng, enemies, roster: r, join, step };
+/** Mundo de las pruebas con los enemigos del nivel; los jugadores entran en (x, y, z). `onShot` ve cada disparo enemigo. */
+function headless(level: LevelData, seed: number, onShot?: (target: PlayerTarget, hit: boolean) => void, audio: CombatAudio = SILENT_AUDIO) {
+  const w = simWorld(R, { level, seed, audio, enemyAudio: SILENT_AUDIO, initial: true, onShot: (_e, t, hit) => onShot?.(t, hit) });
+  return { ...w, join: (x: number, y: number, z: number, yaw = 0, local = false) => w.join(x, z, { y, yaw, local }) };
 }
 
 describe('simulación sin pantalla', () => {
   it('un enemigo ataca al jugador y el jugador lo abate, sin vista ni audio', () => {
     let shotsAtPlayer = 0;
-    const w = simWorld(arena, 7, () => shotsAtPlayer++);
+    const w = headless(arena, 7, () => shotsAtPlayer++);
     const p = w.join(0, 0, 9.5);
     const enemy = w.enemies.spawnAt('thug', new Vector3(0, 0, 4), Math.PI, p.controller.feet.clone());
     w.physics.step();
@@ -104,7 +63,7 @@ describe('simulación sin pantalla', () => {
 describe('varios jugadores sin pantalla (fase 2)', () => {
   it('cada enemigo ataca al jugador más cercano y se vuelve hacia quien le dispara', () => {
     const shotsAt = [0, 0];
-    const w = simWorld(arena, 5, (t) => shotsAt[t.id]!++);
+    const w = headless(arena, 5, (t) => shotsAt[t.id]!++);
     // Los dos invulnerables: aquí importa a quién ataca, no el daño.
     w.roster.god = true;
     // Jugador 0 lejos (al doble de distancia, de sobra para que la regla de la distancia lo descarte); jugador 1 cerca.
@@ -128,7 +87,7 @@ describe('varios jugadores sin pantalla (fase 2)', () => {
   });
 
   it('el daño de cada disparo enemigo va al jugador al que apuntaba', () => {
-    const w = simWorld(arena, 9);
+    const w = headless(arena, 9);
     const far = w.join(1.5, 0, 16);
     const near = w.join(0, 0, 9.5);
     w.enemies.spawnAt('thug', new Vector3(0, 0, 4), Math.PI, near.controller.feet.clone());
@@ -142,7 +101,7 @@ describe('varios jugadores sin pantalla (fase 2)', () => {
 describe('Gauntlet sin pantalla', () => {
   it('el director de misión real lanza oleadas, los enemigos atacan y se superan tres oleadas', () => {
     let shotsAtPlayer = 0;
-    const w = simWorld(hub, 11, () => shotsAtPlayer++);
+    const w = headless(hub, 11, () => shotsAtPlayer++);
     // Jugador invulnerable: aquí se prueba que la partida avanza, no que se sobreviva.
     w.roster.god = true;
     const sp = hub.spawn.pos;
@@ -186,7 +145,7 @@ describe('varios jugadores: sonido, reaparición y objetivos (fase 2)', () => {
 
   it('los disparos de otro jugador suenan donde está; sus avisos de primera persona, no', () => {
     const calls: Array<{ name: string; positioned: boolean }> = [];
-    const w = simWorld(arena, 3, undefined, recordingAudio(calls));
+    const w = headless(arena, 3, undefined, recordingAudio(calls));
     const local = w.join(0, 0, 9.5, 0, true);
     const remote = w.join(3, 0, 9.5);
     aimAhead(local);
@@ -218,7 +177,7 @@ describe('varios jugadores: sonido, reaparición y objetivos (fase 2)', () => {
   });
 
   it('un jugador que no es el local reaparece en el último punto de control', () => {
-    const w = simWorld(arena, 4);
+    const w = headless(arena, 4);
     w.join(0, 0, 9.5, 0, true);
     const remote = w.join(3, 0, 9.5);
     const enemy = w.enemies.spawnAt('thug', new Vector3(0, 0, 4), Math.PI);
@@ -235,7 +194,7 @@ describe('varios jugadores: sonido, reaparición y objetivos (fase 2)', () => {
   });
 
   it('un objetivo de alcanzar una zona se cumple llegue quien llegue', () => {
-    const w = simWorld(practice, 2);
+    const w = headless(practice, 2);
     w.roster.god = true;
     const sp = practice.spawn.pos;
     const local = w.join(sp[0], sp[1], sp[2], practice.spawn.yaw, true);

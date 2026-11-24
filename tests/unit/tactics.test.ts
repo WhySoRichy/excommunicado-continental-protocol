@@ -1,6 +1,6 @@
+import { simWorld } from './support/world';
 import { Vector3 } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { EnemyManager } from '../../src/combat/EnemyManager';
 import { Grenades } from '../../src/combat/Grenades';
 import { NO_VFX, SILENT_AUDIO } from '../../src/combat/ports';
 import { zoneFromHeight } from '../../src/combat/damage';
@@ -13,10 +13,9 @@ import { arena } from '../../src/levels/data/arena';
 import { docks } from '../../src/levels/data/docks';
 import { nightclub } from '../../src/levels/data/nightclub';
 import { rooftop } from '../../src/levels/data/rooftop';
-import { buildLevelPhysics } from '../../src/levels/levelPhysics';
 import { NavGrid } from '../../src/levels/nav/NavGrid';
 import type { LevelData } from '../../src/levels/types';
-import { loadRapier, PhysicsWorld, QueryGroups, type Rapier } from '../../src/physics/Physics';
+import { loadRapier, QueryGroups, type Rapier } from '../../src/physics/Physics';
 
 /** Decisiones tácticas con la física y la navegación reales: coberturas, granadas, cuerpos y reacciones a los impactos. */
 let R: Rapier;
@@ -24,23 +23,10 @@ beforeAll(async () => {
   R = await loadRapier();
 });
 
+/** Solo enemigos: el objetivo es un punto quieto, sin jugador ni cuerpo. */
 function world(level: LevelData, seed = 3) {
-  const physics = new PhysicsWorld(R);
-  buildLevelPhysics(level, physics);
-  physics.step();
-  const rng = new Rng(seed);
   const shots: boolean[] = [];
-  const enemies = new EnemyManager({
-    level,
-    physics,
-    nav: NavGrid.build(level),
-    vfx: NO_VFX,
-    audio: SILENT_AUDIO,
-    rng,
-    accuracyMult: 1,
-    damageMult: 1,
-    onShotAtPlayer: (_e, _t, hit) => shots.push(hit),
-  });
+  const { physics, enemies, rng } = simWorld(R, { level, seed, onShot: (_e, _t, hit) => shots.push(hit) });
   const dummy = enemies.spawnAt('thug', new Vector3(0, -50, 0), 0);
   enemies.remove(dummy);
   const target = (x: number, y: number, z: number, alive = true): PlayerTarget => ({

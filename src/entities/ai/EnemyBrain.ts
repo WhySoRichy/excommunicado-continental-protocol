@@ -129,6 +129,9 @@ const EVADE_TIME = 1.3;
 const SEARCH_POINTS = 3;
 
 export class EnemyBrain {
+  /** Distancia máxima de combate cuando el enemigo asalta. */
+  static readonly ASSAULT_RANGE = 8;
+
   state: AiState = 'patrol';
   stateTime = 0;
   detection = 0;
@@ -136,22 +139,11 @@ export class EnemyBrain {
   hasLastKnown = false;
   /** Segundos sin ver al jugador. */
   unseen = 99;
-  private reactionLeft = 0;
-  private burstLeft = 0;
-  private shotCooldown = 0;
-  private telegraphT = 0;
-  private patrolIndex = 0;
-  private patrolWait = 0;
-  private repositionIn = 3;
-  private peekTimer = 0;
-  private peekUp = false;
-  private readonly goal = new Vector3();
-  private hasGoal = false;
-  private stuckCount = 0;
   /** Conciencia elevada tras una búsqueda (detecta más rápido). */
   private vigilant = 0;
   /** Asalto (oleadas del Excomunicado): se acerca en vez de disparar desde lejos. */
   aggressive = false;
+
   // Órdenes de la escuadra (ver `squad.ts`; sueltas, sin escuadra, dispara cuando puede).
   mayFire = true;
   covering = false;
@@ -159,24 +151,56 @@ export class EnemyBrain {
   flankOrder: -1 | 0 | 1 = 0;
   /** Acaba de empezar a rodear (lo avisa el cuerpo y se apaga). */
   callout = false;
-  /** Fuego que tiene encima (0..1,5): no se asoma y apunta peor. */
-  suppression = 0;
+
+  // A dónde va.
+  private readonly goal = new Vector3();
+  private hasGoal = false;
+  private stuckCount = 0;
+  private patrolIndex = 0;
+  private patrolWait = 0;
+  private repositionIn = 3;
+  private retreatIn = 0;
+  private strafeIn = 0;
+  private evadeT = 0;
+
+  // Disparo.
+  private reactionLeft = 0;
+  private burstLeft = 0;
+  private shotCooldown = 0;
+  private telegraphT = 0;
+  private shotsLeft: number;
+  private reloadT = -1;
+
+  // Cobertura.
   private readonly spot: CoverChoice = { pos: new Vector3(), peek: new Vector3(), high: false };
   private inCover = false;
   private hadTurn = true;
   private exposed = 0;
-  private shotsLeft: number;
-  private reloadT = -1;
-  private staggerT = 0;
-  private disarmT = 0;
-  private evadeT = 0;
-  private searchLeft = 0;
+  private peekTimer = 0;
+  private peekUp = false;
+  private coverTry = 0;
+  private coverFor = 10;
+
+  // Cuerpo a cuerpo.
   private lungeT = -1;
   private recoverT = 0;
   private backOff = false;
-  private strafeIn = 0;
-  /** Distancia máxima de combate cuando el enemigo asalta. */
-  static readonly ASSAULT_RANGE = 8;
+
+  // Búsqueda: dónde lo perdió (los sitios que registra salen de ahí) y cuál toca.
+  private readonly searchFrom = new Vector3();
+  private readonly searchAt = new Vector3();
+  private searchLeft = 0;
+  private searchLook = 0;
+
+  // Lo que le pasa encima.
+  /** Fuego cercano (0..1,5): no se asoma y apunta peor. */
+  suppression = 0;
+  private staggerT = 0;
+  private disarmT = 0;
+  /** Lo que le queda aturdido (s); infinito si no se le pasa solo (un takedown, el jefe arrodillado). */
+  stunLeft = 0;
+  /** Lo que hacía cuando lo aturdieron. */
+  private stunFrom: AiState = 'patrol';
 
   constructor(
     readonly def: EnemyTypeDef,
@@ -279,19 +303,6 @@ export class EnemyBrain {
     this.telegraphT = 0;
     this.inCover = false;
   }
-
-  private searchLook = 0;
-  /** Dónde lo perdió (los sitios que registra salen de ahí) y cuál toca. */
-  private readonly searchFrom = new Vector3();
-  private readonly searchAt = new Vector3();
-  private coverTry = 0;
-  private coverFor = 10;
-  private retreatIn = 0;
-
-  /** Lo que le queda aturdido (s); infinito si no se le pasa solo (un takedown, el jefe arrodillado). */
-  stunLeft = 0;
-  /** Lo que hacía cuando lo aturdieron. */
-  private stunFrom: AiState = 'patrol';
 
   stun(): void {
     if (this.state === 'dead') return;
@@ -511,7 +522,7 @@ export class EnemyBrain {
         this.tickCover(dt, p, t, cmd);
         break;
       case 'flank':
-        this.tickFlank(dt, p, t, cmd);
+        this.tickFlank(dt, p, cmd);
         break;
       case 'search':
         this.tickSearch(dt, p, t, cmd);
@@ -828,7 +839,7 @@ export class EnemyBrain {
     if (this.exposed > COVER_BROKEN * 2 || (p.canSee && p.distance < 4) || this.stateTime > this.coverFor) this.go('combat');
   }
 
-  private tickFlank(dt: number, p: Perception, t: Tactics, cmd: BrainCommand): void {
+  private tickFlank(dt: number, p: Perception, cmd: BrainCommand): void {
     cmd.hasLook = true;
     cmd.lookAt.copy(p.canSee ? p.playerPos : this.lastKnown);
     this.tickFire(dt, p, cmd);
@@ -840,7 +851,6 @@ export class EnemyBrain {
     cmd.hasMove = true;
     cmd.moveTo.copy(this.goal);
     cmd.run = true;
-    void t;
   }
 
   private tickSearch(dt: number, p: Perception, t: Tactics, cmd: BrainCommand): void {

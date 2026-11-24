@@ -14,7 +14,8 @@ import { createRayHit, Groups, type PhysicsWorld, QueryGroups, type Vec3Like } f
 import { type AiState, EnemyBrain, emptyCommand, emptyPerception, type Tactics } from './ai/EnemyBrain';
 import { ENEMY_TYPES, type EnemyTypeDef } from './ai/enemyTypes';
 
-import { emptyIntent, emptyMoveNet, MOVE, type MoveNet, PLAYER_RADIUS, PlayerController, yawFromDir } from './PlayerController';
+import { emptyIntent, emptyMoveNet, MOVE, type MoveNet, PlayerController, yawFromDir } from './PlayerController';
+import { Shield } from './Shield';
 
 /**
  * Un enemigo como objeto plano (fase 3 de docs/ESCALABILIDAD.md): lo que el anfitrión envía de cada uno y lo que basta
@@ -186,8 +187,6 @@ const STAGGER_STEP = 0.42;
 const LIMP_SPEED = 0.55;
 /** Velocidad con la que sale despedido quien muere de un escopetazo (m/s). */
 const BLAST_SPEED = 5.5;
-/** El escudo: a qué distancia lo lleva (m), su ancho a cada lado (algo a su izquierda) y entre qué alturas tapa. */
-const SHIELD = { fwd: 0.42, half: 0.33, side: -0.1, low: 0.3, high: 1.5, duck: 0.42 } as const;
 /** Al tumbarle la guardia o romperle el escudo, se queda descolocado (s). */
 const GUARD_BREAK = 1;
 /** Altura de los ojos de cada cuerpo (m) y del arma del dron. */
@@ -265,10 +264,8 @@ export class Enemy {
   /** Lo que la escuadra lleva en cuenta de él. */
   squadTurnT = 0;
   squadWaitT = 0;
-  /** Escudo: lo que le queda, los golpes que lleva encajados y, en una réplica, si lo tiene levantado. */
-  shieldHealth: number;
-  private guardHit = 0;
-  private netShieldUp: boolean | null = null;
+  /** Su escudo, si lleva. */
+  private readonly shield: Shield | null;
   /** Suelo bajo el que vuela (la altura de los nodos por los que va). */
   private floorY: number;
   private ceilingT = 0;
@@ -308,7 +305,7 @@ export class Enemy {
     const d = this.def;
     this.floorY = def.pos[1];
     this.flyHeight = d.fly ?? 0;
-    this.shieldHealth = d.shield?.health ?? 0;
+    this.shield = d.shield ? new Shield(d.shield) : null;
     this.mover = new PlayerController(w.physics, new Vector3(def.pos[0], def.pos[1] + 0.02 + this.flyHeight, def.pos[2]), def.yaw, Groups.ENEMY, {
       ...(d.half !== undefined ? { half: d.half } : {}),
       flies: d.fly !== undefined,
@@ -384,46 +381,30 @@ export class Enemy {
 
   /** Con el escudo por delante (de guardia lo lleva bajo; aturdido o descolocado no lo sostiene). */
   get shieldUp(): boolean {
-    if (!this.def.shield || !this.alive || this.shieldHealth <= 0) return false;
-    if (this.netShieldUp !== null) return this.netShieldUp;
+    if (!this.shield || !this.alive) return false;
     const s = this.brain.state;
-    return s !== 'patrol' && s !== 'stunned' && this.thrownT < 0 && !this.brain.staggered && !this.brain.disarmed;
+    return this.shield.up(s !== 'patrol' && s !== 'stunned' && this.thrownT < 0 && !this.brain.staggered && !this.brain.disarmed);
   }
 
   get shieldBroken(): boolean {
-    return !!this.def.shield && this.shieldHealth <= 0;
+    return this.shield?.broken ?? false;
   }
 
-  /**
-   * ¿Para su escudo este disparo? `point` y `normal`: dónde da en su cápsula; `dir`: hacia dónde va. Deja en `out` el
-   * punto del escudo. Se mide desde el eje de la cápsula alcanzada, así vale también para un disparo rebobinado.
-   */
+  /** Lo que le queda al escudo (0 sin él). */
+  get shieldHealth(): number {
+    return this.shield?.health ?? 0;
+  }
+
+  /** ¿Para su escudo este disparo? Deja en `out` el punto del escudo (ver `Shield.crosses`). */
   blocks(point: Vec3Like, normal: Vec3Like, dir: Vec3Like, out: Vector3): boolean {
-    if (!this.shieldUp) return false;
-    const yaw = this.mover.yaw;
-    const fx = -Math.sin(yaw);
-    const fz = -Math.cos(yaw);
-    const into = dir.x * fx + dir.z * fz;
-    // Lo que viene por la espalda o de lado no cruza su plano.
-    if (into > -1e-3) return false;
-    const nl = Math.hypot(normal.x, normal.z) || 1;
-    const px = (normal.x / nl) * PLAYER_RADIUS;
-    const pz = (normal.z / nl) * PLAYER_RADIUS;
-    const s = (SHIELD.fwd - (px * fx + pz * fz)) / -into;
-    if (s < 0) return false;
-    const lateral = (px - dir.x * s) * Math.cos(yaw) - (pz - dir.z * s) * Math.sin(yaw);
-    const y = point.y - dir.y * s - this.mover.feet.y + (this.mover.posture === 'crouch' ? SHIELD.duck : 0);
-    if (Math.abs(lateral - SHIELD.side) > SHIELD.half || y < SHIELD.low || y > SHIELD.high) return false;
-    out.set(point.x - dir.x * s, point.y - dir.y * s, point.z - dir.z * s);
-    return true;
+    if (!this.shield || !this.shieldUp) return false;
+    const m = this.mover;
+    return this.shield.crosses(point, normal, dir, { feetY: m.feet.y, yaw: m.yaw, crouched: m.posture === 'crouch' }, out);
   }
 
   /** Un impacto en el escudo: lo desgasta y, si son muchos seguidos, se lo bajan. Devuelve si se rompió. */
   shieldHit(amount: number, from: Vector3): boolean {
-    const d = this.def.shield;
-    if (!d || this.shieldHealth <= 0 || !this.alive) return false;
-    this.shieldHealth = Math.max(0, this.shieldHealth - amount);
-    this.guardHit += amount;
+    if (!this.shield || this.shield.broken || !this.alive) return false;
     this.hitFlash = 0.08;
     this.perception.damaged = true;
     this.perception.damageFrom.copy(from);
@@ -432,9 +413,8 @@ export class Enemy {
     const dz = this.mover.feet.z - from.z;
     const l = Math.hypot(dx, dz) || 1;
     this.push.set(dx / l, 0, dz / l);
-    const broke = this.shieldHealth <= 0;
-    if (broke || this.guardHit >= d.guard) {
-      this.guardHit = 0;
+    const r = this.shield.hit(amount);
+    if (r !== 'held') {
       this.flinch = 1;
       this.flinchFront = true;
       this.hitPart = 'torso';
@@ -442,7 +422,7 @@ export class Enemy {
       this.stagger = 1;
       this.aimIn = 0;
     }
-    return broke;
+    return r === 'broken';
   }
 
   /** Altura actual del cuerpo (para zonas de impacto). */
@@ -458,7 +438,7 @@ export class Enemy {
     this.stagger = Math.max(0, this.stagger - dt * 1.9);
     this.limpT = Math.max(0, this.limpT - dt);
     this.poiseHit = Math.max(0, this.poiseHit - dt * POISE_RECOVERY);
-    this.guardHit = Math.max(0, this.guardHit - dt * POISE_RECOVERY);
+    this.shield?.tick(dt);
     if (this.alive && this.thrownT >= 0) this.thrownT += dt;
     if (!this.alive) {
       // El cuerpo cae y se asienta; después ya no hace falta moverlo.
@@ -951,8 +931,7 @@ export class Enemy {
     this.stagger = 0;
     this.limpT = 0;
     this.poiseHit = 0;
-    this.guardHit = 0;
-    this.shieldHealth = this.def.shield?.health ?? 0;
+    this.shield?.reset();
     this.floorY = this.home.y;
     this.mover.setLocked(false);
     this.mover.revive(this.home, this.spawnDef.yaw);
@@ -1029,8 +1008,7 @@ export class Enemy {
     this.deathFallStart = s.deathFallStart;
     this.thrownT = s.thrownT;
     this.targetRise = s.targetRise;
-    this.netShieldUp = s.shieldUp;
-    if (this.def.shield) this.shieldHealth = s.shieldBroken ? 0 : this.def.shield.health;
+    this.shield?.applyNet(s.shieldUp, s.shieldBroken);
     const c = this.cmd;
     c.reload = s.reload;
     c.hidden = s.hidden;

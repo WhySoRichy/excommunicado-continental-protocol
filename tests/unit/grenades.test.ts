@@ -1,18 +1,13 @@
+import { simWorld } from './support/world';
 import { Vector3 } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { EnemyManager } from '../../src/combat/EnemyManager';
-import { FLIGHT, type GrenadeBody, Grenades, simulateThrow, stepGrenade, STUN, stunSeconds, throwVelocity } from '../../src/combat/Grenades';
-import { Pickups } from '../../src/combat/Pickups';
-import { PlayerCombat } from '../../src/combat/PlayerCombat';
-import { PlayerRoster, type PlayerSlot } from '../../src/combat/PlayerRoster';
+import { FLIGHT, type GrenadeBody, simulateThrow, stepGrenade, STUN, stunSeconds, throwVelocity } from '../../src/combat/Grenades';
+import { type PlayerSlot } from '../../src/combat/PlayerRoster';
 import { type CombatAudio, type CombatVfx, NO_VFX, SILENT_AUDIO } from '../../src/combat/ports';
 import { GEAR, type GearId } from '../../src/combat/weapons';
 import { FIXED_DT } from '../../src/core/Loop';
-import { Rng } from '../../src/core/rng';
-import { PlayerController } from '../../src/entities/PlayerController';
 import { arena } from '../../src/levels/data/arena';
 import { buildLevelPhysics } from '../../src/levels/levelPhysics';
-import { NavGrid } from '../../src/levels/nav/NavGrid';
 import { loadRapier, PhysicsWorld, type Rapier } from '../../src/physics/Physics';
 
 /** Granadas aturdidoras sin pantalla: vuelo, estallido y a quién aturde, y el gesto de lanzarlas. */
@@ -34,50 +29,25 @@ function body(x: number, y: number, z: number, vx: number, vy: number, vz: numbe
 
 /** Mundo con enemigos y jugadores en la arena. */
 function world() {
-  const physics = arenaPhysics();
-  const rng = new Rng(21);
   const bursts: Vector3[] = [];
   const sounds: string[] = [];
   const shots = { n: 0 };
   const vfx: CombatVfx = { ...NO_VFX, burst: (p) => bursts.push(new Vector3(p.x, p.y, p.z)) };
   const audio: CombatAudio = { ...SILENT_AUDIO, grenade: (k) => sounds.push(k), empty: () => sounds.push('empty') };
-  const enemies = new EnemyManager({
-    level: arena,
-    physics,
-    nav: NavGrid.build(arena),
-    vfx,
-    audio,
-    rng,
-    accuracyMult: 1,
-    damageMult: 1,
-    onShotAtPlayer: () => shots.n++,
-  });
-  const grenades = new Grenades({ physics, enemies, civilians: null, vfx, audio });
-  const roster = new PlayerRoster({ physics, enemies, civilians: null, vfx, audio, rng, pickups: new Pickups(), grenades });
+  const w = simWorld(R, { seed: 21, audio, vfx, onShot: () => shots.n++ });
   const join = (x: number, z: number, gear: GearId | null = 'stun'): PlayerSlot => {
-    const s = roster.add(new PlayerController(physics, new Vector3(x, 0.02, z), 0), new PlayerCombat(new Set(), ['carbine', 'pistol', 'knife'], gear), {
-      local: true,
-      ports: { audio, vfx },
-    });
+    const s = w.join(x, z, { gear, loadout: ['carbine', 'pistol', 'knife'], ports: true });
     s.combatIntent.aimFrom.set(x, 1.7, z + 2);
     s.combatIntent.aimDir.set(0, 0, -1);
     return s;
   };
-  const step = (n = 1): void => {
-    for (let i = 0; i < n; i++) {
-      roster.step(FIXED_DT, true);
-      grenades.fixedUpdate(FIXED_DT);
-      enemies.fixedUpdate(FIXED_DT, roster.updateTargets(FIXED_DT));
-      physics.step();
-    }
-  };
   /** Un toque de la tecla: se pulsa un paso. */
   const tap = (s: PlayerSlot): void => {
     s.combatIntent.gearPressed = true;
-    step();
+    w.step();
     s.combatIntent.gearPressed = false;
   };
-  return { physics, enemies, grenades, roster, join, step, tap, bursts, sounds, shots };
+  return { ...w, join, tap, bursts, sounds, shots };
 }
 
 describe('vuelo de una granada', () => {

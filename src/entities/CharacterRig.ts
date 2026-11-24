@@ -1218,10 +1218,6 @@ export class CharacterRig {
   }
 
   /**
-   * Altura de la silueta sobre los pies con la pose actual: la malla deformada por el esqueleto.
-   * Es cara (recorre todos los vértices); la usan las pruebas para comprobar que el cuerpo cabe en su cápsula.
-   */
-  /**
    * Cómo apunta el arma respecto al frente del personaje (grados): desvío del cañón en horizontal, inclinación
    * del cañón y ladeo (giro sobre el propio cañón). La usan las pruebas del encare.
    */
@@ -1276,6 +1272,10 @@ export class CharacterRig {
     return out;
   }
 
+  /**
+   * Altura de la silueta sobre los pies con la pose actual: la malla deformada por el esqueleto.
+   * Es cara (recorre todos los vértices); la usan las pruebas para comprobar que el cuerpo cabe en su cápsula.
+   */
   silhouetteHeight(): number {
     const body = this.meshes.find((m): m is SkinnedMesh => m instanceof SkinnedMesh);
     if (!body) return 0;

@@ -286,8 +286,8 @@ export class Game {
     this.debug = new DebugOverlay(uiRoot);
     this.collisionView = new CollisionDebugView(this.renderer.scene);
     this.detailView = { eye: this.renderer.camera.position, limit: 0 };
-    this.loop = new AnimationLoop({ frame: (dt, now) => this.frame(dt, now) });
-    this.fsm.on((to, from) => this.onStateChange(to, from));
+    this.loop = new AnimationLoop({ frame: (dt) => this.frame(dt) });
+    this.fsm.on((to) => this.onStateChange(to));
     this.hudData = {
       health: 100,
       maxHealth: 100,
@@ -462,7 +462,7 @@ export class Game {
   }
 
   // =========================================================== estados
-  private onStateChange(to: GameStateId, from: GameStateId): void {
+  private onStateChange(to: GameStateId): void {
     const controlling = to === 'hub' || to === 'playing';
     this.input.capturing = controlling;
     if (!controlling) this.aimLatched = false;
@@ -475,7 +475,6 @@ export class Game {
     if (to !== 'dead') this.hud.hideDeath();
     if (!controlling && document.pointerLockElement && to !== 'dead') document.exitPointerLock();
     this.updateCaptureOverlay();
-    void from;
   }
 
   /** Entra (o vuelve) al Continental. */
@@ -911,7 +910,7 @@ export class Game {
   }
 
   // =========================================================== bucle
-  private frame(realDt: number, now: number): void {
+  private frame(realDt: number): void {
     if (this.pendingLagMs > 0) {
       // QA: pico de lag real (bloquea el hilo) para verificar el clamp de dt y el anti-túnel.
       const until = performance.now() + this.pendingLagMs;
@@ -991,7 +990,6 @@ export class Game {
       p.render += performance.now() - tRender;
     }
     this.stats.push(realDt * 1000, this.lastCpuMs);
-    void now;
   }
 
   /** Música adaptativa: ambiente por nivel y modo; intensidad según lo que hacen los enemigos. */

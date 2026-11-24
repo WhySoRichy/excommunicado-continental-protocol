@@ -1,12 +1,8 @@
+import { simWorld } from './support/world';
 import { Vector3 } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { zoneFromHeight } from '../../src/combat/damage';
-import { EnemyManager } from '../../src/combat/EnemyManager';
-import { Grenades } from '../../src/combat/Grenades';
-import { Pickups } from '../../src/combat/Pickups';
 import { PlayerCombat } from '../../src/combat/PlayerCombat';
-import { PlayerRoster } from '../../src/combat/PlayerRoster';
-import { NO_VFX, SILENT_AUDIO } from '../../src/combat/ports';
 import { FIXED_DT } from '../../src/core/Loop';
 import { Rng } from '../../src/core/rng';
 import { EnemyBrain, emptyCommand, emptyPerception, type Tactics } from '../../src/entities/ai/EnemyBrain';
@@ -14,13 +10,10 @@ import { ENEMY_TYPES } from '../../src/entities/ai/enemyTypes';
 import type { Enemy } from '../../src/entities/Enemy';
 import { droneGeometry, DRONE_BONE, houndGeometry, HOUND_BONE } from '../../src/entities/rig/robots';
 import { shieldGeometry } from '../../src/entities/rig/weapons';
-import { PlayerController } from '../../src/entities/PlayerController';
 import { arena } from '../../src/levels/data/arena';
 import { docks } from '../../src/levels/data/docks';
-import { buildLevelPhysics } from '../../src/levels/levelPhysics';
-import { NavGrid } from '../../src/levels/nav/NavGrid';
 import type { LevelData } from '../../src/levels/types';
-import { loadRapier, PhysicsWorld, QueryGroups, type Rapier } from '../../src/physics/Physics';
+import { loadRapier, QueryGroups, type Rapier } from '../../src/physics/Physics';
 
 /** El antidisturbios, el sabueso y el dron: reglas, física y mallas. */
 let R: Rapier;
@@ -28,39 +21,9 @@ beforeAll(async () => {
   R = await loadRapier();
 });
 
-function world(level: LevelData = arena, seed = 4) {
-  const physics = new PhysicsWorld(R);
-  buildLevelPhysics(level, physics);
-  physics.step();
-  const rng = new Rng(seed);
+function world(level: LevelData = arena) {
   const shots: Array<{ type: string; hit: boolean; damage: number }> = [];
-  let roster: PlayerRoster | null = null;
-  const enemies = new EnemyManager({
-    level,
-    physics,
-    nav: NavGrid.build(level),
-    vfx: NO_VFX,
-    audio: SILENT_AUDIO,
-    rng,
-    accuracyMult: 1,
-    damageMult: 1,
-    onShotAtPlayer: (e, t, hit, damage) => {
-      shots.push({ type: e.def.type, hit, damage });
-      roster?.shotAt(e, t, hit, damage);
-    },
-  });
-  const grenades = new Grenades({ physics, enemies, civilians: null, vfx: NO_VFX, audio: SILENT_AUDIO });
-  roster = new PlayerRoster({ physics, enemies, civilians: null, vfx: NO_VFX, audio: SILENT_AUDIO, rng, pickups: new Pickups(), grenades });
-  const join = (x: number, z: number) => roster.add(new PlayerController(physics, new Vector3(x, 0.02, z), 0), new PlayerCombat(new Set()), { local: true });
-  const step = (n = 1): void => {
-    for (let i = 0; i < n; i++) {
-      roster.step(FIXED_DT, true);
-      grenades.fixedUpdate(FIXED_DT);
-      enemies.fixedUpdate(FIXED_DT, roster.updateTargets(FIXED_DT));
-      physics.step();
-    }
-  };
-  return { physics, enemies, grenades, roster, join, step, shots };
+  return { ...simWorld(R, { level, onShot: (e, _t, hit, damage) => shots.push({ type: e.def.type, hit, damage }) }), shots };
 }
 
 const still: Tactics = { findCover: () => false, findFlank: () => false, randomNear: (p, r, out) => (out.set(p.x + r * 0.6, p.y, p.z), true) };

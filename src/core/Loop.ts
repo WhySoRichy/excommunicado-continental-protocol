@@ -52,7 +52,7 @@ export class FixedStepAccumulator {
 
 export interface LoopHandlers {
   /** Se llama una vez por frame real con el dt real (s) en clamp y la marca de tiempo. */
-  frame(realDt: number, now: number): void;
+  frame(realDt: number): void;
 }
 
 /** Bucle de requestAnimationFrame. El reparto en pasos fijos lo hace el juego. */
@@ -80,6 +80,6 @@ export class AnimationLoop {
     this.handle = requestAnimationFrame(this.tick);
     const realDt = this.last < 0 ? 0 : Math.min((now - this.last) / 1000, MAX_FRAME_DT);
     this.last = now;
-    this.handlers.frame(realDt, now);
+    this.handlers.frame(realDt);
   };
 }
