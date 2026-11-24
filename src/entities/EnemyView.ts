@@ -146,9 +146,12 @@ export class EnemyView {
     pose.posture = m.posture;
     pose.grounded = m.grounded;
     pose.aim = e.aiming ? 1 : 0;
+    // De guardia, relajado; en cuanto sospecha algo, con el arma lista.
+    pose.ready = e.state === 'patrol' ? 0 : 1;
     pose.reload = e.alive ? e.cmd.reload : -1;
-    // Escondido: pegado a la cobertura con el arma recogida.
+    // Escondido: de espaldas a la cobertura con el arma recogida; al asomarse, se gira.
     pose.cover = e.alive && e.cmd.hidden ? (m.posture === 'crouch' ? 'low' : 'high') : 'none';
+    pose.coverBack = pose.cover !== 'none' && !this.shield;
     this.updateLook(stunned || thrown, dt);
     if (!e.alive) this.deadFor += dt;
     pose.stateTime = thrown ? Math.max(0, e.thrownT - THROW_DELAY) : e.alive ? m.stateTime : this.deadFor;

@@ -323,6 +323,9 @@ test.describe('Fase 1 · movimiento', () => {
     });
     await frames(page, 0.3);
     await expect.poll(() => page.evaluate(() => window.__EXCOM__!.prompt())).toContain('Saltar por encima');
+    // El aviso va abajo: en el centro tapaba al personaje.
+    const box = await page.locator('.prompt').boundingBox();
+    expect(box!.y, 'fuera del centro de la pantalla').toBeGreaterThan(page.viewportSize()!.height * 0.8);
     await page.screenshot({ path: shotPath('fase1-prompt-vault') });
     await page.evaluate(() => {
       const q = window.__EXCOM__!;
@@ -411,11 +414,12 @@ test.describe('Fase 1 · movimiento', () => {
   test('animación sin tirones: arrancar, parar, girar, agacharse, apuntar y mover la cámara', async ({ page }) => {
     await enterArena(page);
     // Mayor salto de velocidad entre dos fotogramas de cualquier articulación (rad/s²) o de manos y cabeza (m/s²).
-    // Con suavizado de primer orden, el giro en seco y el enganchón de la KCC había picos de 600 a 900.
+    // Con suavizado de primer orden, el giro en seco y el enganchón de la KCC había picos de 600 a 900. Las piernas van
+    // aparte: al correr, muslos y rodillas aceleran de verdad (una zancada dura medio segundo).
     const peaks = await page.evaluate(() => {
       const q = window.__EXCOM__!;
       type Intent = Parameters<typeof q.step>[1];
-      const out: Record<string, { joint: string; peak: number }> = {};
+      const out: Record<string, Record<'best' | 'legs', { joint: string; peak: number }>> = {};
       const measure = (name: string, script: (go: (n: number, it?: Intent, dYaw?: number) => void) => void): void => {
         q.setManual(true);
         q.releaseAll();
@@ -437,14 +441,16 @@ test.describe('Fase 1 · movimiento', () => {
           const d = samples[i]!.yaw! - samples[i - 1]!.yaw!;
           samples[i]!.yaw = samples[i - 1]!.yaw! + d - Math.round(d / (2 * Math.PI)) * 2 * Math.PI;
         }
-        let best = { joint: '', peak: 0 };
+        const best = { joint: '', peak: 0 };
+        const legs = { joint: '', peak: 0 };
         for (const k of Object.keys(samples[0]!)) {
+          const b = /^(thigh|shin)/.test(k) ? legs : best;
           for (let i = 2; i < samples.length; i++) {
             const a = Math.abs(samples[i]![k]! - 2 * samples[i - 1]![k]! + samples[i - 2]![k]!) * 3600;
-            if (a > best.peak) best = { joint: `${k} (paso ${i})`, peak: a };
+            if (a > b.peak) Object.assign(b, { joint: `${k} (paso ${i})`, peak: a });
           }
         }
-        out[name] = best;
+        out[name] = { best, legs };
       };
       measure('arrancar y parar', (go) => {
         go(20);
@@ -478,6 +484,9 @@ test.describe('Fase 1 · movimiento', () => {
       });
       return out;
     });
-    for (const [name, p] of Object.entries(peaks)) expect(p.peak, `${name}: ${p.joint}`).toBeLessThan(320);
+    for (const [name, p] of Object.entries(peaks)) {
+      expect(p.best.peak, `${name}: ${p.best.joint}`).toBeLessThan(320);
+      expect(p.legs.peak, `${name}: ${p.legs.joint}`).toBeLessThan(1000);
+    }
   });
 });

@@ -2,7 +2,8 @@ import type { BufferGeometry } from 'three';
 import { merge, shade } from './geometry';
 import { type Surface, withDetail } from './loft';
 import { ellipsoid, type Knot, softBox, tubePath } from './shapes';
-import { applySkin, type BoneId, rigid } from './skin';
+import type { BoneId } from './skeleton';
+import { applySkin, rigid } from './skin';
 
 /**
  * Las máquinas: el sabueso (cuadrúpedo) y el dron. Son rígidas por piezas (cada pieza va a un hueso), con los mismos

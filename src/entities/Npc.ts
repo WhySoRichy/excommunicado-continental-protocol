@@ -3,6 +3,7 @@ import { dampAngle, wrapAngle } from '../core/math';
 import { disposeSprite, makeTextSprite } from '../render/labels';
 import { CharacterRig, type HairStyle, idlePose, type Outfit, type RigColors, type RigPose } from './CharacterRig';
 import { yawFromDir } from './PlayerController';
+import type { Gesture } from './rig/layers';
 import { type LookAngles, lookAngles } from './rigMath';
 
 export interface NpcDef {
@@ -15,12 +16,17 @@ export interface NpcDef {
   beard?: boolean;
   bulk?: number;
   outfit?: Outfit;
+  /** Cómo está de pie. */
+  gesture?: Gesture;
 }
 
 /** Distancia a la que el NPC se gira hacia el jugador. */
 const ATTENTION_RADIUS = 7;
 /** Giro máximo respecto a su orientación base (no da la espalda al mostrador). */
 const MAX_TURN = 1.1;
+/** A menos de esta distancia (m) habla con el jugador: acompaña con las manos a ratos (cada cuántos radianes por segundo). */
+const TALK_RADIUS = 3.4;
+const TALK_RATE = 0.9;
 /** Altura de los ojos (de un NPC y del jugador) sobre los pies. */
 const EYE_Y = 1.62;
 
@@ -37,6 +43,7 @@ export class Npc {
   private yaw: number;
   private readonly pose: RigPose = idlePose();
   private readonly look: LookAngles = { yaw: 0, pitch: 0 };
+  private talkT = 0;
 
   constructor(
     readonly def: NpcDef,
@@ -56,6 +63,8 @@ export class Npc {
     });
     this.rig.root.position.copy(this.pos);
     this.rig.root.rotation.y = this.yaw;
+    this.pose.ready = 0;
+    this.pose.gesture = def.gesture ?? 'formal';
     scene.add(this.rig.root);
     this.label = makeTextSprite(def.name);
     this.label.position.set(this.pos.x, this.pos.y + 2.25, this.pos.z);
@@ -84,6 +93,10 @@ export class Npc {
       this.pose.lookYaw = l.yaw;
       this.pose.lookPitch = l.pitch;
     }
+    // Recibe con un gesto y después, al hablar, mueve las manos a ratos.
+    const talking = dx * dx + dz * dz < TALK_RADIUS * TALK_RADIUS;
+    this.talkT = talking ? this.talkT + dt : 0;
+    this.pose.talk = talking && Math.sin(this.talkT * TALK_RATE + 0.4) > 0.1 ? 1 : 0;
     this.rig.update(this.pose, dt);
   }
 
@@ -95,12 +108,13 @@ export class Npc {
 }
 
 /** Paletas de los NPC del Continental. */
-export const NPC_LOOKS: Record<'charon' | 'sommelier' | 'winston', Pick<NpcDef, 'name' | 'colors' | 'hair' | 'beard' | 'bulk' | 'outfit'>> = {
+export const NPC_LOOKS: Record<'charon' | 'sommelier' | 'winston', Pick<NpcDef, 'name' | 'colors' | 'hair' | 'beard' | 'bulk' | 'outfit' | 'gesture'>> = {
   charon: {
     name: 'Charon · Conserje',
     colors: { jacket: 0x1b1d22, shirt: 0xf1ece0, tie: 0x7a1020, pants: 0x1b1d22, shoes: 0x0b0b0d, skin: 0x6b4630, hair: 0x1a1512, accent: 0xd4af37 },
     hair: 'bald',
     outfit: { waistcoat: 0x7a1020 },
+    gesture: 'formal',
   },
   // Sumiller de la armería: sin chaqueta (camisa blanca a la vista), chaleco burdeos, pajarita,
   // delantal largo, catavinos de plata, bigote encerado y pelo engominado hacia atrás.
@@ -109,6 +123,7 @@ export const NPC_LOOKS: Record<'charon' | 'sommelier' | 'winston', Pick<NpcDef, 
     colors: { jacket: 0xece6da, shirt: 0xece6da, tie: 0x111216, pants: 0x1c1c22, shoes: 0x0b0b0d, skin: 0xd9b08c, hair: 0x2b1d14, accent: 0xd4af37 },
     hair: 'slick',
     outfit: { jacket: false, waistcoat: 0x5a1a28, bowTie: true, apron: 0x16171b, tastevin: true, mustache: true },
+    gesture: 'counter',
   },
   winston: {
     name: 'Winston · Gerente',
@@ -116,5 +131,6 @@ export const NPC_LOOKS: Record<'charon' | 'sommelier' | 'winston', Pick<NpcDef, 
     hair: 'slick',
     beard: true,
     outfit: { waistcoat: 0x5c4a22 },
+    gesture: 'behind',
   },
 };

@@ -148,6 +148,8 @@ export interface QaApi {
   player(): PlayerSnapshot | null;
   /** Altura real de la silueta del jugador con su pose actual (lenta: recorre la malla). */
   rigHeight(): number;
+  /** ¿Lleva un arma en la mano (a la vista)? */
+  rigArmed(): boolean;
   /** Arma del jugador respecto a su frente (grados): desvío horizontal del cañón, inclinación y ladeo. */
   weaponAim(): { yaw: number; pitch: number; roll: number } | null;
   /** Ángulos de las articulaciones y posición de manos y cabeza del jugador (pruebas de fluidez). */
@@ -391,6 +393,7 @@ export function installQa(game: Game): void {
       game.stepManual(Math.max(0, Math.floor(n)));
     },
     rigHeight: () => game.session?.playerRig.silhouetteHeight() ?? 0,
+    rigArmed: () => (game.session?.playerRig.weaponMount.children.length ?? 0) > 0,
     weaponAim: () => game.session?.playerRig.weaponAim() ?? null,
     rigMotion: () => game.session?.playerRig.motionSample() ?? null,
     enemyMotion: (id) => {

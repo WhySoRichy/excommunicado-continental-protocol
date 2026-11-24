@@ -1,8 +1,9 @@
 import type { BufferGeometry } from 'three';
-import { bell01, far, loft, type Ring, type Surface } from './loft';
+import { bell01, far, loft, type Ring } from './loft';
+import { cloth, leather, plastic, silk, skinOf, steel } from './surfaces';
 import { ellipsoid, type Knot, Shell, softBox, tubePath } from './shapes';
-import { BONE, ELBOW_H, HIP_Y, KNEE_H, leg, neck, NECK_H, rigid, SHOULDER_H, type SkinFn, skirt, sleeve, trunk } from './skin';
-import { FOOT_DROP, HAND_Y, SHOULDER_X } from './skeleton';
+import { HEAD_H, HIP_Y } from './skeleton';
+import { neck, type SkinFn, skirt, trunk } from './skin';
 import { shade, trim } from './geometry';
 import type { Outfit, RigOptions } from './types';
 
@@ -12,23 +13,11 @@ export interface BodyPart {
   skin: SkinFn;
 }
 
-// ------------------------------------------------------------------ superficies
-export const cloth = (c: number, w = 1, r = 0.88): Surface => ({ c, r, m: 0, w });
-export const silk = (c: number): Surface => ({ c, r: 0.46, m: 0, w: 0.35 });
-export const leather = (c: number, r = 0.46): Surface => ({ c, r, m: 0, w: 0.12 });
-export const skinOf = (c: number): Surface => ({ c, r: 0.56, m: 0, w: 0 });
-export const hairOf = (c: number): Surface => ({ c, r: 0.6, m: 0, w: 0 });
-export const steel = (c: number, r = 0.34): Surface => ({ c, r, m: 0.85, w: 0 });
-export const plastic = (c: number, r = 0.55): Surface => ({ c, r, m: 0, w: 0 });
-
-const SOLE = 0x0b0b0d;
-const PI = Math.PI;
-
 /** Mezcla lineal. */
 const mix = (a: number, b: number, t: number): number => a + (b - a) * t;
 
 /** Faldones de la chaqueta: los empuja la pierna de su lado. */
-const tails = skirt(HIP_Y + 0.02, 0.8, 0.86);
+const tails = skirt(HIP_Y + 0.02, 0.83, 0.72, 0.36);
 
 /** Anillos del tronco con chaqueta. El ancho crece con la corpulencia; el fondo, menos. */
 function torsoRings(b: number, jacket: boolean, grow = 0): Ring[] {
@@ -36,29 +25,30 @@ function torsoRings(b: number, jacket: boolean, grow = 0): Ring[] {
   const d = (v: number): number => v * (0.42 + 0.58 * b) + grow;
   const hem: Ring[] = jacket
     ? [
-        { y: 0.795, rx: w(0.212), rz: d(0.15), rb: d(0.15), e: 2.5 },
-        { y: 0.87, rx: w(0.199), rz: d(0.136), rb: d(0.141), e: 2.5 },
-        { y: 0.95, rx: w(0.18), rz: d(0.119), rb: d(0.126), e: 2.45 },
+        { y: 0.828, rx: w(0.2), rz: d(0.142), rb: d(0.146), e: 2.5 },
+        { y: 0.885, rx: w(0.19), rz: d(0.132), rb: d(0.138), e: 2.5 },
+        { y: 0.955, rx: w(0.174), rz: d(0.118), rb: d(0.125), e: 2.45 },
       ]
-    : [{ y: 0.955, rx: w(0.166), rz: d(0.107), rb: d(0.113), e: 2.4 }];
+    : [{ y: 0.955, rx: w(0.16), rz: d(0.106), rb: d(0.112), e: 2.4 }];
   return [
     ...hem,
-    { y: 1.035, rx: w(0.164), rz: d(0.109), rb: d(0.108), e: 2.4 },
-    { y: 1.11, rx: w(0.159), rz: d(0.109), rb: d(0.101), e: 2.4 },
-    { y: 1.2, rx: w(0.168), rz: d(0.115), rb: d(0.106), e: 2.4 },
-    { y: 1.3, rx: w(0.189), rz: d(0.124), rb: d(0.118), e: 2.4 },
-    { y: 1.39, rx: w(0.205), rz: d(0.13), rb: d(0.128), e: 2.4 },
-    { y: 1.455, rx: w(0.22), rz: d(0.125), rb: d(0.128), e: 2.35 },
-    { y: 1.505, rx: w(0.236), rz: d(0.11), rb: d(0.12), e: 2.25 },
-    { y: 1.545, rx: w(0.23), rz: d(0.09), rb: d(0.102), e: 2.15 },
-    { y: 1.575, rx: w(0.186), rz: d(0.075), rb: d(0.088), e: 2.05 },
-    { y: 1.6, rx: w(0.118), rz: 0.067, rb: 0.08 },
-    { y: 1.625, rx: 0.076, rz: 0.06, rb: 0.07 },
+    { y: 1.035, rx: w(0.157), rz: d(0.107), rb: d(0.106), e: 2.4 },
+    { y: 1.11, rx: w(0.152), rz: d(0.107), rb: d(0.1), e: 2.4 },
+    { y: 1.2, rx: w(0.159), rz: d(0.114), rb: d(0.105), e: 2.4 },
+    { y: 1.3, rx: w(0.174), rz: d(0.123), rb: d(0.117), e: 2.4 },
+    { y: 1.39, rx: w(0.189), rz: d(0.129), rb: d(0.127), e: 2.4 },
+    { y: 1.455, rx: w(0.199), rz: d(0.123), rb: d(0.127), e: 2.35 },
+    { y: 1.51, rx: w(0.207), rz: d(0.104), rb: d(0.116), e: 2.25 },
+    { y: 1.545, rx: w(0.2), rz: d(0.085), rb: d(0.099), e: 2.15 },
+    { y: 1.567, rx: w(0.166), rz: d(0.075), rb: d(0.088), e: 2.05 },
+    { y: 1.588, rx: w(0.122), rz: 0.068, rb: 0.081 },
+    { y: 1.607, rx: 0.084, rz: 0.062, rb: 0.073 },
+    { y: 1.625, rx: 0.07, rz: 0.058, rb: 0.068 },
   ];
 }
 
 /** Arrugas de tela alrededor de una altura (codo, rodilla, cintura). */
-const wrinkle = (y: number, at: number, span: number, freq: number): number => Math.sin((y - at) * freq) * Math.exp(-(((y - at) / span) ** 2));
+export const wrinkle = (y: number, at: number, span: number, freq: number): number => Math.sin((y - at) * freq) * Math.exp(-(((y - at) / span) ** 2));
 
 // ------------------------------------------------------------------ tronco
 export function trunkParts(o: RigOptions): BodyPart[] {
@@ -124,7 +114,7 @@ export function trunkParts(o: RigOptions): BodyPart[] {
       [
         { y: 1.55, rx: 0.058, rz: 0.054, rb: 0.06 },
         { y: 1.6, rx: 0.055, rz: 0.05, rb: 0.062, z: 0.004 },
-        { y: NECK_H + 0.02, rx: 0.056, rz: 0.048, rb: 0.064, z: 0.006, k: 0.8 },
+        { y: HEAD_H + 0.02, rx: 0.056, rz: 0.048, rb: 0.064, z: 0.006, k: 0.8 },
       ],
       skinOf(c.skin),
       5,
@@ -182,7 +172,7 @@ function suitFront(o: RigOptions, shell: Shell, add: (g: BufferGeometry, skin?: 
     ),
   );
   for (const s of [-1, 1])
-    add(softBox(0.034, 0.05, 0.008, cloth(c.shirt, 0.6, 0.8), { x: s * 0.03, y: 1.583, z: shell.z(0.03, 1.58) - 0.004 }, 0.003, { z: s * 0.5, x: 0.25 }));
+    add(softBox(0.027, 0.046, 0.007, cloth(c.shirt, 0.6, 0.8), { x: s * 0.033, y: 1.586, z: shell.z(0.033, 1.583) - 0.002 }, 0.003, { z: s * 0.72, x: 0.3 }));
   if (fit.bowTie) {
     for (const s of [-1, 1]) add(ellipsoid(0.026, 0.017, 0.01, silk(c.tie), s * 0.026, 1.585, shell.z(0, 1.58) - 0.014, { segs: 8, rows: 6 }));
     add(ellipsoid(0.01, 0.012, 0.011, silk(shade(c.tie, 0.85)), 0, 1.585, shell.z(0, 1.58) - 0.017, { segs: 8, rows: 6 }));
@@ -268,9 +258,15 @@ function suitFront(o: RigOptions, shell: Shell, add: (g: BufferGeometry, skin?: 
   // Cuello de la chaqueta por detrás.
   add(
     tubePath(
-      ([-1, -0.6, 0, 0.6, 1] as const).map((t): Knot => ({ x: t * 0.092, y: 1.6 + 0.026 * (1 - t * t), z: 0.078 - 0.118 * t * t, a: 0.011, b: 0.026 })),
+      ([-1, -0.6, 0, 0.6, 1] as const).map((t): Knot => ({
+        x: t * 0.08,
+        y: 1.586 + 0.036 * (1 - t * t),
+        z: 0.074 - 0.112 * t * t,
+        a: 0.009 - 0.005 * t * t,
+        b: 0.024 - 0.015 * t * t,
+      })),
       lapel,
-      { segs: 8, steps: 3, up: { x: 0, y: 1, z: -0.35 } },
+      { segs: 8, steps: 3, round: true, up: { x: 0, y: 1, z: -0.35 } },
     ),
   );
   if (fit.pocketSquare !== false) {
@@ -291,7 +287,7 @@ function suitFront(o: RigOptions, shell: Shell, add: (g: BufferGeometry, skin?: 
   add(ellipsoid(0.009, 0.009, 0.005, plastic(edge, 0.3), 0.004, 1.222, shell.z(0, 1.222) - 0.004, { segs: 8, rows: 5 }));
   add(
     shell.patch(
-      0.8,
+      0.832,
       1.215,
       () => -0.004,
       () => 0.002,
@@ -303,7 +299,7 @@ function suitFront(o: RigOptions, shell: Shell, add: (g: BufferGeometry, skin?: 
   );
   add(
     shell.patch(
-      0.8,
+      0.832,
       1.0,
       () => -0.003,
       () => 0.003,
@@ -384,9 +380,15 @@ function bomber(o: RigOptions, b: number, add: (g: BufferGeometry, skin?: SkinFn
   // Cuello subido.
   add(
     tubePath(
-      ([-1, -0.7, 0, 0.7, 1] as const).map((t): Knot => ({ x: t * 0.086, y: 1.588 + 0.03 * (1 - t * t), z: 0.078 - 0.122 * t * t, a: 0.014, b: 0.032 })),
+      ([-1, -0.7, 0, 0.7, 1] as const).map((t): Knot => ({
+        x: t * 0.079,
+        y: 1.584 + 0.034 * (1 - t * t),
+        z: 0.074 - 0.116 * t * t,
+        a: 0.013 - 0.005 * t * t,
+        b: 0.032 - 0.016 * t * t,
+      })),
       hide,
-      { segs: 8, steps: 3, up: { x: 0, y: 1, z: -0.2 } },
+      { segs: 8, steps: 3, round: true, up: { x: 0, y: 1, z: -0.2 } },
     ),
   );
   // Franjas del color de su tipo en los hombros.
@@ -396,7 +398,7 @@ function bomber(o: RigOptions, b: number, add: (g: BufferGeometry, skin?: SkinFn
         1.44,
         1.47,
         () => s * 0.05 * b,
-        () => s * 0.21 * b,
+        () => s * 0.175 * b,
         0.004,
         cloth(c.accent, 0.4, 0.7),
         { cols: 5, rows: 2 },
@@ -488,9 +490,15 @@ function coat(o: RigOptions, rings: Ring[], add: (g: BufferGeometry, skin?: Skin
   }
   add(
     tubePath(
-      ([-1, -0.6, 0, 0.6, 1] as const).map((t): Knot => ({ x: t * 0.1, y: 1.6 + 0.04 * (1 - t * t), z: 0.088 - 0.13 * t * t, a: 0.012, b: 0.042 })),
+      ([-1, -0.6, 0, 0.6, 1] as const).map((t): Knot => ({
+        x: t * 0.086,
+        y: 1.588 + 0.05 * (1 - t * t),
+        z: 0.084 - 0.126 * t * t,
+        a: 0.012 - 0.005 * t * t,
+        b: 0.042 - 0.026 * t * t,
+      })),
       cloth(shade(c.jacket, 0.94)),
-      { segs: 8, steps: 3, up: { x: 0, y: 1, z: -0.3 } },
+      { segs: 8, steps: 3, round: true, up: { x: 0, y: 1, z: -0.3 } },
     ),
   );
 }
@@ -676,363 +684,4 @@ function vest(o: RigOptions, kind: 'carrier' | 'heavy', b: number, add: (g: Buff
       { segs: 22 },
     ),
   );
-}
-
-// ------------------------------------------------------------------ brazos y manos
-export function armParts(o: RigOptions, s: -1 | 1): BodyPart[] {
-  const c = o.colors;
-  const b = o.bulk ?? 1;
-  const fit: Outfit = o.outfit ?? {};
-  const top = fit.top ?? 'suit';
-  const X = s * SHOULDER_X * b;
-  const k = 0.45 + 0.55 * b;
-  const puff = top === 'bomber' ? 1.16 : top === 'fatigues' ? 1.06 : 1;
-  const r = (v: number): number => v * k * puff;
-  const sl = sleeve(s);
-  const out: BodyPart[] = [];
-  const color = fit.jacket === false && top === 'suit' ? c.shirt : c.jacket;
-  const fabric = top === 'bomber' ? leather(color, 0.42) : top === 'fatigues' ? cloth(color, 1.3) : cloth(color);
-  // El hombro nace dentro del tronco (hacia el centro) y cae hacia fuera: sin bola en la articulación.
-  const top0 = SHOULDER_H + 0.042;
-  const inner = X - s * 0.028;
-  out.push({
-    g: loft(
-      [
-        { y: top0, x: inner, rx: r(0.02), rz: r(0.026) },
-        { y: top0 - 0.008, x: inner + s * 0.006, rx: r(0.046), rz: r(0.05) },
-        { y: top0 - 0.03, x: X - s * 0.008, rx: r(0.06), rz: r(0.063) },
-        { y: SHOULDER_H - 0.03, x: X - s * 0.002, rx: r(0.066), rz: r(0.07) },
-        { y: 1.42, x: X, rx: r(0.063), rz: r(0.068) },
-        { y: 1.33, x: X, rx: r(0.057), rz: r(0.062) },
-        { y: 1.25, x: X, rx: r(0.054), rz: r(0.058) },
-        { y: ELBOW_H, x: X, rx: r(0.052), rz: r(0.056), z: 0.002 },
-        { y: 1.12, x: X, rx: r(0.0515), rz: r(0.054) },
-        { y: 1.03, x: X, rx: r(0.047), rz: r(0.049) },
-        { y: 0.95, x: X, rx: r(0.042), rz: r(0.045) },
-        { y: 0.915, x: X, rx: r(0.0415), rz: r(0.0445) },
-        { y: 0.914, x: X, rx: r(0.036), rz: r(0.039), k: 0.5 },
-      ],
-      fabric,
-      20,
-      {
-        segs: 13,
-        mod: (p, a, y) => {
-          // Arrugas del codo (por dentro) y del puño; en la cazadora, anillos acolchados.
-          let q = 1 + 0.03 * wrinkle(y, ELBOW_H, 0.055, 120) * (0.35 + 0.65 * Math.max(0, -Math.cos(a))) + 0.016 * wrinkle(y, 0.96, 0.04, 150);
-          if (top === 'bomber') q += 0.03 * Math.sin((y - 0.95) * 70) * bell01((y - 1.25) / 0.28);
-          p.x = X + (p.x - X) * q;
-          p.z *= q;
-        },
-      },
-    ),
-    skin: sl,
-  });
-  const fore = rigid(s < 0 ? BONE.foreL : BONE.foreR);
-  // Puño: de camisa, o elástico en la cazadora.
-  const cuff = top === 'bomber' ? cloth(shade(c.jacket, 0.7), 1.4) : fit.gloves !== undefined ? leather(shade(fit.gloves, 0.9)) : cloth(c.shirt, 0.6, 0.8);
-  out.push({
-    g: loft(
-      [
-        { y: 0.93, x: X, rx: r(0.0355), rz: r(0.0385) },
-        { y: 0.898, x: X, rx: r(0.035), rz: r(0.038) },
-        { y: 0.897, x: X, rx: 0.027, rz: 0.031, k: 0.5 },
-      ],
-      cuff,
-      0,
-      { segs: 14 },
-    ),
-    skin: fore,
-  });
-  // Brazalete del color de su tipo.
-  if (fit.armband) {
-    out.push({
-      g: loft(
-        [
-          { y: 1.335, x: X, rx: r(0.0605), rz: r(0.0655) },
-          { y: 1.38, x: X, rx: r(0.063), rz: r(0.068) },
-        ],
-        cloth(c.accent, 0.5, 0.7),
-        2,
-        { segs: 16 },
-      ),
-      skin: rigid(s < 0 ? BONE.armL : BONE.armR),
-    });
-  }
-  // Hombrera y codera del blindado.
-  if (fit.vest === 'heavy') {
-    const arm = rigid(s < 0 ? BONE.armL : BONE.armR);
-    const armor = (y0: number, y1: number, rx: number, grow: number, tone: number): BufferGeometry =>
-      loft(
-        [
-          { y: y0, x: X + s * 0.012, rx: r(rx) + grow * 0.6, rz: r(rx * 1.04) + grow * 0.6, e: 2.6, k: 0.7 },
-          { y: y0 + 0.012, x: X + s * 0.012, rx: r(rx) + grow, rz: r(rx * 1.04) + grow, e: 2.6 },
-          { y: (y0 + y1) / 2, x: X + s * 0.01, rx: r(rx * 1.04) + grow, rz: r(rx * 1.08) + grow, e: 2.6 },
-          { y: y1 - 0.01, x: X + s * 0.004, rx: r(rx * 0.94) + grow * 0.8, rz: r(rx) + grow * 0.8, e: 2.5 },
-          { y: y1, x: X, rx: r(rx * 0.7), rz: r(rx * 0.75), e: 2.3 },
-        ],
-        plastic(shade(c.accent, tone), 0.42),
-        9,
-        { segs: 18, capStart: true },
-      );
-    out.push({ g: armor(SHOULDER_H - 0.085, SHOULDER_H + 0.05, 0.068, 0.02, 0.8), skin: arm });
-    out.push({ g: armor(1.335, 1.42, 0.062, 0.014, 0.55), skin: arm });
-    out.push({ g: armor(0.96, 1.14, 0.05, 0.014, 0.55), skin: fore });
-  }
-  for (const g of handGeometry(X, s, fit.gloves !== undefined ? leather(fit.gloves, 0.55) : skinOf(c.skin))) out.push({ g, skin: fore });
-  return out;
-}
-
-/** Mano a medio cerrar alrededor de una empuñadura: palma, cuatro dedos y pulgar. */
-function handGeometry(X: number, s: -1 | 1, surf: Surface): BufferGeometry[] {
-  const H = ELBOW_H + HAND_Y;
-  const y = (v: number): number => H + v;
-  const out: BufferGeometry[] = [
-    loft(
-      [
-        { y: y(0.04), x: X, rx: 0.025, rz: 0.03, z: -0.004, e: 2.3 },
-        { y: y(0.015), x: X + s * 0.002, rx: 0.0235, rz: 0.036, z: -0.008, e: 2.5 },
-        { y: y(-0.015), x: X + s * 0.004, rx: 0.021, rz: 0.043, z: -0.01, e: 2.7 },
-        { y: y(-0.04), x: X + s * 0.005, rx: 0.018, rz: 0.044, z: -0.009, e: 2.7 },
-        { y: y(-0.056), x: X + s * 0.005, rx: 0.011, rz: 0.038, z: -0.008, e: 2.4 },
-      ],
-      surf,
-      5,
-      { segs: 10, capStart: true, capEnd: true },
-    ),
-  ];
-  if (far()) {
-    // De lejos, un puño.
-    out.push(ellipsoid(0.026, 0.026, 0.046, surf, X - s * 0.012, y(-0.052), -0.008, { segs: 10, rows: 6 }));
-    return out;
-  }
-  for (let f = 0; f < 4; f++) {
-    const z = -0.041 + f * 0.0225;
-    // El corazón es el más largo; el meñique, el más corto y fino.
-    const len = [0.94, 1.04, 1, 0.82][f]!;
-    const a = [0.0105, 0.0108, 0.0103, 0.009][f]!;
-    out.push(
-      tubePath(
-        [
-          { x: X + s * 0.006, y: y(-0.036), z, a },
-          { x: X + s * 0.006, y: y(-0.036 - 0.032 * len), z, a: a * 0.98 },
-          { x: X - s * 0.012, y: y(-0.036 - 0.05 * len), z, a: a * 0.94 },
-          { x: X - s * 0.031, y: y(-0.036 - 0.04 * len), z, a: a * 0.9 },
-          { x: X - s * 0.037, y: y(-0.036 - 0.014 * len), z: z + 0.001, a: a * 0.8 },
-        ],
-        surf,
-        { segs: 6, round: true, up: { x: 0, y: 0, z: 1 } },
-      ),
-    );
-  }
-  out.push(
-    tubePath(
-      [
-        { x: X - s * 0.002, y: y(0.018), z: -0.032, a: 0.0135 },
-        { x: X - s * 0.01, y: y(-0.004), z: -0.056, a: 0.0125 },
-        { x: X - s * 0.024, y: y(-0.024), z: -0.062, a: 0.0115 },
-        { x: X - s * 0.034, y: y(-0.038), z: -0.054, a: 0.0095 },
-      ],
-      surf,
-      { segs: 6, round: true, up: { x: 0, y: 1, z: 0 } },
-    ),
-  );
-  return out;
-}
-
-// ------------------------------------------------------------------ piernas y zapatos
-export function legParts(o: RigOptions, s: -1 | 1): BodyPart[] {
-  const c = o.colors;
-  const b = o.bulk ?? 1;
-  const fit: Outfit = o.outfit ?? {};
-  const top = fit.top ?? 'suit';
-  const X = s * 0.1 * b;
-  const k = 0.5 + 0.5 * b;
-  const loose = top === 'suit' || top === 'coat' ? 1 : 1.07;
-  const r = (v: number): number => v * k * loose;
-  const out: BodyPart[] = [];
-  const pants = top === 'suit' || top === 'coat' ? cloth(c.pants) : cloth(c.pants, 1.4);
-  const crease = top === 'suit' || top === 'coat';
-  const boots = fit.boots === true;
-  out.push({
-    g: loft(
-      [
-        { y: HIP_Y + 0.03, x: X, rx: r(0.06), rz: r(0.072), k: 0.8 },
-        { y: HIP_Y - 0.02, x: X, rx: r(0.088), rz: r(0.1) },
-        { y: 0.86, x: X, rx: r(0.092), rz: r(0.104), rb: r(0.107) },
-        { y: 0.76, x: X, rx: r(0.087), rz: r(0.098), rb: r(0.1) },
-        { y: 0.66, x: X, rx: r(0.08), rz: r(0.09) },
-        { y: 0.57, x: X, rx: r(0.073), rz: r(0.083), rb: r(0.079) },
-        { y: KNEE_H, x: X, rx: r(0.068), rz: r(0.079), rb: r(0.072) },
-        { y: 0.41, x: X, rx: r(0.066), rz: r(0.073), rb: r(0.077) },
-        { y: 0.33, x: X, rx: r(0.065), rz: r(0.069), rb: r(0.081) },
-        { y: 0.24, x: X, rx: r(0.061), rz: r(0.066), rb: r(0.073) },
-        ...(boots
-          ? [{ y: 0.19, x: X, rx: r(0.062), rz: r(0.068), rb: r(0.072) }]
-          : [
-              { y: 0.15, x: X, rx: r(0.06), rz: r(0.068), rb: r(0.068) },
-              { y: 0.1, x: X, rx: r(0.062), rz: r(0.076), rb: r(0.066), z: -0.004 },
-              { y: 0.088, x: X, rx: r(0.062), rz: r(0.078), rb: r(0.066), z: -0.004 },
-            ]),
-      ],
-      pants,
-      20,
-      {
-        segs: 13,
-        mod: (p, a, y) => {
-          const f = Math.max(0, -Math.cos(a));
-          // Raya del pantalón delante, pliegues tras la rodilla y sobre el zapato.
-          if (crease) p.z -= 0.004 * Math.exp(-(((a - PI) / 0.16) ** 2)) * bell01((y - 0.5) / 0.4);
-          const q =
-            1 +
-            0.03 * wrinkle(y, KNEE_H, 0.06, 110) * (1 - f) +
-            (boots ? 0 : 0.03 * wrinkle(y, 0.15, 0.05, 130)) +
-            (crease ? 0 : 0.016 * Math.sin(y * 48 + a * 2));
-          p.x = X + (p.x - X) * q;
-          p.z *= q;
-        },
-      },
-    ),
-    skin: leg(s),
-  });
-  const thigh = rigid(s < 0 ? BONE.thighL : BONE.thighR);
-  const shin = rigid(s < 0 ? BONE.shinL : BONE.shinR);
-  if (fit.holster && s > 0) {
-    // Pistolera de muslo.
-    out.push({
-      g: loft(
-        [
-          { y: 0.74, x: X, rx: r(0.091), rz: r(0.103) },
-          { y: 0.765, x: X, rx: r(0.092), rz: r(0.104) },
-        ],
-        leather(0x17181b),
-        0,
-        { segs: 16 },
-      ),
-      skin: thigh,
-    });
-    out.push({ g: softBox(0.03, 0.16, 0.07, leather(0x17181b), { x: X + r(0.1), y: 0.76, z: 0.004 }, 0.01), skin: thigh });
-    out.push({ g: softBox(0.022, 0.05, 0.05, plastic(0x0d0e10), { x: X + r(0.1), y: 0.86, z: 0.012 }, 0.01), skin: thigh });
-  }
-  if (fit.kneepads) {
-    out.push({ g: ellipsoid(r(0.066), 0.075, 0.034, plastic(shade(c.accent, 0.55), 0.5), X, KNEE_H - 0.005, -r(0.066), { segs: 12, rows: 8 }), skin: shin });
-    out.push({
-      g: loft(
-        [
-          { y: KNEE_H - 0.055, x: X, rx: r(0.07), rz: r(0.076) },
-          { y: KNEE_H - 0.035, x: X, rx: r(0.07), rz: r(0.077) },
-        ],
-        cloth(0x1a1c20, 1.2),
-        0,
-        { segs: 14 },
-      ),
-      skin: shin,
-    });
-  }
-  if (fit.vest === 'heavy') {
-    const sh = new Shell([
-      { y: 0.1, x: X, rx: r(0.064), rz: r(0.072) },
-      { y: 0.33, x: X, rx: r(0.068), rz: r(0.074), rb: r(0.081) },
-      { y: KNEE_H, x: X, rx: r(0.07), rz: r(0.08), rb: r(0.072) },
-      { y: 0.66, x: X, rx: r(0.083), rz: r(0.093) },
-      { y: 0.86, x: X, rx: r(0.095), rz: r(0.106), rb: r(0.107) },
-    ]);
-    const tone = plastic(shade(c.accent, 0.62), 0.42);
-    const w = (y: number): number => sh.at(y).rx * 0.82;
-    out.push({
-      g: sh.patch(
-        0.57,
-        0.765,
-        (y) => X - w(y),
-        (y) => X + w(y),
-        0.016,
-        tone,
-        { cols: 7, rows: 7 },
-      ),
-      skin: thigh,
-    });
-    out.push({
-      g: sh.patch(
-        0.17,
-        0.41,
-        (y) => X - w(y),
-        (y) => X + w(y),
-        0.016,
-        tone,
-        { cols: 7, rows: 7 },
-      ),
-      skin: shin,
-    });
-  }
-  out.push(...shoeParts(o, s, X, boots));
-  return out;
-}
-
-/** Zapato de cordones o bota: empeine, puntera y suela, en el hueso del tobillo. */
-function shoeParts(o: RigOptions, s: -1 | 1, X: number, boots: boolean): BodyPart[] {
-  const c = o.colors;
-  const b = 0.6 + 0.4 * (o.bulk ?? 1);
-  const foot = rigid(s < 0 ? BONE.footL : BONE.footR);
-  const shin = rigid(s < 0 ? BONE.shinL : BONE.shinR);
-  // Suelo del zapato en reposo.
-  const y0 = HIP_Y - 0.46 - 0.405 - FOOT_DROP;
-  const hide = leather(c.shoes, boots ? 0.66 : 0.52);
-  const out: BodyPart[] = [];
-  const w = (v: number): number => v * b * (boots ? 1.12 : 1);
-  out.push({
-    g: tubePath(
-      [
-        { x: X, y: y0 + 0.042, z: 0.052, a: w(0.03), b: 0.032 },
-        { x: X, y: y0 + 0.05, z: 0.03, a: w(0.037), b: 0.042 },
-        { x: X, y: y0 + 0.052, z: -0.015, a: w(0.039), b: 0.044 },
-        { x: X, y: y0 + 0.046, z: -0.075, a: w(0.042), b: 0.037 },
-        { x: X, y: y0 + 0.038, z: -0.135, a: w(0.046), b: 0.029 },
-        { x: X, y: y0 + 0.034, z: -0.19, a: w(0.043), b: boots ? 0.029 : 0.023 },
-        { x: X, y: y0 + 0.03, z: -0.228, a: w(0.03), b: boots ? 0.024 : 0.017 },
-        { x: X, y: y0 + 0.028, z: -0.243, a: w(0.012), b: 0.01 },
-      ],
-      hide,
-      { segs: 11, up: { x: 0, y: 1, z: 0 }, round: true },
-    ),
-    skin: foot,
-  });
-  // Suela y tacón.
-  if (!far())
-    out.push({
-      g: tubePath(
-        [
-          { x: X, y: y0 + 0.011, z: 0.06, a: w(0.028), b: 0.011 },
-          { x: X, y: y0 + 0.011, z: 0.02, a: w(0.039), b: 0.011 },
-          { x: X, y: y0 + 0.011, z: -0.06, a: w(0.041), b: 0.011 },
-          { x: X, y: y0 + 0.011, z: -0.15, a: w(0.049), b: 0.011 },
-          { x: X, y: y0 + 0.011, z: -0.215, a: w(0.04), b: 0.011 },
-          { x: X, y: y0 + 0.011, z: -0.25, a: w(0.012), b: 0.009 },
-        ],
-        plastic(SOLE, 0.8),
-        { segs: 8, up: { x: 0, y: 1, z: 0 } },
-      ),
-      skin: foot,
-    });
-  if (boots) {
-    out.push({
-      g: loft(
-        [
-          { y: 0.1, x: X, rx: w(0.045), rz: 0.056, rb: 0.052, z: -0.008 },
-          { y: 0.15, x: X, rx: w(0.05), rz: 0.058, rb: 0.056 },
-          { y: 0.215, x: X, rx: w(0.056), rz: 0.064, rb: 0.068 },
-          { y: 0.222, x: X, rx: w(0.05), rz: 0.058, rb: 0.062, k: 0.5 },
-        ],
-        hide,
-        8,
-        { segs: 14 },
-      ),
-      skin: shin,
-    });
-  } else if (!far()) {
-    // Cordones: tres pasadas sobre el empeine.
-    for (let i = 0; i < 3; i++) {
-      const z = -0.045 - i * 0.026;
-      out.push({ g: softBox(0.034, 0.005, 0.008, plastic(shade(c.shoes, 0.6)), { x: X, y: y0 + 0.087 - i * 0.008, z }, 0.002, { x: -0.25 }), skin: foot });
-    }
-  }
-  return out;
 }

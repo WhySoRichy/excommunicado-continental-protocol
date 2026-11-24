@@ -229,7 +229,8 @@ test.describe('Fase 6 · rendimiento', () => {
           q.teleport(0, 0, 14, 0);
           q.setLook(0, -0.1);
           for (let i = 0; i < n!; i++) q.spawnEnemy('thug', -3 + i * 1.5, 0, rowZ!, false);
-          q.step(2, {});
+          // Hasta que la cámara se aleja del todo: al hacerlo entra en cuadro más escenario, y con él su geometría.
+          q.step(90, {});
           q.luminance();
           return q.info().geometries;
         },

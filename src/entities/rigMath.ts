@@ -1,6 +1,6 @@
 /**
- * Matemática pura del rig de personajes (sin three): cinemática inversa de la pierna
- * y trayectoria del pie al caminar.
+ * Matemática pura del rig (sin three): piernas sueltas (en el aire, rodando, cayendo), pata de las máquinas, muelles y
+ * mirada. La marcha y los brazos de las personas están en `rig/gait.ts` y `rig/limbs.ts`.
  *
  * Convención de ángulos (rotación en X de un hueso que cuelga hacia −Y, con el personaje
  * mirando a −Z): positivo = hacia delante. La rodilla humana flexiona al revés que la
@@ -66,47 +66,6 @@ export function footStep(phase: number, halfStride: number, liftHeight: number, 
   const up = Math.max(0, -Math.sin(phase));
   out.lift = liftHeight * up * up * (3 - 2 * up);
   return out;
-}
-
-/**
- * Cabeceo del pie en el ciclo de marcha (rad, + = punta arriba), con la misma fase que
- * `footStep`: al final del apoyo se levanta el talón, en el aire la punta cuelga y antes
- * de pisar sube para entrar de talón.
- */
-export function footPitch(phase: number): number {
-  const tau = Math.PI * 2;
-  const ph = ((phase % tau) + tau) % tau;
-  if (ph < Math.PI) return -0.4 * smooth(0.7, 1, ph / Math.PI);
-  const u = (ph - Math.PI) / Math.PI;
-  return -0.4 * (1 - smooth(0, 0.45, u)) - 0.25 * Math.sin(Math.PI * u) * (1 - u) + 0.3 * smooth(0.5, 1, u) * (1 - smooth(0.9, 1, u));
-}
-
-export interface ArmReach {
-  /** Flexión del codo (≥ 0). */
-  elbow: number;
-  /** Mano en el espacio del brazo con el hombro sin girar: componentes Y y Z (X = 0). */
-  hy: number;
-  hz: number;
-}
-
-/**
- * IK del brazo, parte plana: flexión del codo para que la mano quede a `dist` del hombro, y
- * dónde queda entonces la mano con el hombro sin girar (el brazo cuelga hacia −Y y el codo
- * flexiona hacia delante, −Z). El rig gira después el hombro para llevar ese vector al objetivo.
- * Fuera de alcance, el brazo se estira.
- */
-export function solveArm(dist: number, l1: number, l2: number, out: ArmReach): ArmReach {
-  const d = Math.min(l1 + l2 - 0.004, Math.max(Math.abs(l1 - l2) + 0.02, dist));
-  const cosIn = (l1 * l1 + l2 * l2 - d * d) / (2 * l1 * l2);
-  out.elbow = Math.PI - Math.acos(Math.min(1, Math.max(-1, cosIn)));
-  out.hy = -l1 - l2 * Math.cos(out.elbow);
-  out.hz = -l2 * Math.sin(out.elbow);
-  return out;
-}
-
-/** Pasos por segundo según la velocidad: de un paseo (~1,8) a un sprint (~3,3). */
-export function cadence(speed: number): number {
-  return 1.7 + 1.6 * Math.min(1, Math.max(0, speed / 7));
 }
 
 /** Curva suave 0→1→0 para gestos de ida y vuelta (recarga, cambio de arma). */

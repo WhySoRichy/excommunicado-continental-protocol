@@ -19,11 +19,11 @@ export const STOCK: Record<WeaponModel, number> = {
 /** Dónde agarra la mano izquierda cada arma, en el espacio del arma (cañón a −Z, arriba +Y). */
 export const GRIP: Record<WeaponModel, readonly [number, number, number] | null> = {
   pistol: [-0.045, -0.035, -0.005],
-  rifle: [0, -0.04, -0.4],
-  smg: [0, -0.045, -0.26],
-  shotgun: [0, -0.02, -0.44],
+  rifle: [0, -0.04, -0.33],
+  smg: [0, -0.045, -0.24],
+  shotgun: [0, -0.02, -0.37],
   shotgunTactical: [0, -0.02, -0.32],
-  dmr: [0, -0.04, -0.4],
+  dmr: [0, -0.04, -0.34],
   revolver: [-0.045, -0.035, 0],
   knife: null,
   none: null,

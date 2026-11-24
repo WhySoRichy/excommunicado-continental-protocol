@@ -1,5 +1,6 @@
 import type { DeathStyle, HitPart } from '../../combat/hitReaction';
 import type { CoverHeight, MoveState, Posture } from '../PlayerController';
+import type { Gesture } from './layers';
 
 /** Colores del personaje (van en los vértices: un solo material). */
 export interface RigColors {
@@ -126,6 +127,14 @@ export interface RigPose {
   hitPart: HitPart;
   /** 0..1 descolocado por un impacto: retrocede doblado, con el arma baja. */
   stagger: number;
+  /** 0..1 en guardia: con el arma lista (0 relajado, con ella baja). */
+  ready: number;
+  /** Postura de quien no pelea, cuánto gesticula al hablar (0..1) y el compás al bailar (avanza 1 por golpe). */
+  gesture: Gesture;
+  talk: number;
+  beat: number;
+  /** A cubierto, se gira para apoyar la espalda en la pared (quien está pegado a ella). */
+  coverBack: boolean;
   /** 0..1 lleva el escudo por delante con el brazo izquierdo. */
   shield: number;
   /** Cojea: −1 de la pierna izquierda, +1 de la derecha, 0 no. */
@@ -178,6 +187,11 @@ export function idlePose(): RigPose {
     flinchFront: true,
     hitPart: 'torso',
     stagger: 0,
+    ready: 1,
+    gesture: 'none',
+    talk: 0,
+    beat: 0,
+    coverBack: false,
     shield: 0,
     limp: 0,
     death: 0,

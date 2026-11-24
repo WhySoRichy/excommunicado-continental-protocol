@@ -32,6 +32,7 @@ test.describe('Fase 3 · El Continental', () => {
     await enterHub(page);
     const c = await page.evaluate(() => window.__EXCOM__!.combat()!);
     expect(c.holstered).toBe(true);
+    await expect.poll(() => page.evaluate(() => window.__EXCOM__!.rigArmed()), { message: 'con el arma enfundada, las manos vacías' }).toBe(false);
     const hud = await page.evaluate(() => window.__EXCOM__!.hud());
     expect(hud.zone).toContain('ZONA NEUTRAL');
     expect(hud.objective).toContain('Charon');

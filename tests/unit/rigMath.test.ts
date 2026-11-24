@@ -2,8 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   bell,
   bodyYaw,
-  cadence,
-  footPitch,
   footStep,
   type LegAngles,
   legFoot,
@@ -12,7 +10,6 @@ import {
   SHIN_LEN,
   smooth,
   smoother,
-  solveArm,
   spring,
   solveLeg,
   THIGH_LEN,
@@ -85,7 +82,7 @@ describe('rig: cinemática inversa de la pierna', () => {
   });
 });
 
-describe('rig: ciclo de marcha', () => {
+describe('rig: marcha de las máquinas', () => {
   it('el pie apoya mientras retrocede y se levanta mientras avanza', () => {
     const s = { along: 0, lift: 0 };
     let prev = footStep(0, 0.3, 0.1, s).along;
@@ -103,41 +100,13 @@ describe('rig: ciclo de marcha', () => {
     }
   });
 
-  it('la cadencia sube con la velocidad y las curvas auxiliares están acotadas', () => {
-    expect(cadence(7)).toBeGreaterThan(cadence(2.6));
-    expect(cadence(100)).toBe(cadence(7));
+  it('las curvas auxiliares están acotadas', () => {
     expect(bell(0)).toBeCloseTo(0);
     expect(bell(0.5)).toBeCloseTo(1);
     expect(bell(2)).toBeCloseTo(0);
     expect(smooth(0, 1, -1)).toBe(0);
     expect(smooth(0, 1, 0.5)).toBeCloseTo(0.5);
     expect(smooth(0, 1, 3)).toBe(1);
-  });
-});
-
-describe('IK del brazo y cabeceo del pie', () => {
-  it('la mano queda a la distancia pedida del hombro', () => {
-    const out = { elbow: 0, hy: 0, hz: 0 };
-    for (const d of [0.15, 0.3, 0.45, 0.6]) {
-      const a = solveArm(d, 0.32, 0.315, out);
-      expect(Math.hypot(a.hy, a.hz)).toBeCloseTo(d, 5);
-      expect(a.elbow).toBeGreaterThan(0);
-      // El codo flexiona hacia delante: la mano nunca queda por detrás del hombro.
-      expect(a.hz).toBeLessThanOrEqual(0);
-    }
-  });
-
-  it('fuera de alcance, el brazo se estira', () => {
-    const a = solveArm(2, 0.32, 0.315, { elbow: 0, hy: 0, hz: 0 });
-    expect(a.elbow).toBeLessThan(0.3);
-    expect(Math.hypot(a.hy, a.hz)).toBeGreaterThan(0.62);
-  });
-
-  it('el pie va plano en medio del apoyo y con la punta arriba antes de pisar', () => {
-    expect(footPitch(Math.PI * 0.4)).toBeCloseTo(0, 5);
-    expect(footPitch(Math.PI * 0.98)).toBeLessThan(-0.3);
-    expect(footPitch(Math.PI * 1.8)).toBeGreaterThan(0.1);
-    expect(Math.abs(footPitch(Math.PI * 2 - 1e-6))).toBeLessThan(0.02);
   });
 });
 

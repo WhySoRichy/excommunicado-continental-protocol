@@ -1,9 +1,11 @@
 import type { BufferGeometry } from 'three';
-import { armParts, type BodyPart, legParts, trunkParts } from './body';
+import { type BodyPart, trunkParts } from './body';
+import { armParts, legParts } from './extremities';
 import { merge } from './geometry';
 import { headParts } from './head';
 import { withDetail } from './loft';
-import { applySkin, BONE, rigid } from './skin';
+import { BONE } from './skeleton';
+import { applySkin, rigid } from './skin';
 import type { RigOptions } from './types';
 
 /** Cuánto detalle lleva la malla de cerca y la de lejos. */

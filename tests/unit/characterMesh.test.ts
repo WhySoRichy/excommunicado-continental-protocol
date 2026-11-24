@@ -7,7 +7,7 @@ import { ENEMY_TYPES } from '../../src/entities/ai/enemyTypes';
 import { characterGeometry } from '../../src/entities/rig/character';
 import { loft } from '../../src/entities/rig/loft';
 import { ellipsoid, Shell, softBox, tubePath } from '../../src/entities/rig/shapes';
-import { BONE } from '../../src/entities/rig/skin';
+import { BONE } from '../../src/entities/rig/skeleton';
 
 const base = { rimColor: 0, rimStrength: 0, weapon: 'none' } as const;
 const ENEMIES: Record<string, RigOptions> = Object.fromEntries(
@@ -149,7 +149,7 @@ describe('malla de los personajes', () => {
         maxY = Math.max(maxY, pos.getY(i));
         const sum = sw.getX(i) + sw.getY(i) + sw.getZ(i) + sw.getW(i);
         const finite = Number.isFinite(pos.getX(i) + pos.getY(i) + pos.getZ(i));
-        if (!finite || Math.abs(sum - 1) > 1e-5 || Math.max(si.getX(i), si.getY(i)) > BONE.footR) wrong++;
+        if (!finite || Math.abs(sum - 1) > 1e-5 || Math.max(si.getX(i), si.getY(i), si.getZ(i)) > BONE.toeR) wrong++;
       }
       expect(wrong, 'vértices sin posición o con pesos que no suman 1').toBe(0);
       // Las suelas, donde las espera la animación, y la altura de siempre (la de su cápsula).

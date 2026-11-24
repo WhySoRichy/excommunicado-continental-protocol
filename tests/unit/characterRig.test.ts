@@ -53,22 +53,22 @@ describe('animaciones', () => {
 
   it('la cabeza mira a un lado, pero no por encima del hombro ni estando muerto', () => {
     const rig = new CharacterRig('prueba:mirada', { ...PLAYER_LOOK, weapon: 'none' });
-    const head = rig['head'];
     const pose = idlePose();
     pose.look = 1;
     pose.lookYaw = 0.8;
     settle(rig, pose);
-    expect(head.rotation.y, 'gira hacia lo que mira').toBeCloseTo(0.8, 1);
+    expect(rig.gaze().yaw, 'gira hacia lo que mira').toBeCloseTo(0.8, 1);
 
     pose.lookYaw = 2.6;
     settle(rig, pose);
-    expect(Math.abs(head.rotation.y), 'lo que queda a la espalda no se sigue').toBeLessThan(0.05);
+    expect(Math.abs(rig.gaze().yaw), 'lo que queda a la espalda no se sigue').toBeLessThan(0.05);
 
     pose.lookYaw = 0.8;
     pose.state = 'dead';
     pose.stateTime = 2;
     settle(rig, pose);
-    expect(Math.abs(head.rotation.y), 'un cuerpo caído no mira').toBeLessThan(0.05);
+    const { neck, head } = rig.bones;
+    expect(Math.abs(neck.rotation.y + head.rotation.y), 'un cuerpo caído no mira').toBeLessThan(0.05);
     rig.dispose();
   });
 });

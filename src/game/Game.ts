@@ -4,6 +4,7 @@ import { AudioEngine } from '../audio/AudioEngine';
 import { type IntensityInput, musicIntensity } from '../audio/music';
 import { simulateThrow, STUN } from '../combat/Grenades';
 import { type CombatIntent, emptyCombatIntent, SWITCH_TIME } from '../combat/PlayerCombat';
+import { fillPlayerLook } from '../combat/playerLook';
 import { type PlayerSlot, REMOTE_RESPAWN } from '../combat/PlayerRoster';
 import { STYLE_RANKS } from '../combat/StyleMeter';
 import { GEAR, gearFor, type GearId, type LoadoutSlot, loadoutFor, normalizeLoadout, type UpgradeId, type WeaponId } from '../combat/weapons';
@@ -32,10 +33,11 @@ import { pbrSetsOf } from '../render/materials';
 import { preloadPbr } from '../render/pbrTextures';
 import { CollisionDebugView, DebugOverlay } from '../debug/DebugOverlay';
 import { FrameStats } from '../debug/FrameStats';
-import { type DetailView, idlePose, type RigPose, type WeaponModel } from '../entities/CharacterRig';
+import { type DetailView, idlePose, PLAYER_LOOK, type RigPose, type WeaponModel } from '../entities/CharacterRig';
 import { WEAPON_MODEL } from '../entities/PlayerViews';
 import { type BodyYaw, bodyYaw, updateBodyYaw } from '../entities/rigMath';
 import { emptyIntent, type PlayerIntent } from '../entities/PlayerController';
+import { fillPlayerPose, PlayerBody } from '../entities/playerPose';
 import { DIALOGUE, HUB_TEXT, rulesPlaque } from '../hub/dialogue';
 import { buy } from '../hub/economy';
 import { HubDirector } from '../hub/HubDirector';
@@ -81,6 +83,8 @@ const MISSION_LEVEL: Record<MissionId, LevelId> = { practice: 'practice', nightc
 const SUB_LABELS = { time: 'Tiempo', accuracy: 'Precisión', damage: 'Daño recibido', variety: 'Variedad', civilians: 'Civiles ilesos' } as const;
 /** Margen (fracción de media pantalla) donde se pega la flecha de la baliza fuera de pantalla. */
 const BEACON_EDGE = 0.88;
+/** Lo que la cámara tarda en colocarse tras rodear una esquina a cubierto (s). */
+const WRAP_VIEW = 0.8;
 /** Tiempo mínimo en la pantalla de muerte antes de poder reaparecer. */
 const DEATH_MIN = 1.2;
 /** Autoguardado del tiempo de juego. */
@@ -164,6 +168,9 @@ export class Game {
   private readonly mouse: Vec2 = { x: 0, y: 0 };
   private readonly pad: Vec2 = { x: 0, y: 0 };
   private readonly pose: RigPose = idlePose();
+  private playerBody = new PlayerBody();
+  /** Segundos que la cámara sigue apartándose de la pared tras rodear una esquina a cubierto. */
+  private wrapView = 0;
   /** Giro visual del Huésped (la simulación gira a ritmo constante; el cuerpo, con muelle). */
   private readonly playerYaw: BodyYaw = bodyYaw();
   private readonly captureOverlay: HTMLDivElement;
@@ -395,7 +402,9 @@ export class Game {
     this.hud.setMarkers(0, 0);
     this.hud.setCombatVisible(true);
     this.audio.ambience(data.ambience);
-    this.lastWeaponModel = 'none';
+    // El personaje nuevo nace con su arma de serie en la mano: si la lleva enfundada (el hotel), hay que quitársela.
+    this.lastWeaponModel = PLAYER_LOOK.weapon;
+    this.playerBody = new PlayerBody();
   }
 
   /**
@@ -965,7 +974,7 @@ export class Game {
       s.civilianViews?.update(alpha, scaledDt, view);
       s.pickupViews.update(s.pickups.items, scaledDt);
       s.grenadeViews.update(s.grenades.items, alpha);
-      s.playerViews.update(s.roster.slots, alpha, scaledDt, view);
+      s.playerViews.update(s.roster.slots, alpha, scaledDt, view, this.musicIn.fighting > 0);
       s.vfx.update(scaledDt);
       s.renderNpcs(scaledDt);
       s.alarm.update(scaledDt);
@@ -1630,6 +1639,8 @@ export class Game {
     const edgeSide = pc && pc.height === 'high' && pc.wrap < 0 ? pc.peekSide || pc.edgeNear : 0;
     this.camera.shoulderOverride = edgeSide;
     this.camera.coverLean = edgeSide !== 0 && pc?.peekSide === 0 ? 1 : 0;
+    this.wrapView = pc && pc.wrap >= 0 ? WRAP_VIEW : Math.max(0, this.wrapView - realDt);
+    if (pc && this.wrapView > 0 && !p.aiming) this.camera.clearWall(p.yaw, realDt);
     this.camera.update({ feet: _feet, posture: p.posture, aiming: p.aiming, sprinting: p.sprinting, dt: realDt, zoom: s.combat.weapon.def.aimFov }, s.physics);
     if (this.opts.qa) checkCameraInvariants(s, this.camera, this.invariants);
     const rig = s.playerRig;
@@ -1645,37 +1656,31 @@ export class Game {
       rig.setWeapon(model);
     }
     const pose = this.pose;
-    pose.speed = p.stepSpeed(FIXED_DT);
-    const vx = p.feet.x - p.prevFeet.x;
-    const vz = p.feet.z - p.prevFeet.z;
-    pose.moveAngle = Math.hypot(vx, vz) > 1e-4 ? Math.atan2(-vx, -vz) - yaw : 0;
-    pose.state = p.state;
-    pose.posture = p.posture;
-    pose.grounded = p.grounded;
-    pose.blind = c.holstered ? 0 : c.blindPose(p);
-    // Un disparo a ciegas no levanta el arma a la mira: la saca por encima o por el borde.
-    pose.aim = !c.holstered && (p.aiming || (c.weapon.cooldown > 0 && pose.blind === 0)) ? 1 : 0;
+    const look = s.local.look;
+    fillPlayerLook(look, p, c);
+    fillPlayerPose(pose, p, look, yaw);
+    this.playerBody.update(pose, p, look, this.musicIn.fighting > 0, scaledDt);
+    this.hurtFrom(s, yaw, pose);
     pose.aimPitch = this.camera.pitch;
-    pose.stateTime = p.stateTime;
-    pose.reload = c.weapon.reloadProgress;
-    pose.recoil = c.recoilVis;
-    pose.melee = c.grab;
-    pose.slash = c.slashPhase;
     // La cabeza mira hacia donde apunta la cámara; con la cámara delante del personaje, al frente.
     pose.lookYaw = wrapAngle(this.camera.yaw - yaw);
     pose.look = 1;
-    pose.swap = c.switchT > 0 ? Math.sin(swapT * Math.PI) : 0;
-    pose.takedown = c.takedown ? c.takedown.t : -1;
-    pose.throw = c.throwPhase;
-    pose.vault = p.vaultProgress;
-    pose.cover = p.state === 'cover' && p.cover ? p.cover.height : 'none';
-    pose.peek = p.peekAmount;
-    pose.coverSide = p.state === 'cover' && p.cover ? p.cover.edgeNear : 0;
-    pose.brace = p.state === 'cover' && p.cover ? p.cover.impact : 0;
-    pose.coverTop = p.cover ? p.cover.top : 1.2;
+    pose.swap = c.switchT > 0 ? Math.sin(swapT * Math.PI) ** 2 : 0;
     rig.update(pose, scaledDt);
     rig.setOpacity(this.camera.distanceToHead < 0.55 ? 0 : 1);
     this.updateThrowArc(s, realDt);
+  }
+
+  /** De qué lado vino el último golpe: el cuerpo se sacude hacia el contrario. */
+  private hurtFrom(s: LevelSession, yaw: number, pose: RigPose): void {
+    let last = 0;
+    for (const d of s.combat.damageDirs) {
+      if (d.t <= last) continue;
+      last = d.t;
+      const rel = Math.atan2(-(d.from.x - s.player.feet.x), -(d.from.z - s.player.feet.z)) - yaw;
+      pose.flinchFront = Math.cos(rel) > -0.2;
+      pose.flinchSide = Math.sin(rel) > 0 ? -1 : 1;
+    }
   }
 
   /** El arco de lo que se lanzaría, con el mismo vuelo que hará la granada. */

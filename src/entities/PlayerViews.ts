@@ -3,8 +3,8 @@ import { disposeSprite, makeTextSprite } from '../render/labels';
 import { playerName } from '../text/coop';
 import type { PlayerSlot } from '../combat/PlayerRoster';
 import type { WeaponId } from '../combat/weapons';
-import { FIXED_DT } from '../core/Loop';
 import { CharacterRig, type DetailView, idlePose, PLAYER_LOOK, type RigOptions, type RigPose, type WeaponModel } from './CharacterRig';
+import { fillPlayerPose, PlayerBody } from './playerPose';
 import { type BodyYaw, bodyYaw, updateBodyYaw } from './rigMath';
 
 /** Modelo que se dibuja para cada arma del jugador. */
@@ -42,6 +42,7 @@ class PlayerView {
   private readonly label: Sprite;
   private readonly labelSize = new Vector2();
   private readonly pose: RigPose = idlePose();
+  private readonly body = new PlayerBody();
   private readonly visualYaw: BodyYaw = bodyYaw();
   private model: WeaponModel = 'none';
   /** Marca de la última actualización (para soltar las vistas de quien se fue). */
@@ -59,7 +60,7 @@ class PlayerView {
     scene.add(this.label);
   }
 
-  update(alpha: number, dt: number, view: DetailView): void {
+  update(alpha: number, dt: number, view: DetailView, threat: boolean): void {
     this.rig.updateDetail(view);
     const p = this.slot.controller;
     const look = this.slot.look;
@@ -73,31 +74,8 @@ class PlayerView {
     const yaw = updateBodyYaw(this.visualYaw, p.renderYaw(alpha), p.aiming || look.throw >= 0, dt);
     root.rotation.y = yaw;
     const pose = this.pose;
-    pose.speed = p.stepSpeed(FIXED_DT);
-    const vx = p.feet.x - p.prevFeet.x;
-    const vz = p.feet.z - p.prevFeet.z;
-    pose.moveAngle = Math.hypot(vx, vz) > 1e-4 ? Math.atan2(-vx, -vz) - yaw : 0;
-    pose.state = look.dead ? 'dead' : p.state;
-    pose.posture = p.posture;
-    pose.grounded = p.grounded;
-    pose.aim = look.aim ? 1 : 0;
-    // Inclina el arma hacia donde apunta.
-    pose.aimPitch = look.aimPitch;
-    pose.stateTime = p.stateTime;
-    pose.reload = look.reload;
-    pose.recoil = look.recoil;
-    pose.melee = look.melee;
-    pose.slash = look.slash;
-    pose.takedown = look.takedown;
-    pose.throw = look.throw;
-    pose.vault = p.vaultProgress;
-    pose.cover = p.state === 'cover' && p.cover ? p.cover.height : 'none';
-    pose.peek = p.peekAmount;
-    pose.blind = look.blind;
-    pose.coverSide = p.state === 'cover' && p.cover ? p.cover.edgeNear : 0;
-    pose.brace = p.state === 'cover' && p.cover ? p.cover.impact : 0;
-    pose.coverTop = p.cover ? p.cover.top : 1.2;
-    pose.death = 1;
+    fillPlayerPose(pose, p, look, yaw);
+    this.body.update(pose, p, look, threat, dt);
     this.rig.update(pose, dt);
     const lp = root.position;
     this.updateLabel(lp.x, lp.y + (p.posture === 'crouch' ? 1.55 : 2.15), lp.z, look.dead, view.eye);
@@ -132,7 +110,7 @@ export class PlayerViews {
 
   constructor(private readonly scene: Scene) {}
 
-  update(slots: readonly PlayerSlot[], alpha: number, dt: number, view: DetailView): void {
+  update(slots: readonly PlayerSlot[], alpha: number, dt: number, view: DetailView, threat: boolean): void {
     const t = ++this.tick;
     for (const s of slots) {
       if (s.local) continue;
@@ -142,7 +120,7 @@ export class PlayerViews {
         this.views.set(s, v);
       }
       v.seen = t;
-      v.update(alpha, dt, view);
+      v.update(alpha, dt, view, threat);
     }
     // Quien se fue de la partida ya no está en la lista: su personaje se retira.
     for (const [s, v] of this.views) {

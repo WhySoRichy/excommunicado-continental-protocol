@@ -2,9 +2,14 @@ import type { Scene } from 'three';
 import { FIXED_DT } from '../core/Loop';
 import { CharacterRig, type DetailView, type HairStyle, idlePose, type Outfit, type RigColors, type RigPose } from './CharacterRig';
 import type { Civilian } from './Civilian';
+import type { Gesture } from './rig/layers';
 
 /** Rim verde azulado: los civiles se distinguen de los enemigos a simple vista. */
 export const CIVILIAN_COLOR = 0x5ee6c8;
+
+/** Golpes por segundo de la música de la pista (unos 124 por minuto). */
+const BEATS = 2.07;
+const DANCES: readonly Gesture[] = ['dance0', 'dance1', 'dance2'];
 
 /** Cómo van vestidos los civiles. */
 export const CIVILIAN_LOOKS: ReadonlyArray<{ colors: RigColors; hair: HairStyle; outfit: Outfit }> = [
@@ -34,7 +39,8 @@ export const CIVILIAN_LOOKS: ReadonlyArray<{ colors: RigColors; hair: HairStyle;
 class CivilianView {
   private readonly rig: CharacterRig;
   private readonly pose: RigPose = idlePose();
-  private dancePhase: number;
+  /** Por qué golpe de la música va (avanza 1 por golpe). */
+  private beat: number;
   /** Segundos de juego desde la muerte (animación de caída). */
   private deadFor = 0;
 
@@ -54,7 +60,7 @@ class CivilianView {
       lod: true,
     });
     scene.add(this.rig.root);
-    this.dancePhase = civ.dancePhase0;
+    this.beat = civ.dancePhase0;
   }
 
   update(alpha: number, dt: number, view: DetailView): void {
@@ -66,6 +72,9 @@ class CivilianView {
     root.rotation.y = m.renderYaw(alpha);
     const pose = this.pose;
     pose.speed = m.stepSpeed(FIXED_DT);
+    const vx = m.feet.x - m.prevFeet.x;
+    const vz = m.feet.z - m.prevFeet.z;
+    pose.moveAngle = Math.hypot(vx, vz) > 1e-4 ? Math.atan2(-vx, -vz) - root.rotation.y : 0;
     pose.state = c.alive ? m.state : 'dead';
     pose.posture = m.posture;
     pose.grounded = m.grounded;
@@ -73,12 +82,26 @@ class CivilianView {
     if (!c.alive) this.deadFor += dt;
     pose.stateTime = c.alive ? m.stateTime : this.deadFor;
     pose.death = 2;
+    pose.ready = 0;
+    pose.gesture = this.gesture(pose.speed);
+    this.beat += dt * BEATS;
+    pose.beat = this.beat;
+    // Quien no baila mira a su alrededor; escondido, más deprisa y por todas partes.
+    const hiding = c.state === 'hide';
+    pose.look = c.alive && (hiding || c.state === 'calm') && c.behavior !== 'dance' ? 1 : 0;
+    pose.lookYaw = (hiding ? 0.9 : 0.5) * Math.sin(this.beat * (hiding ? 0.8 : 0.22) + c.index);
     this.rig.update(pose, dt);
-    if (c.alive && c.state === 'calm' && c.behavior === 'dance') {
-      this.dancePhase += dt * 6.5;
-      root.position.y += Math.abs(Math.sin(this.dancePhase)) * 0.08;
-      root.rotation.y += Math.sin(this.dancePhase * 0.5) * 0.35;
-    }
+  }
+
+  /** Cada uno a lo suyo: en la pista baila (hay tres maneras), en la barra se apoya y, con los tiros, huye o se encoge. */
+  private gesture(speed: number): Gesture {
+    const c = this.civ;
+    if (!c.alive) return 'none';
+    if (c.state === 'flee') return 'panic';
+    if (c.state === 'hide') return 'cower';
+    if (speed > 0.3) return 'none';
+    if (c.behavior === 'dance') return DANCES[c.index % DANCES.length]!;
+    return c.behavior === 'bar' ? 'counter' : 'pocket';
   }
 
   dispose(): void {
