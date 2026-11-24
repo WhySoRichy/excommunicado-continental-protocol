@@ -36,8 +36,8 @@ function torsoRings(b: number, jacket: boolean, grow = 0): Ring[] {
   const d = (v: number): number => v * (0.42 + 0.58 * b) + grow;
   const hem: Ring[] = jacket
     ? [
-        { y: 0.795, rx: w(0.2), rz: d(0.142), rb: d(0.144), e: 2.5 },
-        { y: 0.87, rx: w(0.193), rz: d(0.132), rb: d(0.138), e: 2.5 },
+        { y: 0.795, rx: w(0.212), rz: d(0.15), rb: d(0.15), e: 2.5 },
+        { y: 0.87, rx: w(0.199), rz: d(0.136), rb: d(0.141), e: 2.5 },
         { y: 0.95, rx: w(0.18), rz: d(0.119), rb: d(0.126), e: 2.45 },
       ]
     : [{ y: 0.955, rx: w(0.166), rz: d(0.107), rb: d(0.113), e: 2.4 }];

@@ -6,7 +6,9 @@ import {
   PerspectiveCamera,
   PMREMGenerator,
   Scene,
+  type SkinnedMesh,
   SRGBColorSpace,
+  Texture,
   Vector2,
   WebGLRenderer,
   WebGLRenderTarget,
@@ -22,6 +24,9 @@ import { AmbientOcclusionPass } from './ambientOcclusion';
 import { setMaterialDetail } from './materials';
 import { setMaxAnisotropy } from './textures';
 import { setWeaponEnvironment } from './weaponMaterial';
+
+/** Las texturas que puede llevar un material. */
+const MAPS = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap', 'alphaMap', 'bumpMap', 'lightMap'] as const;
 
 export type QualityPreset = 'low' | 'medium' | 'high';
 
@@ -351,8 +356,9 @@ export class GameRenderer {
     else this.renderer.render(this.scene, this.camera);
   }
 
-  /** Precompila los shaders del nivel para evitar tirones al ver un material por primera vez. */
+  /** Precompila los shaders del nivel y sube sus texturas para evitar tirones al ver algo por primera vez. */
   prewarm(): void {
+    this.uploadTextures();
     // Con posprocesado la escena se dibuja en el destino del compositor, cuyos programas difieren de
     // los de pantalla (sin mapeo de tonos): se compila contra ese destino para no duplicarlos.
     const target = this.bloomEnabled && this.composer ? this.composer.readBuffer : null;
@@ -361,6 +367,26 @@ export class GameRenderer {
     this.renderer.setRenderTarget(null);
     // Nivel nuevo: la sombra se regenera en el primer frame aunque toque saltarlo.
     this.renderer.shadowMap.needsUpdate = true;
+  }
+
+  /** Sube a la GPU las texturas de todo lo que hay en la escena (también lo que aún no está en cuadro) y los esqueletos. */
+  private uploadTextures(): void {
+    const seen = new Set<Texture>();
+    const upload = (t: unknown): void => {
+      if (!(t instanceof Texture) || t.isRenderTargetTexture || seen.has(t)) return;
+      seen.add(t);
+      this.renderer.initTexture(t);
+    };
+    this.scene.traverse((o) => {
+      const { material, skeleton } = o as Partial<SkinnedMesh>;
+      for (const m of Array.isArray(material) ? material : material ? [material] : []) {
+        for (const key of MAPS) upload((m as unknown as Record<string, unknown>)[key]);
+      }
+      if (skeleton) {
+        if (!skeleton.boneTexture) skeleton.computeBoneTexture();
+        upload(skeleton.boneTexture);
+      }
+    });
   }
 
   /**
