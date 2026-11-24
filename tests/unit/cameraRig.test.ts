@@ -39,4 +39,17 @@ describe('Cámara sobre el hombro', () => {
     // Mirando al norte (−Z), la derecha es +X.
     expect(rig.position.x).toBeGreaterThan(10.5);
   });
+
+  it('rodeando una esquina a cubierto, no se queda del lado de la pared', () => {
+    // Mirando de espaldas a la nueva pared, la cámara acababa dentro de ella y el personaje desaparecía.
+    const rig = new CameraRig(new PerspectiveCamera(), new Rng(1));
+    const wall = Math.PI / 2;
+    rig.setYawPitch(wall + 2.6, 0);
+    for (let i = 0; i < 60; i++) rig.clearWall(wall, 1 / 60);
+    expect(Math.abs(rig.yaw - wall)).toBeLessThan(1.35);
+    // Si ya mira hacia su lado, no la toca.
+    rig.setYawPitch(wall - 0.9, 0);
+    rig.clearWall(wall, 1 / 60);
+    expect(rig.yaw).toBeCloseTo(wall - 0.9, 6);
+  });
 });

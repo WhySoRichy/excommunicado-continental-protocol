@@ -459,14 +459,17 @@ body {
   box-shadow: 0 0 2px rgba(0, 0, 0, 0.9);
 }
 
+/* Abajo, entre los dos paneles: en el centro tapaba al personaje. */
 .prompt {
   position: absolute;
   left: 50%;
-  top: calc(50% + 96px);
+  bottom: 26px;
   transform: translateX(-50%);
+  width: max-content;
+  max-width: min(calc(100vw - 560px), 640px);
   padding: 0.4rem 0.8rem;
   font-size: 0.95rem;
-  white-space: nowrap;
+  text-align: center;
   background: rgba(14, 16, 20, 0.82);
   border: 1px solid rgba(212, 175, 55, 0.6);
   border-radius: 6px;
@@ -474,6 +477,13 @@ body {
 
 .prompt[hidden] {
   display: none;
+}
+
+@media (max-width: 760px) {
+  .prompt {
+    bottom: 132px;
+    max-width: calc(100vw - 48px);
+  }
 }
 
 .prompt-text {

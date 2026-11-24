@@ -1,5 +1,5 @@
 import { type PerspectiveCamera, Vector3 } from 'three';
-import { clamp, damp } from '../core/math';
+import { clamp, damp, wrapAngle } from '../core/math';
 import type { Rng } from '../core/rng';
 import type { PhysicsWorld } from '../physics/Physics';
 import { QueryGroups } from '../physics/Physics';
@@ -36,6 +36,8 @@ const DIST_AIM = 2.7;
 const DIST_SPRINT = 3.4;
 /** Zoom de FOV al apuntar (compensa la distancia mayor: el objetivo se ve igual de grande). */
 const AIM_FOV_FACTOR = 0.78;
+/** Rodeando una cobertura, cuánto puede desviarse la vista de la pared (rad): más allá la cámara quedaría dentro de ella. */
+const WALL_VIEW = 1.3;
 const CAM_RADIUS = 0.2;
 const MARGIN = 0.06;
 const MIN_DIST = 0.25;
@@ -131,6 +133,16 @@ export class CameraRig implements CombatCamera {
     this.yaw += yawRad;
     this.recoilPitch += pitchRad;
     this.recoilYaw += yawRad;
+  }
+
+  /**
+   * Rodeando una esquina a cubierto: si la vista queda de espaldas a la nueva pared, la cámara acabaría metida en ella y el
+   * personaje desaparecería. Gira lo justo para quedar de su lado.
+   */
+  clearWall(wallYaw: number, dt: number): void {
+    const rel = wrapAngle(this.yaw - wallYaw);
+    const over = Math.abs(rel) - WALL_VIEW;
+    if (over > 0) this.yaw -= Math.sign(rel) * over * (1 - Math.exp(-9 * dt));
   }
 
   /** Recuperación del retroceso (vuelve ~60 % hacia la mira original). */
