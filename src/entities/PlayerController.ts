@@ -1,7 +1,17 @@
 import type { CharacterCollision, Collider } from '@dimforge/rapier3d-compat';
 import { Vector3 } from 'three';
 import { angleDelta, clamp, lerp, moveTowardsAngle } from '../core/math';
-import { createRayHit, DEFAULT_KCC, Groups, type CharacterBody, type PhysicsWorld, QueryGroups, type Vec3Like } from '../physics/Physics';
+import {
+  type CharacterBody,
+  createRayHit,
+  DEFAULT_KCC,
+  Groups,
+  interactionGroups,
+  Layer,
+  type PhysicsWorld,
+  QueryGroups,
+  type Vec3Like,
+} from '../physics/Physics';
 import {
   CHEST_Y,
   COVER,
@@ -17,6 +27,10 @@ import {
   wrapTurn,
 } from './coverSensor';
 
+/** Un movimiento que se aparta esto (m) del pedido en un paso puede ser el empujón de otro personaje. */
+const SHOVED = 0.03;
+/** Y lo más que ese empujón lo mueve por paso (m). */
+const SHOVE_STEP = 0.06;
 /** Dimensiones de la cápsula (total = 2·half + 2·radio). */
 export const PLAYER_RADIUS = 0.32;
 export const STAND_HALF = 0.58; // 1,80 m
@@ -1452,7 +1466,29 @@ export class PlayerController {
     d.z = this.velocity.z * dt;
     const ctrl = this.char.controller;
     ctrl.computeColliderMovement(this.char.collider, d, undefined, this.groups);
-    const m = ctrl.computedMovement(this.kccOut);
+    let m = ctrl.computedMovement(this.kccOut);
+    // Si otro personaje se le ha metido dentro (al acabar una voltereta, una embestida), el controlador lo aparta de él
+    // aunque sea hacia dentro de la pared o del suelo. Entonces manda el escenario: se calcula otra vez sin personajes.
+    const px = m.x - d.x;
+    const py = m.y - d.y;
+    const pz = m.z - d.z;
+    if (px * px + py * py + pz * pz > SHOVED * SHOVED) {
+      // Se separan poco a poco: de golpe era un salto de casi medio metro.
+      const wish = Math.hypot(d.x, d.z) + SHOVE_STEP;
+      const got = Math.hypot(m.x, m.z);
+      if (got > wish) {
+        m.x *= wish / got;
+        m.z *= wish / got;
+      }
+      this.centerOf(_tmp);
+      _tmp.x += m.x;
+      _tmp.y += m.y;
+      _tmp.z += m.z;
+      if (this.physics.overlapsCapsule(_tmp, PLAYER_RADIUS - 0.03, this.halfHeight - 0.01, QueryGroups.STATIC, this.char.collider)) {
+        ctrl.computeColliderMovement(this.char.collider, d, undefined, interactionGroups(this.groups >>> 16, Layer.STATIC));
+        m = ctrl.computedMovement(this.kccOut);
+      }
+    }
     this.grounded = ctrl.computedGrounded();
     if (correctVelocity) this.clipVelocityAgainstContacts();
     this.feet.x += m.x;

@@ -7,7 +7,7 @@ import { COVER } from '../../src/entities/coverSensor';
 import { emptyIntent, MOVE, PLAYER_RADIUS, PlayerController, type PlayerIntent } from '../../src/entities/PlayerController';
 import { arena } from '../../src/levels/data/arena';
 import { buildLevelPhysics } from '../../src/levels/levelPhysics';
-import { createRayHit, loadRapier, PhysicsWorld, QueryGroups, type Rapier } from '../../src/physics/Physics';
+import { createRayHit, Groups, loadRapier, PhysicsWorld, QueryGroups, type Rapier } from '../../src/physics/Physics';
 
 /**
  * Checklist anti-bugs de movimiento sobre el mundo Rapier REAL de la arena de pruebas.
@@ -571,5 +571,32 @@ describe('Movimiento · acciones encadenadas (fuzz)', () => {
     // Siguió dentro del recinto.
     expect(Math.abs(ctx.p.feet.x)).toBeLessThan(24);
     expect(Math.abs(ctx.p.feet.z)).toBeLessThan(24);
+  });
+
+  it('otro personaje metido dentro no lo empuja a través de la pared ni del suelo', () => {
+    // Al acabar una voltereta o recibir una embestida, dos cápsulas pueden quedar una dentro de otra: el controlador las
+    // separaba hasta 45 cm de un paso al siguiente, también hacia dentro de un muro.
+    for (const [x, y, z] of [
+      [0, 0.02, -3.75],
+      [0.1, 0.02, -3.6],
+      [0, 0.4, -3.7],
+      [0, 1, -3.86],
+      [0.05, 1.5, -3.8],
+    ] as const) {
+      const ctx = setup(0, 0, -3.86);
+      const other = new PlayerController(ctx.physics, new Vector3(x, y, z), NORTH, Groups.ENEMY);
+      ctx.physics.step();
+      let minZ = 9;
+      let minY = 9;
+      for (let i = 0; i < 120; i++) {
+        other.fixedUpdate(FIXED_DT, { ...emptyIntent(), moveY: i < 60 ? 1 : 0 });
+        run(ctx, FIXED_DT, () => ({}));
+        minZ = Math.min(minZ, ctx.p.feet.z);
+        minY = Math.min(minY, ctx.p.feet.y);
+      }
+      expectClean(ctx);
+      expect(minZ, 'la cara del muro está en z = −4,2').toBeGreaterThan(-3.95);
+      expect(minY).toBeGreaterThan(-0.05);
+    }
   });
 });
