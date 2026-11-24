@@ -1,26 +1,23 @@
 <div align="center">
 
-# EXCOMMUNICADO
+<img src="docs/media/portada.jpg" alt="Excommunicado: Continental Protocol" width="100%">
 
-### Continental Protocol
+# EXCOMMUNICADO: CONTINENTAL PROTOCOL
 
-Acción en tercera persona para el navegador, inspirada en el universo de John Wick.<br>
-Gun-fu, contratos y las reglas del Continental, hecho con TypeScript, Three.js y Rapier.
+**Acción en tercera persona para el navegador.**<br>
+Tiroteos a bocajarro, coberturas, contratos puntuados y un hotel en el que está prohibido disparar.
+
+### [Jugar ahora](https://whysorichy.github.io/excommunicado-continental-protocol/)
+
+Gratis, sin instalar nada y sin cuenta. Solo, o con hasta tres amigos.
 
 [![CI y despliegue](https://github.com/WhySoRichy/excommunicado-continental-protocol/actions/workflows/deploy.yml/badge.svg)](https://github.com/WhySoRichy/excommunicado-continental-protocol/actions/workflows/deploy.yml)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
 ![Three.js](https://img.shields.io/badge/Three.js-0.187-000000?logo=threedotjs&logoColor=white)
-![Rapier](https://img.shields.io/badge/F%C3%ADsica-Rapier_0.21-D4AF37)
-![Vite](https://img.shields.io/badge/Vite-8-646CFF?logo=vite&logoColor=white)
-![Licencia MIT](https://img.shields.io/badge/Licencia-MIT-2EA44F)
+![Rapier](https://img.shields.io/badge/Rapier-0.21-D4AF37)
+[![Licencia MIT](https://img.shields.io/badge/Licencia-MIT-2EA44F)](LICENSE)
 
-**[Jugar en el navegador](https://whysorichy.github.io/excommunicado-continental-protocol/)**
-&nbsp;&middot;&nbsp; [Instalación](INSTALACION.md)
-&nbsp;&middot;&nbsp; [Diseño](docs/DISENO.md)
-&nbsp;&middot;&nbsp; [Arquitectura](docs/ARQUITECTURA.md)
-&nbsp;&middot;&nbsp; [Roadmap](docs/ROADMAP.md)
-
-<img src="docs/media/gameplay.gif" alt="El simulacro de combate" width="760">
+[El juego](#el-juego) &nbsp;·&nbsp; [Contratos](#contratos) &nbsp;·&nbsp; [Controles](#controles) &nbsp;·&nbsp; [Por dentro](#por-dentro) &nbsp;·&nbsp; [Ponerlo en marcha](#ponerlo-en-marcha) &nbsp;·&nbsp; [Rumbo](#rumbo)
 
 </div>
 
@@ -28,36 +25,48 @@ Gun-fu, contratos y las reglas del Continental, hecho con TypeScript, Three.js y
 
 ## El juego
 
-Eres el Huésped, un asesino retirado al que han vuelto a llamar. El hotel Continental es territorio neutral: ahí se habla, se compra y se aceptan contratos, pero no se dispara. Fuera, cada contrato se puntúa por estilo, precisión y economía de movimiento.
+Eres el Huésped, un asesino retirado al que han vuelto a llamar. El Continental es terreno neutral: ahí se habla, se compra y se firman contratos. Fuera, cada trabajo se puntúa por tiempo, precisión, variedad y limpieza.
+
+Es un proyecto independiente: los personajes, las armas, la animación, el sonido y la música se generan en el propio juego. No hay modelos ni clips comprados.
+
+<div align="center">
+<img src="docs/media/juego.webp" alt="El simulacro de combate" width="720">
+</div>
+
+**Tiroteos de cerca.** Doble tap, recarga perfecta, remates cuerpo a cuerpo y Foco, la cámara lenta que se gana peleando bien. El medidor de estilo, de ×1 a ×8, premia variar.
+
+**Coberturas que se usan de verdad.** Manteniendo una tecla se corre a la que miras. Con la espalda en la pared se recorre, se rodea la esquina, se asoma por el borde o por encima y se dispara a ciegas. También se llega deslizándose o saltando por encima.
+
+**Enemigos que pelean en escuadra.** Se turnan para disparar, avisan cuando te rodean, recargan a cubierto y se apartan de las granadas. Cada impacto se nota donde da. Hay matones, escoltas, tiradores, blindados, antidisturbios con escudo, sabuesos mecánicos, drones y un Juez que no perdona.
+
+**Un inventario con decisiones.** Al contrato llevas cuatro piezas: un arma principal, una secundaria, el cuchillo y el equipo. Se eligen en la armería, donde se ven en 3D, con lo que ganas en cada trabajo.
+
+**Reglas con consecuencias.** Dispara dentro del hotel y quedarás Excomunicado: multa, alarma y tres oleadas que entran a por ti.
+
+## Contratos
 
 | | |
 |---|---|
-| **El Continental** | Hub con Charon (contratos), el Sommelier (armería) y Winston. Romper la Regla I tiene consecuencias: Excomunicado, multa del 30 % de tus monedas, alarma y tres oleadas que asaltan el hotel |
-| **Simulacro de combate** | Tutorial jugable de unos 3 minutos que enseña cada movimiento con la tecla que tengas asignada, y después 6 maniquíes armados |
-| **Club Kairos** | Una pista llena de civiles que no hay que tocar, un panel de alarma que conviene desactivar y Vance en el VIP |
-| **Muelle 9** | Contenedores apilados con tiradores, tres cargamentos que destruir y la huida en bote |
-| **Torre Meridian** | Tres azoteas a distinta altura, el Juez con fases y 45 segundos para escapar |
-| **Gauntlet** | Oleadas infinitas en el vestíbulo, una sola vida y un top 10 local |
-| **Cooperativo** | Hasta cuatro jugadores en la arena o en cualquier contrato. Uno abre la sala y los demás entran con su código de cinco letras, desde la lista de salas públicas o desde otra pestaña del mismo equipo; la partida va directa entre los equipos. Quien se corta vuelve solo a su plaza |
+| **Simulacro** | Un tutorial de tres minutos que enseña cada movimiento con tu propia tecla y termina a tiros |
+| **Club Kairos** | Una pista llena de civiles que no hay que tocar, una alarma que conviene apagar y Vance arriba, en el VIP |
+| **Muelle 9** | Contenedores apilados, tiradores en lo alto, tres cargamentos que destruir y la huida en bote |
+| **Torre Meridian** | Tres azoteas, el Juez por fases y 45 segundos para salir |
+| **Gauntlet** | Oleadas sin fin en el vestíbulo con una sola vida |
 
-Cada contrato termina con un **rango de D a S** (tiempo, precisión, daño recibido, variedad y civiles). Los **marcadores de sangre** hacen de vidas, y las monedas se gastan en la armería: armas, granadas aturdidoras, cargador extendido, silenciador, trajes balísticos y más. Hay 16 logros.
-
-Al contrato llevas cuatro piezas de tu inventario: un arma principal (carabina, escopeta o rifle de tirador), una secundaria (pistola o revólver), el cuchillo y el equipo (granadas aturdidoras). Las eliges en la armería, donde se ven en 3D, o antes de cada contrato. En combate tienes además takedowns con doble tap, recarga perfecta, **Foco** (cámara lenta), cobertura, vault, deslizamiento y voltereta. El medidor de estilo, de ×1 a ×8, premia variar.
-
-## Capturas
+Todos se pueden jugar en **cooperativo, hasta cuatro**: uno abre la sala y los demás entran con su código de cinco letras o desde la lista de salas públicas. Si alguien se corta, vuelve solo a su sitio.
 
 <table>
   <tr>
-    <td><img src="docs/media/01-titulo.png" alt="Pantalla de título"></td>
-    <td><img src="docs/media/02-continental.png" alt="El Continental"></td>
+    <td width="50%"><img src="docs/media/continental.jpg" alt="El vestíbulo del Continental"></td>
+    <td width="50%"><img src="docs/media/cobertura.jpg" alt="A cubierto en el Muelle 9"></td>
   </tr>
   <tr>
-    <td><img src="docs/media/03-club-kairos.png" alt="Club Kairos"></td>
-    <td><img src="docs/media/04-muelle-9.png" alt="Muelle 9"></td>
+    <td><img src="docs/media/club.jpg" alt="Club Kairos"></td>
+    <td><img src="docs/media/muelle.jpg" alt="Muelle 9"></td>
   </tr>
   <tr>
-    <td><img src="docs/media/05-torre-meridian.png" alt="Torre Meridian"></td>
-    <td><img src="docs/media/06-intel.png" alt="Intel con la leyenda de enemigos"></td>
+    <td><img src="docs/media/torre.jpg" alt="Torre Meridian"></td>
+    <td><img src="docs/media/armeria.jpg" alt="La armería del Sommelier"></td>
   </tr>
 </table>
 
@@ -65,26 +74,84 @@ Al contrato llevas cuatro piezas de tu inventario: un arma principal (carabina, 
 
 | Acción | Teclado y ratón | Mando |
 |---|---|---|
-| Mover / mirar | WASD / ratón | Stick izquierdo / derecho |
-| Disparar / apuntar | Clic izquierdo / clic derecho | RT / LT |
-| Recargar (otra vez en la zona dorada: recarga perfecta) | R | X |
-| Takedown | F | B |
+| Moverse / mirar | WASD / ratón | Sticks |
+| Disparar / apuntar | Clic izquierdo / derecho | RT / LT |
+| Recargar (otra vez en la zona dorada: perfecta) | R | X |
+| Remate cuerpo a cuerpo | F | B |
 | Interactuar | E | A |
-| Saltar y vault | Espacio | A |
-| Esquivar (o doble Espacio) | Alt | RB |
-| Sprint | Shift | L3 |
-| Agacharse, deslizarse, cubrirse | C | Y |
+| Saltar, pasar por encima | Espacio | A |
+| Esquivar | Alt o doble Espacio | RB |
+| Esprintar | Shift | L3 |
+| Agacharse, deslizarse, cubrirse (mantener: correr a cubierto) | C | Y |
+| Lanzar el equipo (mantener: ver el arco) | G | Cruceta izquierda |
 | Foco | Q | LB |
-| Armas | 1, 2, 3 o rueda | Cruceta |
+| Armas | 1, 2, 3 o rueda | Cruceta arriba, derecha y abajo |
 | Cambiar de hombro | V | R3 |
-| Intel (mantener) | Tab | Select |
+| Intel | Tab | Select |
 | Pausa / controles | Esc / H | Start |
 
-Todo se puede reasignar en **Ajustes → Teclas**, y los avisos en pantalla muestran siempre la tecla real. Ajustes también incluye sensibilidad, invertir Y, apuntar alternando, FOV, brillo, calidad gráfica, volúmenes, sacudida de cámara, tamaño de la interfaz y pistas.
+Todo se reasigna en **Ajustes → Teclas**, y los avisos en pantalla muestran siempre la tecla que hayas puesto. Hay además sensibilidad, apuntar alternando, campo de visión, brillo, calidad gráfica, volúmenes por canal, sacudida de cámara y tamaño de la interfaz.
 
-## Ejecutarlo en local
+## Por dentro
 
-Necesitas [Node.js](https://nodejs.org) 22.12 o superior (se recomienda la 24 LTS).
+TypeScript en modo estricto, [Three.js](https://threejs.org) para dibujar, [Rapier](https://rapier.rs) para la física y [Vite](https://vite.dev) para construir. Nada más en tiempo de ejecución.
+
+**Personajes generados por código.** Cada cuerpo, con sus manos, su cara, su pelo y su ropa, es una sola malla con esqueleto de 24 huesos que se construye al cargar, en dos niveles de detalle. Cada tipo de enemigo se reconoce por la silueta.
+
+**Animación por capas, sin clips grabados.** Un ciclo de marcha que no patina (el pie apoyado retrocede justo a la velocidad a la que avanza el cuerpo), cinemática inversa en brazos y piernas, y el arma manda: se coloca el arma y las manos van a ella. La postura depende de lo que pasa: relajado, en guardia, encarando, de espaldas a una pared, herido, aturdido. Las transiciones van con muelles y se miden articulación por articulación.
+
+**La simulación no sabe que existe la pantalla.** Corre a paso fijo de 60 Hz y se puede ejecutar entera en Node: los contratos se prueban jugándolos sin dibujar nada. Lo que se ve la lee y nunca la cambia.
+
+**Cooperativo con autoridad del anfitrión.** Los disparos se predicen con la misma semilla que usará el anfitrión y se resuelven contra lo que cada uno tenía en pantalla (compensación de latencia). Va por WebRTC, con un servicio de salas propio en el plan gratuito de Cloudflare.
+
+**Escenarios como datos.** De una misma descripción salen la malla, las colisiones y la navegación. Texturas fotoescaneadas con relieve, aristas biseladas, luz basada en imagen, oclusión ambiental y resolución dinámica.
+
+**Sonido y música sintetizados.** Ni un archivo de audio: disparos, ambientes y una banda sonora que sube con el combate, hechos con Web Audio.
+
+```
+src/
+  core/       bucle, entrada, máquina de estados, guardado y ajustes
+  physics/    mundo físico y consultas
+  entities/   jugador, enemigos y su IA, civiles, gente del hotel y cuerpo de todos ellos
+  combat/     armas, daño, granadas, estilo y rango
+  net/        cooperativo: protocolo, anfitrión, invitado y transportes
+  levels/     datos de cada nivel, constructor y navegación
+  missions/   contratos, tutorial, Gauntlet y logros
+  hub/        reglas del Continental y economía
+  render/     materiales, efectos y resolución dinámica
+  audio/      motor de sonido y música
+  ui/  text/  interfaz y textos
+server/       servicio de salas
+```
+
+Más en profundidad: [arquitectura](docs/ARQUITECTURA.md), [diseño](docs/DISENO.md), [escalabilidad](docs/ESCALABILIDAD.md) y [guía de desarrollo](docs/CONTRIBUIR.md).
+
+### Pruebas
+
+| | |
+|---|---|
+| **394 unitarias** | Partidas completas sin pantalla, red con latencia y pérdidas, IA de cada enemigo y de la escuadra, balística, cobertura, animación (marcha sin patinar, manos en el arma, posturas), mallas, niveles, economía y guardado |
+| **66 de navegador** | El juego construido como en producción: contratos de principio a fin, cooperativo entre dos pestañas, movimiento sin atravesar paredes, tirones de animación, rendimiento, fugas de memoria, claridad visual, audio, mando y ajustes |
+
+Cada cambio pasa por el linter, la auditoría de dependencias y las dos baterías antes de publicarse.
+
+### Rendimiento
+
+Peor valor de todos los niveles en calidad Alta, comprobado en cada cambio:
+
+| | Medido | Tope |
+|---|---|---|
+| Llamadas de dibujo | 146 | 260 |
+| Triángulos, con sombras | 176 k | 230 k |
+| CPU por fotograma | 2,2 ms | 4 ms |
+| CPU por fotograma con el procesador frenado a la mitad | 5,8 ms | 10 ms |
+| Descarga del juego / de la física (gzip) | 353 KB / 1,6 MB | 355 KB / 1,8 MB |
+
+En una RTX 4060 va a 144 FPS, el tope del monitor. En gráficas integradas arranca en calidad Baja.
+
+## Ponerlo en marcha
+
+Hace falta [Node.js](https://nodejs.org) 22.12 o superior.
 
 ```bash
 git clone https://github.com/WhySoRichy/excommunicado-continental-protocol.git
@@ -93,62 +160,26 @@ npm install
 npm start
 ```
 
-El navegador se abre en http://localhost:4173. La guía completa, con instalación de Node.js en Windows, macOS y Linux, descarga en ZIP y solución de problemas, está en **[INSTALACION.md](INSTALACION.md)**.
+Se abre en http://localhost:4173. Paso a paso, para cualquier sistema y con los problemas habituales: [INSTALACION.md](INSTALACION.md).
 
-## Tecnología
-
-- **TypeScript en modo strict** con Vite 8.
-- **Animación procedural**, sin clips grabados: las piernas se resuelven con cinemática inversa para que los pies pisen el suelo, la mano de apoyo busca el arma con su propia IK, y las poses de recarga, deslizamiento, voltereta, vault o takedown se calculan en cada frame.
-- **Three.js 0.187** para el render: personajes generados por código (cuerpo, manos, cara, pelo y ropa, con dos niveles de detalle) como un solo `SkinnedMesh`, rim light Fresnel, IBL, sombras y resolución dinámica. Los neones y carteles van en HDR y alimentan un bloom con viñeta; los exteriores tienen un cielo nocturno con la silueta de la ciudad generado en un canvas. Los escenarios usan texturas fotoescaneadas con relieve, muestreadas sin que se note su repetición, aristas biseladas y oclusión ambiental.
-- **Rapier 0.21** para la física: el `KinematicCharacterController` mueve las cápsulas de jugador, enemigos y civiles.
-- **Bucle a paso fijo de 60 Hz** con interpolación de render y una sola máquina de estados de juego.
-- **Cooperativo en red con anfitrión con autoridad**: cada invitado envía su paso y recibe 20 instantáneas por segundo, que dibuja interpoladas. Su disparo se predice con la misma semilla que usará el anfitrión, y el anfitrión lo resuelve contra lo que el invitado tenía en pantalla (compensación de latencia). WebRTC con un servicio de salas propio en el plan gratuito de Cloudflare (código de sala de cinco letras, salas públicas, relé para las redes cerradas) y, si no responde, con la señalización en dos códigos que se copian; todo lo que llega por la red se valida.
-- **Niveles como datos**: mallas y colliders salen de la misma fuente, y la navegación (rejilla 2.5D con A*) se genera a partir de ellos.
-- **Audio 100 % Web Audio**: disparos, ambientes, sirena y música adaptativa que sube con el combate. No hay ningún archivo de sonido.
-- **Contenido propio y procedural**: no hay modelos ni música de terceros. Las únicas piezas ajenas son las texturas de los escenarios, de dominio público (CC0, ver [CREDITOS.md](docs/CREDITOS.md)).
-
-```
-src/
-  core/       bucle, entrada, máquina de estados, guardado y ajustes
-  physics/    mundo de Rapier y consultas
-  entities/   jugador, enemigos (con su IA), civiles, NPC y rig de personajes
-  combat/     armas, daño, estilo, rango y registro de jugadores
-  net/        cooperativo en red: protocolo, anfitrión, invitado y transportes
-  levels/     datos de cada nivel, constructor y navegación
-  hub/        reglas del Continental y economía
-  missions/   director de misión, tutorial, Gauntlet y logros
-  ui/         HUD, menús e Intel
-  text/       catálogo de textos
-  audio/      motor de audio y música
-  render/     renderer, materiales, efectos y resolución dinámica
-server/
-  salas/      servicio de salas del cooperativo (Cloudflare, plan gratuito)
-```
-
-Los detalles, decisiones técnicas y convenciones están en [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md). Hacia dónde va el juego y qué promete a quien lo juega (nada de pagar por ventaja): [visión](docs/VISION.md). Para retomar o ampliar el proyecto: [guía de desarrollo](docs/CONTRIBUIR.md), [roadmap](docs/ROADMAP.md) y [plan de escalabilidad](docs/ESCALABILIDAD.md).
-
-## Pruebas y calidad
-
-| | |
+| Para desarrollar | |
 |---|---|
-| **368 pruebas unitarias** (Vitest) | El servicio de salas, una partida cooperativa en red sin pantalla (anfitrión e invitado con latencia, variación y pérdida), su protocolo y la compensación de latencia, simulación de combate y misión sin pantalla, cinemática inversa de piernas y brazos del rig, suavizado de la animación sin tirones, movimiento sin pasos perdidos, la cobertura (entrar desde lejos, correr a la que se mira, rincones y esquinas, de una a otra, asomarse y disparar a ciegas), la cámara junto a las paredes, la geometría de los escenarios (cerrada y con los biseles hacia fuera), las mallas de los personajes (siluetas, pesos, caras y presupuesto), los modelos de las armas (presupuesto, culata y agarre), el inventario y la armería, las granadas (vuelo, rebotes, a quién aturden y el gesto de lanzarlas), daño, estilo, rango (incluida una prueba de coherencia con 500 partidas al azar), economía, IA de los enemigos (cada uno, la escuadra, el escudo, el sabueso y el dron), las reacciones a los impactos, navegación de cada nivel, guardado, reasignación de teclas, oleadas, música y superficie bajo los pies |
-| **66 pruebas e2e** (Playwright) | El juego real, compilado como en producción más la API de pruebas: el cooperativo con dos pestañas que juegan juntas (también por WebRTC y con la del anfitrión oculta), movimiento sin atravesar paredes ni atascarse (también con picos de lag), animación sin tirones medida articulación por articulación, combate contra varios enemigos, la armería y las granadas, los cuatro contratos y el Gauntlet de principio a fin, tutorial, ajustes persistentes, mando, claridad visual, mezcla de audio, rendimiento (también que cambiar de nivel no deje recursos en la GPU) y robustez ante un nivel que no se descarga. También comprueban que la versión publicada no incluya la API de pruebas ni los trucos de depuración, y que lleve su política de seguridad de contenido. Una prueba de humo comprueba además el juego en Firefox |
-| **CI** | Cada push a `main` pasa el linter, audita las dependencias, ejecuta las pruebas y publica el juego en GitHub Pages |
+| `npm run dev` | Servidor con recarga |
+| `npm test` / `npm run test:e2e` | Pruebas unitarias / de navegador |
+| `npm run lint` | Linter, formato y código sin uso |
+| `npm run sheets` | Láminas de personajes, posturas, marcha, armas y golpes con el motor del juego |
 
-### Rendimiento
+## Rumbo
 
-El peor valor de todos los niveles, en calidad Alta:
+Lo que el juego promete a quien lo juega está en [VISION.md](docs/VISION.md): **gratis, sin pagar por ventaja** y con todo lo cosmético al alcance de quien juega. Lo siguiente, en orden:
 
-| Métrica | Medida | Límite |
-|---|---|---|
-| Draw calls | 130 | 260 |
-| Triángulos (con sombras) | 132 k | 230 k |
-| CPU por frame | 2,0 ms | 4 ms |
-| CPU por frame, CPU frenada ×2 (portátil con gráfica integrada) | 5,4 ms | 10 ms |
-| JavaScript del juego / motor de física (gzip) | 345 KB / 1,6 MB | 355 KB / 1,8 MB |
+1. Mapas más grandes, con rutas para rodear y alturas.
+2. Acabados de armas y accesorios que solo se ven.
+3. Universo propio e idioma inglés.
+4. Arena PvP en salas privadas.
 
-Con una RTX 4060 va a 144 FPS (el tope del monitor). En gráficas integradas el juego arranca en calidad Baja.
+El detalle, con su estado, en el [roadmap](docs/ROADMAP.md).
 
-## Créditos y licencia
+## Licencia y créditos
 
-Proyecto de **WhySoRichy** para la asignatura de Programación Avanzada, inspirado en el universo de John Wick. Bibliotecas y herramientas en [CREDITS.md](CREDITS.md). El código está bajo la [licencia MIT](LICENSE).
+Proyecto independiente de **WhySoRichy**, inspirado en el universo de John Wick. Código bajo [licencia MIT](LICENSE). Texturas CC0, bibliotecas y herramientas en [CREDITOS.md](docs/CREDITOS.md).

@@ -1,8 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * Capturas y GIF del README (`npm run media`). No forma parte de la suite: genera
- * `docs/media/*.png` y los fotogramas del GIF con el build de producción.
+ * Imágenes del README (`npm run media`). No forma parte de la suite: genera `docs/media/*.jpg` y los fotogramas de la
+ * animación de juego con el build de pruebas.
  */
 export default defineConfig({
   testDir: 'tests/media',

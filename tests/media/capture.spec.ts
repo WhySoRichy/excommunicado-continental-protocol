@@ -2,12 +2,13 @@ import { expect, type Page, test } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-/** Capturas del README y fotogramas del GIF de juego (ver scripts/make-gif.mjs). */
+/** Imágenes del README (JPEG, sin interfaz) y fotogramas de la animación de juego (ver scripts/make-clip.mjs). */
 const OUT = join(process.cwd(), 'docs', 'media');
 const FRAMES = join(OUT, 'frames');
-const GIF_FRAMES = 112;
-/** 12 fotogramas por segundo de juego; el GIF los reproduce a 10 (algo más lento que el tiempo real). */
-const STEPS_PER_FRAME = 5;
+const CLIP_FRAMES = 96;
+/** 15 fotogramas por segundo de juego. */
+const STEPS_PER_FRAME = 4;
+const CLIP_SIZE = { width: 1280, height: 720 };
 /** Puntería humana: fracción del giro pendiente por paso, espera antes del primer tiro y pausa entre tiros (pasos de 1/60 s). */
 const AIM_EASE = 0.16;
 const REACTION_STEPS = 10;
@@ -26,7 +27,39 @@ async function settle(page: Page, s = 0.6): Promise<void> {
 }
 
 async function shot(page: Page, name: string): Promise<void> {
-  await page.screenshot({ path: join(OUT, `${name}.png`) });
+  await page.screenshot({ path: join(OUT, `${name}.jpg`), type: 'jpeg', quality: 80 });
+}
+
+/** Sin interfaz: solo lo que se ve en el juego. */
+async function bare(page: Page, on: boolean): Promise<void> {
+  await page.evaluate((v) => {
+    const id = 'sin-interfaz';
+    document.getElementById(id)?.remove();
+    if (!v) return;
+    const css = document.createElement('style');
+    css.id = id;
+    css.textContent = '#hud { visibility: hidden !important; }';
+    document.head.append(css);
+  }, on);
+}
+
+/** Coloca al jugador y la cámara, deja pasar unos pasos y hace la foto. */
+async function scene(
+  page: Page,
+  name: string,
+  o: { at: [number, number, number, number]; look: [number, number]; weapon?: string; steps?: number; move?: { moveY: number; sprint?: boolean } },
+): Promise<void> {
+  await page.evaluate((v) => {
+    const q = window.__EXCOM__!;
+    q.setManual(true);
+    q.releaseAll();
+    q.teleport(...v.at);
+    q.setLook(...v.look);
+    if (v.weapon) q.press(v.weapon as 'weapon1');
+    q.step(v.steps ?? 60, v.move ?? {});
+  }, o);
+  await settle(page, 0.8);
+  await shot(page, name);
 }
 
 async function contract(page: Page, id: 'practice' | 'nightclub' | 'docks' | 'rooftop'): Promise<void> {
@@ -41,63 +74,74 @@ async function contract(page: Page, id: 'practice' | 'nightclub' | 'docks' | 'ro
   });
 }
 
-test('capturas del README', async ({ page }) => {
+test('imágenes del README', async ({ page }) => {
   mkdirSync(OUT, { recursive: true });
   await ready(page);
-  await settle(page, 2.5);
-  await shot(page, '01-titulo');
   await page
     .getByRole('button', { name: /Nueva partida|Continuar/ })
     .first()
     .click();
   await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('hub');
+  await bare(page, true);
+  await scene(page, 'continental', { at: [2.4, 0, 2, 0.15], look: [0.12, -0.06], steps: 44, move: { moveY: 0.35 } });
+
+  // Armería: con su interfaz.
+  await bare(page, false);
   await page.evaluate(() => {
     const q = window.__EXCOM__!;
-    q.setManual(true);
-    q.teleport(-2.5, 0, -6.5, -0.35);
-    q.setLook(-0.35, -0.05);
-    q.step(10, {});
+    q.setCoins(30);
+    q.checkpoint('bar');
+    q.step(4, {});
+    q.interact();
   });
-  await settle(page, 1);
-  await shot(page, '02-continental');
+  for (let i = 0; i < 5 && (await page.evaluate(() => window.__EXCOM__!.menu())) === 'dialog'; i++)
+    await page.evaluate(() => window.__EXCOM__!.advanceDialog());
+  await expect.poll(() => page.evaluate(() => window.__EXCOM__!.menu())).toBe('shop');
+  await settle(page, 1.2);
+  await shot(page, 'armeria');
+  await page.evaluate(() => window.__EXCOM__!.closeMenu());
+  await bare(page, true);
 
   await contract(page, 'nightclub');
-  await page.evaluate(() => {
-    const q = window.__EXCOM__!;
-    q.teleport(-3, 0, 12, 0.25);
-    q.setLook(0.25, 0.02);
-    q.step(10, {});
-  });
-  await settle(page, 1);
-  await shot(page, '03-club-kairos');
-  await page.evaluate(() => window.__EXCOM__!.hold('intel', true));
-  await settle(page, 0.4);
-  await shot(page, '06-intel');
-  await page.evaluate(() => window.__EXCOM__!.hold('intel', false));
+  await scene(page, 'club', { at: [-3, 0, 12, 0.25], look: [0.25, 0] });
 
   await contract(page, 'docks');
-  await page.evaluate(() => {
-    const q = window.__EXCOM__!;
-    q.teleport(2, 0, 22, 0.15);
-    q.setLook(0.15, 0.0);
-    q.step(10, {});
-  });
+  await scene(page, 'muelle', { at: [2, 0, 22, 0.15], look: [0.15, 0], weapon: 'weapon1', steps: 22, move: { moveY: 1 } });
+  // A cubierto contra un contenedor: en medio de la pared y, de portada, en su esquina.
+  const cover = async (weapon: string, walk: number, look: [number, number]): Promise<void> => {
+    await page.evaluate(
+      ([w, n, yaw, pitch]) => {
+        const q = window.__EXCOM__!;
+        q.releaseAll();
+        q.teleport(5.5, 0, 20.5, 0);
+        q.setLook(0.1, -0.08);
+        q.press(w as 'weapon1');
+        q.step(30, {});
+        q.step(1, { crouch: true });
+        q.step(40, {});
+        if (n) q.step(n as number, { moveX: -1 });
+        q.setLook(yaw as number, pitch as number);
+        q.step(40, {});
+      },
+      [weapon, walk, ...look],
+    );
+    await settle(page, 0.8);
+  };
+  await cover('weapon1', 0, [-0.5, -0.06]);
+  await shot(page, 'cobertura');
+  await cover('weapon2', 90, [0.35, -0.05]);
+  await page.setViewportSize({ width: 1600, height: 640 });
   await settle(page, 1);
-  await shot(page, '04-muelle-9');
+  await shot(page, 'portada');
+  await page.setViewportSize({ width: 1280, height: 720 });
 
   await contract(page, 'rooftop');
-  await page.evaluate(() => {
-    const q = window.__EXCOM__!;
-    q.teleport(6, 7.68, -14, -0.35);
-    q.setLook(-0.35, 0.0);
-    q.step(10, {});
-  });
-  await settle(page, 1);
-  await shot(page, '05-torre-meridian');
+  await scene(page, 'torre', { at: [0, 0, 15, 0], look: [0.1, -0.05], weapon: 'weapon1', steps: 30, move: { moveY: 1, sprint: true } });
 });
 
-test('fotogramas del GIF: el simulacro a tiros', async ({ page }) => {
+test('fotogramas de la animación: el simulacro a tiros', async ({ page }) => {
   mkdirSync(FRAMES, { recursive: true });
+  await page.setViewportSize(CLIP_SIZE);
   await ready(page);
   await page
     .getByRole('button', { name: /Nueva partida|Continuar/ })
@@ -111,14 +155,14 @@ test('fotogramas del GIF: el simulacro a tiros', async ({ page }) => {
     q.step(30, {});
   });
   await settle(page, 0.6);
-  for (let i = 0; i < GIF_FRAMES; i++) {
+  for (let i = 0; i < CLIP_FRAMES; i++) {
     // Paso a paso: la cámara gira con suavidad hacia el objetivo (sin saltos), espera un instante al
     // tenerlo en la mira y no dispara más de un tiro cada 0,4 s. Si no lo ve, avanza por el camino sin dejar de mirarlo.
     await page.evaluate(
       ([n, ease, reaction, gap]) => {
         const q = window.__EXCOM__!;
-        const w = window as unknown as { __gifAim?: { target: string; onTarget: number; hidden: number; sinceShot: number } };
-        const st = (w.__gifAim ??= { target: '', onTarget: 0, hidden: 0, sinceShot: 99 });
+        const w = window as unknown as { __clipAim?: { target: string; onTarget: number; hidden: number; sinceShot: number } };
+        const st = (w.__clipAim ??= { target: '', onTarget: 0, hidden: 0, sinceShot: 99 });
         for (let k = 0; k < n!; k++) {
           st.sinceShot++;
           const enemies = q.enemies().filter((e) => e.alive);
@@ -177,6 +221,6 @@ test('fotogramas del GIF: el simulacro a tiros', async ({ page }) => {
       [STEPS_PER_FRAME, AIM_EASE, REACTION_STEPS, SHOT_GAP_STEPS],
     );
     await settle(page, 0.05);
-    await page.screenshot({ path: join(FRAMES, `frame-${String(i).padStart(3, '0')}.png`) });
+    await page.screenshot({ path: join(FRAMES, `frame-${String(i).padStart(3, '0')}.jpg`), type: 'jpeg', quality: 92 });
   }
 });

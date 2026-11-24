@@ -1,6 +1,6 @@
 # Créditos
 
-Proyecto de WhySoRichy. El código, los personajes, las armas, la música y los efectos de sonido son propios y se generan en el juego.
+Proyecto independiente de **WhySoRichy**. El código, los personajes, las armas, la animación, la música y los efectos de sonido son propios y se generan en el juego. No se descarga ninguna tipografía.
 
 ## Texturas de los escenarios
 
@@ -26,3 +26,24 @@ Las superficies de los escenarios usan texturas fotoescaneadas de [Poly Haven](h
 | [Plywood](https://polyhaven.com/a/plywood) | Rob Tuytel | Relieve de las cajas |
 
 Las descarga y convierte `npm run textures` (`scripts/textures.mjs`).
+
+## Bibliotecas
+
+| Biblioteca | Para qué | Licencia |
+|---|---|---|
+| [three.js](https://threejs.org/) | Dibujo en 3D | MIT |
+| [Rapier](https://rapier.rs/) | Física | Apache-2.0 |
+
+## Herramientas
+
+| Herramienta | Para qué | Licencia |
+|---|---|---|
+| [TypeScript](https://www.typescriptlang.org/) | Lenguaje | Apache-2.0 |
+| [Vite](https://vite.dev/) | Servidor de desarrollo y empaquetado | MIT |
+| [Vitest](https://vitest.dev/) y [Playwright](https://playwright.dev/) | Pruebas | MIT y Apache-2.0 |
+| [Oxlint](https://oxc.rs/), [Prettier](https://prettier.io/) y [Knip](https://knip.dev/) | Linter, formato y código sin uso | MIT, MIT e ISC |
+| [FFmpeg](https://ffmpeg.org/) | Convertir texturas y montar las imágenes del README (no se distribuye) | LGPL/GPL |
+
+## Inspiración
+
+El universo de John Wick: el hotel Continental, sus reglas y los marcadores de sangre.

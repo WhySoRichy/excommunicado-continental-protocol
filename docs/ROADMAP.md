@@ -7,8 +7,8 @@ Qué se puede mejorar y en qué orden. Cada bloque está pensado para una sesió
 ## Estado actual
 
 - Hub, tutorial, tres contratos y Gauntlet completos y jugables de principio a fin.
-- Animación procedural con IK de piernas y de la mano de apoyo, pies articulados, reacciones de impacto, caídas variadas, vault en tres tiempos, takedown coreografiado y tajo de cuchillo en tres tiempos (`src/entities/CharacterRig.ts`). Las cabezas miran: los enemigos siguen al jugador con la vista y se inclinan hacia él al apuntar, los guardias vigilan a un lado y a otro, los NPC del vestíbulo te siguen con la mirada y el Huésped mira hacia donde apunta la cámara.
-- Animación sin tirones, medida articulación por articulación: las transiciones (agacharse, apuntar, arrancar, parar) van con muelles críticos, la zancada termina el paso al parar, el cuerpo gira con suavidad aunque la simulación gire en seco y la rodilla ya no frena de golpe al estirarse. Se corrigió además un enganchón del movimiento: al correr se perdía uno de cada 20 o 30 pasos de simulación.
+- Cuerpo y animación rehechos (bloque 2, pulido tras la quinta entrega): esqueleto de 24 huesos (columna en dos tramos, cuello, clavículas, muñecas, dedos y punta del pie), cuerpos con proporciones de persona (hombros, talle, manos, melena de una pieza), un ciclo de marcha que no patina en ninguna dirección y posturas según lo que pasa: relajado, en guardia, encarando, herido. El arma manda sobre los brazos, así que las manos están siempre en ella. A cubierto, de espaldas a la pared, y al asomarse se gira por fuera de la esquina. El Huésped acusa los golpes y los aterrizajes; la gente del hotel espera y gesticula, en el club se baila de tres maneras y con los tiros unos corren y otros se encogen. Todo en capas que se prueban sin pantalla.
+- Animación sin tirones, medida articulación por articulación: las transiciones van con muelles críticos, el cuerpo gira con suavidad aunque la simulación gire en seco y ninguna postura se enciende ni se apaga de golpe. Se corrigió además un enganchón del movimiento: al correr se perdía uno de cada 20 o 30 pasos de simulación.
 - Enemigos (bloque 2, quinta entrega): pelean en escuadra (turnos de disparo, rodeos avisados con fuego de cobertura), usan coberturas bajas y altas comprobadas con rayos, recargan a cubierto, se asustan del fuego cercano, se apartan de las granadas, registran la zona y encuentran a sus caídos. Cada impacto se nota donde da (cabeza, brazo, pierna) y hay seis formas de caer. Tres tipos nuevos: antidisturbios con escudo, sabueso mecánico y dron. La dificultad se midió antes y después con las mismas semillas para que el daño que hacen no cambie.
 - Personajes nuevos (bloque 2, cuarta entrega): cuerpos de superficies suaves en lugar de bloques, con manos de cinco dedos, rostro modelado, ropa con arrugas y un brillo propio para cada material. Cada enemigo tiene su silueta (cazadora, portaplacas, capucha y visor, armadura con pantalla, abrigo blanco) y las articulaciones se doblan sin abrirse. Dos mallas por aspecto según la distancia; todo generado por código, sin descargas. Una prueba compara las siluetas, las caras y los pesos de los trece aspectos.
 - Inventario y equipo (bloque 2, tercera entrega, segunda parte): se tienen todas las armas que se consiguen, pero al contrato se llevan cuatro piezas, una por hueco (principal, secundaria, cuerpo a cuerpo y equipo). Se elige en la armería, con vista previa en 3D y las estadísticas de cada pieza, en el briefing y en la sala del cooperativo, cada jugador el suyo; la elección se guarda y las partidas anteriores siguen valiendo. El equipo estrena las granadas aturdidoras: arco de lanzamiento fiel al vuelo, rebotes, destello, enemigos que se tambalean con la mano en la cara y se recuperan, takedown a un aturdido, sonido y red. La sala del cooperativo pasa a dos columnas y los disparos de un invitado ya los oyen los demás.
@@ -48,17 +48,16 @@ Lo que quedó pendiente de esa revisión. Conviene hacerlo antes del cuarto cont
 - La lluvia declarada en los niveles (`weather`) no se dibuja.
 
 ### Mantenibilidad
-- Seguir repartiendo `src/game/Game.ts` (ha vuelto a crecer: 1.867 líneas; el flujo de los contratos, las interacciones del vestíbulo y lo del cooperativo son lo más separable) y pasar las fases del jefe de `MissionDirector` a un módulo puro.
+- Seguir repartiendo `src/game/Game.ts` (1.871 líneas; el flujo de los contratos, las interacciones del vestíbulo y lo del cooperativo son lo más separable) y pasar las fases del jefe de `MissionDirector` a un módulo puro.
 - `PlayerController.ts` mueve también a enemigos y civiles: la cobertura y el vault del jugador pueden ir a módulos propios antes de seguir añadiéndole estados.
 
 ## Prioridad alta: lo que más se nota al jugar
 
 ### 1. Pulido de animación
-La cuarta pasada está completa: encare de las armas largas por IK, tajo de cuchillo propio (se arma junto a la oreja y corta en diagonal cruzando el cuerpo), cabezas que miran a su objetivo con independencia del torso, transiciones sin tirones y poses de cobertura. Queda como pulido:
-- **Muñecas y dedos**: la mano ya tiene dedos, pero su gesto es fijo; no se adapta a cada arma.
-- **Sacudida del Huésped al recibir un impacto**: los enemigos ya la tienen (`RigPose.flinch`), pero el jugador no la usa.
-- **Civiles que miran**: bailan, huyen y se esconden sin volver nunca la cabeza hacia el tiroteo.
-- Cómo comprobarlo: `npm run poses` genera capturas de perfil de cada pose en `qa-screenshots/poses/`.
+Rehecha por capas (ver «Estado actual»). Queda como pulido:
+- **Remates coreografiados** con el enemigo: hoy cada uno hace su parte, sin agarrarse de verdad.
+- **Civiles que miran** hacia el tiroteo antes de correr.
+- Cómo comprobarlo: `npm run sheets -- posturas marcha cobertura acciones gestos` y `npm run poses` (dentro del juego).
 
 ### 2. Sensación de combate
 Ya hay pausa de impacto y sacudida en cada baja, casquillos, humo en la boca del arma y pisadas que cambian con la velocidad y con el suelo (`src/levels/surface.ts`). Queda:
