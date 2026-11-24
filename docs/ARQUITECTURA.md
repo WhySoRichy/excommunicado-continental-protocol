@@ -75,6 +75,7 @@ La lógica que no necesita three.js ni el DOM vive en archivos propios y tiene t
 | `hub/ExcommunicadoRules.ts` | Zona neutral → aviso → Excomunicado → oleadas → readmisión |
 | `entities/ai/EnemyBrain.ts` | Patrulla, sospecha, combate, cobertura, flanqueo, búsqueda |
 | `entities/RobotRigs.ts` y `entities/rig/robots.ts` | Cuerpo y animación de las máquinas (sabueso y dron), con el mismo material que los personajes |
+| `entities/Shield.ts` | El escudo del antidisturbios: qué disparos para, cuándo se lo bajan y cuándo se rompe |
 | `entities/ai/squad.ts` | Quién dispara, quién rodea y quién lo cubre en cada grupo (sin física ni vista) |
 | `combat/hitReaction.ts` | Qué parte alcanzó un impacto, cómo le afecta y cómo cae si lo mata |
 | `entities/coverSensor.ts` | Dónde puede cubrirse el jugador: la pared hacia donde anda o mira, que cubra, con sitio y alcanzable; sus bordes, sus rincones y cómo rodear una esquina |
@@ -224,16 +225,17 @@ Sin una GPU integrada a mano, se mide lo que la limita:
 - CPU por frame con la CPU frenada por el protocolo de DevTools: ×2 se parece a un portátil con gráfica integrada (es el límite que se exige) y ×4 a un portátil viejo (solo se registra);
 - tamaño del JavaScript comprimido.
 
-Todo está en `tests/e2e/perf.spec.ts`. Resultados en el nivel más pesado (Club Kairos, 12 civiles y 8 enemigos):
+Todo está en `tests/e2e/perf.spec.ts`, con el motivo de cada presupuesto. El peor valor de todos los niveles en calidad Alta (2026-11-24, RTX 4060):
 
 | Métrica | Medida | Límite |
 |---|---|---|
-| Draw calls | 139 | ≤ 260 |
-| Triángulos | 15 k | ≤ 120 k |
-| CPU por frame | ~2 ms | ≤ 4 ms |
-| CPU por frame con CPU ×2 | 4–7 ms | ≤ 10 ms |
-| CPU por frame con CPU ×4 | 10–17 ms | (registro) |
-| JS del juego / motor de física, gzip | 240 KB / 1,6 MB | ≤ 300 KB / 1,8 MB |
+| Draw calls | 130 | ≤ 260 |
+| Triángulos (con sombras) | 132 k | ≤ 230 k |
+| Programas de sombreado en toda la sesión | 71 | ≤ 76 |
+| CPU por frame | 2,0 ms | ≤ 4 ms |
+| CPU por frame con CPU ×2 | 5,4 ms | ≤ 10 ms |
+| CPU por frame con CPU ×4 | 13,1 ms | (registro) |
+| JS del juego / motor de física, gzip | 345 KB / 1,6 MB | ≤ 355 KB / 1,8 MB |
 
 Lo que más ayudó: un `SkinnedMesh` por personaje (de 421 a 169 draw calls), fusionar los props por material (de 169 a 139), congelar las matrices del nivel estático y regenerar las sombras a 30 Hz en el preset Medio.
 

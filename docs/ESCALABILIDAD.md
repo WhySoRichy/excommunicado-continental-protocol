@@ -18,13 +18,13 @@ El juego va a seguir creciendo en cuatro direcciones a la vez: gráficos, conten
 |---|---|---|
 | Simulación y vista mezcladas | Al empezar la fase 1, 11 módulos de simulación importaban render, audio, interfaz o cámara. Tras la fase 1, ninguno (vigilado por lint) | Resuelto: la simulación corre sin pantalla |
 | Un solo jugador cableado | Al empezar la fase 2, `LevelSession` guardaba un `player`, un `combat` y un único `PlayerTarget`. Tras ella, un registro de plazas con un objetivo por jugador; tras la fase 3, cooperativo en red | Resuelto |
-| Peso del juego | 275 KB comprimidos de un presupuesto de 300 (la red añadió unos 15) | Lo próximo grande conviene cargarlo aparte, como los niveles |
-| Módulos que concentran demasiado | `Game.ts` 1.330 líneas, `PlayerController.ts` 1.035, `CharacterRig.ts` 1.018 (su `update` ronda las 550) | Que dos frentes avancen a la vez sin pisarse |
+| Peso del juego | 345 KB comprimidos de un presupuesto de 355 (275 al terminar la red; después, armas, personajes y enemigos por código) | Lo próximo grande conviene cargarlo aparte, como los niveles |
+| Módulos que concentran demasiado | `Game.ts` 1.867 líneas, `PlayerController.ts` 1.597, `CharacterRig.ts` 1.327, `PlayerCombat.ts` 1.104, `Enemy.ts` 1.028 (2026-11-24) | Que dos frentes avancen a la vez sin pisarse |
 | Textos dentro del código | Cadenas en español repartidas por más de diez módulos de juego (armas, estilo, logros, diálogos) | Traducir y revisar textos sin tocar lógica |
 | Contenido sin validar fuera de los niveles | Armas, tipos de enemigo y diálogos no tienen comprobaciones como las de los niveles | Añadir contenido en volumen sin romper el equilibrio ni las referencias |
-| Gráficos solo procedurales | Sin carga de modelos ni texturas externas, sin instancias ni niveles de detalle | Gráficos más realistas y escenas con muchos personajes |
-| Historial pesado | 48 MB de `.git`: seis versiones del GIF del README suman 29 MB | Cada regeneración de capturas añade unos 10 MB para siempre |
-| CI lineal | 54 e2e en serie, de 8 a 13 min en un runner sin GPU | El tiempo crece con cada contrato nuevo |
+| Gráficos casi solo procedurales | Texturas CC0 en los escenarios y dos niveles de detalle en los personajes desde el bloque 2; sin carga de modelos ni instancias | Gráficos más realistas y escenas con muchos personajes |
+| Historial pesado | 70 MB de `.git`: seis versiones del GIF del README suman 29 MB | Cada regeneración de capturas añade unos 10 MB para siempre |
+| CI lineal | 66 e2e en serie, unos 22 min en un runner sin GPU | El tiempo crece con cada contrato nuevo |
 
 ## 3. Reglas para crecer
 

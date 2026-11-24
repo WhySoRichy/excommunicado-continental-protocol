@@ -137,15 +137,15 @@ Los detalles, decisiones técnicas y convenciones están en [docs/ARQUITECTURA.m
 
 ### Rendimiento
 
-Medido en el nivel más pesado (Club Kairos: 12 civiles y 8 enemigos):
+El peor valor de todos los niveles, en calidad Alta:
 
 | Métrica | Medida | Límite |
 |---|---|---|
-| Draw calls | 139 | 260 |
-| Triángulos | 15 k | 120 k |
-| CPU por frame | ~2 ms | 4 ms |
-| CPU por frame, CPU frenada ×2 (portátil con gráfica integrada) | 4–7 ms | 10 ms |
-| JavaScript del juego / motor de física (gzip) | 240 KB / 1,6 MB | 300 KB / 1,8 MB |
+| Draw calls | 130 | 260 |
+| Triángulos (con sombras) | 132 k | 230 k |
+| CPU por frame | 2,0 ms | 4 ms |
+| CPU por frame, CPU frenada ×2 (portátil con gráfica integrada) | 5,4 ms | 10 ms |
+| JavaScript del juego / motor de física (gzip) | 345 KB / 1,6 MB | 355 KB / 1,8 MB |
 
 Con una RTX 4060 va a 144 FPS (el tope del monitor). En gráficas integradas el juego arranca en calidad Baja.
 
