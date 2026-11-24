@@ -32,7 +32,7 @@ import { pbrSetsOf } from '../render/materials';
 import { preloadPbr } from '../render/pbrTextures';
 import { CollisionDebugView, DebugOverlay } from '../debug/DebugOverlay';
 import { FrameStats } from '../debug/FrameStats';
-import { idlePose, type RigPose, type WeaponModel } from '../entities/CharacterRig';
+import { type DetailView, idlePose, type RigPose, type WeaponModel } from '../entities/CharacterRig';
 import { WEAPON_MODEL } from '../entities/PlayerViews';
 import { type BodyYaw, bodyYaw, updateBodyYaw } from '../entities/rigMath';
 import { emptyIntent, type PlayerIntent } from '../entities/PlayerController';
@@ -196,6 +196,7 @@ export class Game {
   private stepDist = 0;
   private deathReturn: 'hub' | 'playing' = 'playing';
   private lastWeaponModel: WeaponModel = 'pistol';
+  private readonly detailView: DetailView;
   private loading = false;
   private autosaveT = 0;
   private nearInteractable: InteractableDef | null = null;
@@ -284,6 +285,7 @@ export class Game {
     };
     this.debug = new DebugOverlay(uiRoot);
     this.collisionView = new CollisionDebugView(this.renderer.scene);
+    this.detailView = { eye: this.renderer.camera.position, limit: 0 };
     this.loop = new AnimationLoop({ frame: (dt, now) => this.frame(dt, now) });
     this.fsm.on((to, from) => this.onStateChange(to, from));
     this.hudData = {
@@ -959,11 +961,12 @@ export class Game {
     const inWorld = controlling || this.fsm.state === 'paused' || this.fsm.state === 'dead' || this.fsm.state === 'hubMenu';
     if (s && inWorld) {
       this.updatePlayerView(alpha, realDt, scaledDt);
-      s.enemyViews.update(s.enemies.enemies, alpha, scaledDt);
-      s.civilianViews?.update(alpha, scaledDt);
+      const view = this.updateDetailView();
+      s.enemyViews.update(s.enemies.enemies, alpha, scaledDt, view);
+      s.civilianViews?.update(alpha, scaledDt, view);
       s.pickupViews.update(s.pickups.items, scaledDt);
       s.grenadeViews.update(s.grenades.items, alpha);
-      s.playerViews.update(s.roster.slots, alpha, scaledDt, this.renderer.camera.position);
+      s.playerViews.update(s.roster.slots, alpha, scaledDt, view);
       s.vfx.update(scaledDt);
       s.renderNpcs(scaledDt);
       s.alarm.update(scaledDt);
@@ -1707,6 +1710,13 @@ export class Game {
     this.hud.flash(near * (facing > 0 ? 0.3 + 0.7 * facing : 0.12) * this.settings.flash);
   }
 
+  /** Hasta dónde se ven los personajes con detalle: según la calidad y más lejos cuanto más aumento. */
+  private updateDetailView(): DetailView {
+    const v = this.detailView;
+    v.limit = (this.renderer.quality.characterDetail * DEFAULT_CAMERA.fov) / this.renderer.camera.fov;
+    return v;
+  }
+
   private updateAttractCamera(dt: number): void {
     this.orbit += dt;
     const cam = this.renderer.camera;
@@ -1768,7 +1778,7 @@ export class Game {
       this.camera.look(0, 0, 0, 0, FIXED_DT);
       this.fixedUpdate(FIXED_DT);
       this.updatePlayerView(1, FIXED_DT, FIXED_DT);
-      s.enemyViews.update(s.enemies.enemies, 1, FIXED_DT);
+      s.enemyViews.update(s.enemies.enemies, 1, FIXED_DT, this.updateDetailView());
       s.vfx.update(FIXED_DT);
       s.combat.frameUpdate(FIXED_DT, this.audio);
       s.alarm.update(FIXED_DT);

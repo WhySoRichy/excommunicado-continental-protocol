@@ -2,12 +2,12 @@ import { AdditiveBlending, BoxGeometry, Color, Mesh, MeshBasicMaterial, type Sce
 import { FIXED_DT } from '../core/Loop';
 import { clamp, damp } from '../core/math';
 import { alertIconMaterial } from '../render/vfx';
-import { CharacterRig, idlePose, type RigPose } from './CharacterRig';
+import { CharacterRig, type DetailView, idlePose, type RigPose } from './CharacterRig';
 import { CORPSE_SETTLE, type Enemy, THROW_DELAY } from './Enemy';
 import { type BodyYaw, bodyYaw, type LookAngles, lookAngles, updateBodyYaw } from './rigMath';
 
 /** Grosor del rim en reposo: por debajo del umbral del bloom, para que solo brillen el impacto y el telégrafo. */
-const RIM_BASE = 0.8;
+const RIM_BASE = 0.5;
 /**
  * Haz del láser: se afila hacia el extremo del objetivo (+Z tras `lookAt`), que es el que
  * queda junto a la cámara; con grosor constante se veía como una banda.
@@ -55,10 +55,12 @@ export class EnemyView {
       rimColor: def.color,
       rimStrength: RIM_BASE,
       hair: def.hair,
+      beard: def.beard,
       bulk: def.bulk,
-      vest: def.vest,
+      outfit: def.outfit,
       weapon: def.weapon.model,
       uniqueMaterial: true,
+      lod: true,
     });
     this.baseRim = new Color(def.color);
     scene.add(this.rig.root);
@@ -80,8 +82,9 @@ export class EnemyView {
     }
   }
 
-  update(alpha: number, dt: number): void {
+  update(alpha: number, dt: number, view: DetailView): void {
     const e = this.enemy;
+    this.rig.updateDetail(view);
     if (!e.alive && this.deadFor < 0) {
       // Si lo estaban proyectando, la caída sigue donde iba en vez de empezar de pie.
       this.deadFor = e.deathFallStart;
@@ -219,12 +222,12 @@ export class EnemyViews {
     this.sweep(enemies.length, t);
   }
 
-  update(enemies: readonly Enemy[], alpha: number, dt: number): void {
+  update(enemies: readonly Enemy[], alpha: number, dt: number, view: DetailView): void {
     const t = ++this.tick;
     for (const e of enemies) {
       const v = this.viewOf(e);
       v.seen = t;
-      v.update(alpha, dt);
+      v.update(alpha, dt, view);
     }
     this.sweep(enemies.length, t);
   }

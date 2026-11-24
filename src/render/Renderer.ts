@@ -43,6 +43,8 @@ export interface QualitySettings {
   ao: boolean;
   /** Relieve y rugosidad de las texturas fotoescaneadas (sin él, solo su color). */
   materialDetail: boolean;
+  /** Hasta qué distancia (m) los personajes se dibujan con su malla detallada. */
+  characterDetail: number;
 }
 
 export const QUALITY: Record<QualityPreset, QualitySettings> = {
@@ -57,6 +59,7 @@ export const QUALITY: Record<QualityPreset, QualitySettings> = {
     shadowInterval: 1,
     ao: false,
     materialDetail: false,
+    characterDetail: 5,
   },
   // Medio: la sombra (el mayor coste de CPU tras las draw calls) se regenera en frames alternos.
   medium: {
@@ -70,6 +73,7 @@ export const QUALITY: Record<QualityPreset, QualitySettings> = {
     shadowInterval: 2,
     ao: false,
     materialDetail: true,
+    characterDetail: 8,
   },
   high: {
     pixelRatioCap: 1.75,
@@ -82,6 +86,7 @@ export const QUALITY: Record<QualityPreset, QualitySettings> = {
     shadowInterval: 1,
     ao: true,
     materialDetail: true,
+    characterDetail: 12,
   },
 };
 

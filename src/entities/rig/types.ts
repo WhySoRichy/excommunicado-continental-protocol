@@ -1,6 +1,6 @@
 import type { CoverHeight, MoveState, Posture } from '../PlayerController';
 
-/** Colores del personaje (low-poly con colores por vértice: 1 material por tipo). */
+/** Colores del personaje (van en los vértices: un solo material). */
 export interface RigColors {
   jacket: number;
   shirt: number;
@@ -14,13 +14,17 @@ export interface RigColors {
 
 export type HairStyle = 'long' | 'short' | 'bald' | 'helmet' | 'cap' | 'parted' | 'slick';
 export type WeaponModel = 'pistol' | 'revolver' | 'rifle' | 'dmr' | 'smg' | 'shotgun' | 'shotgunTactical' | 'knife' | 'none';
-/** Rostro: `stern` es el común (cejas fruncidas); `wick`, el del Huésped. */
-export type FaceStyle = 'stern' | 'wick';
+/** Rostro: `stern`, ceñudo (el común); `calm`, sereno (el del Huésped). */
+export type FaceStyle = 'stern' | 'calm';
 
-/** Prendas opcionales. Sin `outfit`, el personaje lleva traje de chaqueta con corbata y pañuelo. */
+/** Prendas y equipo opcionales. Sin `outfit`, el personaje lleva traje de chaqueta con corbata y pañuelo. */
 export interface Outfit {
-  /** Chaqueta (por defecto sí). Sin ella se ven el chaleco y las mangas de la camisa. */
+  /** Lo que lleva en el tronco: traje (por defecto), cazadora acolchada, abrigo largo o uniforme de faena. */
+  top?: 'suit' | 'bomber' | 'coat' | 'fatigues';
+  /** Chaqueta del traje (por defecto sí). Sin ella se ven el chaleco y las mangas de la camisa. */
   jacket?: boolean;
+  /** Corbata (por defecto sí, salvo con pajarita). */
+  tie?: boolean;
   /** Chaleco de vestir: color. */
   waistcoat?: number;
   /** Pañuelo de bolsillo en el color de acento (por defecto sí). */
@@ -33,6 +37,29 @@ export interface Outfit {
   tastevin?: boolean;
   /** Bigote encerado (solo sin barba). */
   mustache?: boolean;
+  /** Chaleco encima: portaplacas ligero o blindaje completo con hombreras y placas en las piernas. */
+  vest?: 'carrier' | 'heavy';
+  /** Brazaletes del color de acento. */
+  armband?: boolean;
+  /** Guantes: color. */
+  gloves?: number;
+  /** Botas en vez de zapatos. */
+  boots?: boolean;
+  /** Pistolera en el muslo derecho. */
+  holster?: boolean;
+  kneepads?: boolean;
+  /** Capucha echada, con el cuello tapado: color. */
+  hood?: number;
+  /** Cara tapada, salvo los ojos. */
+  mask?: 'balaclava';
+  /** Visor de dos lentes: su color. */
+  goggles?: number;
+  /** Gafas de sol. */
+  glasses?: boolean;
+  /** Auricular con su cable. */
+  earpiece?: boolean;
+  /** Pantalla blindada delante de la cara (con casco). */
+  visor?: boolean;
 }
 
 export interface RigOptions {
@@ -42,8 +69,6 @@ export interface RigOptions {
   hair: HairStyle;
   /** Corpulencia (1 = normal, 1.25 = blindado). */
   bulk?: number;
-  /** Chaleco/placas (blindado, escolta). */
-  vest?: boolean;
   /** Barba cerrada (la mandíbula va del color del pelo). */
   beard?: boolean;
   /** Prendas que cambian la silueta además de los colores (traje de tres piezas, sumiller...). */
@@ -53,6 +78,8 @@ export interface RigOptions {
   weapon: WeaponModel;
   /** Material propio (no cacheado): permite efectos por instancia (destello de impacto). */
   uniqueMaterial?: boolean;
+  /** Con malla lejana (enemigos, civiles y aliados: los que se ven de cerca y de lejos). */
+  lod?: boolean;
 }
 
 export interface RigPose {

@@ -11,7 +11,9 @@ import { isCI, openGame } from './helpers';
  */
 const BUDGET = {
   calls: 260,
-  triangles: 120_000,
+  // Subió de 120.000 con los personajes de mallas suaves (bloque 2, entrega 4): unos 8.000 triángulos de cerca y 3.000 de
+  // lejos cada uno, dos veces por fotograma (sombra y escena). El peor caso es la pista del club, con todos sus civiles.
+  triangles: 230_000,
   /** Programas de shader compilados en TODA la sesión (la caché es acumulativa). */
   // Incluye la cadena de posprocesado (bloom y salida), que aporta unos nueve programas propios.
   programsSession: 76,
@@ -21,9 +23,10 @@ const BUDGET = {
   cpuMsThrottled: 10,
   /**
    * JS inicial del juego (gzip) y del motor de física (gzip), en KB. El del juego subió de 300 a 320 con las armas de
-   * piezas reales (bloque 2): las extrusiones, los torneados y la triangulación de contornos de three, unos 8 KB.
+   * piezas reales (bloque 2): las extrusiones, los torneados y la triangulación de contornos de three, unos 8 KB; y a 340
+   * con los personajes de mallas suaves, unos 10 KB de código en lugar de megas de modelos descargados.
    */
-  appGzKb: 320,
+  appGzKb: 340,
   rapierGzKb: 1800,
 };
 

@@ -1,5 +1,5 @@
 import type { EnemyType } from '../../levels/types';
-import type { HairStyle, RigColors, WeaponModel } from '../rig/types';
+import type { HairStyle, Outfit, RigColors, WeaponModel } from '../rig/types';
 
 /** Tipos de enemigo (DISENO §4.2): color + icono propios para que se distingan siempre. */
 export interface EnemyWeaponDef {
@@ -49,12 +49,12 @@ export interface EnemyTypeDef {
   engage: readonly [number, number];
   colors: RigColors;
   hair: HairStyle;
-  vest: boolean;
+  /** Prendas y equipo: la silueta con la que se le reconoce de lejos. */
+  outfit: Outfit;
+  beard?: boolean;
   bulk: number;
   score: number;
 }
-
-const suitDark = { shirt: 0x1d2026, tie: 0x0c0d10, pants: 0x2a2d33, shoes: 0x0b0b0d, skin: 0xbf8f72, hair: 0x1f1a16 };
 
 export const ENEMY_TYPES: Record<EnemyType, EnemyTypeDef> = {
   thug: {
@@ -75,10 +75,12 @@ export const ENEMY_TYPES: Record<EnemyType, EnemyTypeDef> = {
     prefersCover: 0.45,
     flanker: false,
     engage: [7, 15],
-    colors: { jacket: 0x3a3330, accent: 0xff8c2a, ...suitDark },
-    hair: 'short',
-    vest: false,
-    bulk: 1.05,
+    // Cazadora acolchada de cuero, vaqueros y la cabeza rapada: ancho de hombros y corto de abajo.
+    colors: { jacket: 0x3b2b22, shirt: 0x6a6d73, tie: 0x0c0d10, pants: 0x2b3340, shoes: 0x1c1612, skin: 0xbf8f72, hair: 0x2a211b, accent: 0xff8c2a },
+    hair: 'bald',
+    outfit: { top: 'bomber', armband: true },
+    beard: true,
+    bulk: 1.08,
     score: 100,
   },
   escort: {
@@ -99,9 +101,10 @@ export const ENEMY_TYPES: Record<EnemyType, EnemyTypeDef> = {
     prefersCover: 0.3,
     flanker: true,
     engage: [6, 12],
-    colors: { jacket: 0x2b3038, accent: 0xffd23f, ...suitDark },
-    hair: 'cap',
-    vest: true,
+    // Guardaespaldas: traje oscuro con portaplacas, gafas de sol, auricular y pistolera.
+    colors: { jacket: 0x23262d, shirt: 0xd9d5cb, tie: 0xffd23f, pants: 0x23262d, shoes: 0x0b0b0d, skin: 0xb98766, hair: 0x1f1a16, accent: 0xffd23f },
+    hair: 'short',
+    outfit: { vest: 'carrier', glasses: true, earpiece: true, holster: true, armband: true, pocketSquare: false },
     bulk: 1,
     score: 120,
   },
@@ -123,10 +126,11 @@ export const ENEMY_TYPES: Record<EnemyType, EnemyTypeDef> = {
     prefersCover: 0.2,
     flanker: false,
     engage: [15, 45],
-    colors: { jacket: 0x34302e, accent: 0xff3b3b, ...suitDark },
+    // Tirador: abrigo largo con capucha, cuello tapado y visor de dos lentes rojas.
+    colors: { jacket: 0x33372f, shirt: 0x1d2026, tie: 0x0c0d10, pants: 0x24272b, shoes: 0x16140f, skin: 0xbf8f72, hair: 0x1f1a16, accent: 0xff3b3b },
     hair: 'short',
-    vest: false,
-    bulk: 1,
+    outfit: { top: 'coat', tie: false, hood: 0x2f332b, goggles: 0xff2a2a, gloves: 0x15161a, boots: true, armband: true },
+    bulk: 0.97,
     score: 150,
   },
   heavy: {
@@ -148,10 +152,11 @@ export const ENEMY_TYPES: Record<EnemyType, EnemyTypeDef> = {
     prefersCover: 0,
     flanker: false,
     engage: [2, 7],
-    colors: { jacket: 0x2e3542, accent: 0x7fb2ff, ...suitDark },
+    // Blindado: uniforme, placas de los hombros a las espinillas, gola y casco con pantalla.
+    colors: { jacket: 0x2a303b, shirt: 0x1b1e24, tie: 0x0c0d10, pants: 0x262b34, shoes: 0x111216, skin: 0xbf8f72, hair: 0x1f1a16, accent: 0x7fb2ff },
     hair: 'helmet',
-    vest: true,
-    bulk: 1.28,
+    outfit: { top: 'fatigues', vest: 'heavy', visor: true, mask: 'balaclava', gloves: 0x15171c, boots: true, kneepads: true },
+    bulk: 1.24,
     score: 220,
   },
   boss: {
@@ -175,8 +180,10 @@ export const ENEMY_TYPES: Record<EnemyType, EnemyTypeDef> = {
     flanker: false,
     engage: [8, 18],
     colors: { jacket: 0xe7e2d8, shirt: 0x14161a, tie: 0xff2e88, pants: 0xd9d3c7, shoes: 0x1a1a1a, skin: 0xc79a7a, hair: 0x0e0e0e, accent: 0xff2e88 },
-    hair: 'short',
-    vest: false,
+    // El Juez: abrigo blanco hasta la rodilla, guantes negros y el pelo engominado.
+    hair: 'slick',
+    outfit: { top: 'coat', gloves: 0x101114, boots: true },
+    beard: true,
     bulk: 1.12,
     score: 600,
   },

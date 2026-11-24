@@ -275,9 +275,10 @@ Hay cinco subnotas de 0 a 100: **tiempo** (frente al par), **precisión** (impac
 - **Noir por contraste, no por oscuridad:**
   - Piso de luz ambiental en todos los niveles y suelos y paredes de valores medios.
   - Neón emisivo y cobertura con bordes claros.
-- **Personajes por bloques:** prismas facetados con sombreado plano y rasgos mínimos.
-  - El Huésped, inspirado en John Wick, llevado al estilo de bloques: cara alargada, pómulos altos, cejas rectas, ojos de párpado caído, media melena con raya al medio y barba corta. Viste traje negro de tres piezas con camisa y corbata negras.
-  - El Sommelier trabaja sin chaqueta: camisa blanca, chaleco burdeos, pajarita, delantal largo, catavinos de plata y bigote encerado.
+- **Personajes con volumen:** cuerpos de superficies suaves generados por código, con manos de cinco dedos, rostro modelado (cuencas, pómulos, labios, nariz, ojos con iris), ropa con arrugas y cada material con su brillo (tela, cuero, seda, piel, pelo, metal). Rostros propios: no se busca el parecido con nadie.
+  - El Huésped: traje negro de tres piezas con camisa y corbata negras, media melena con raya al medio y barba corta.
+  - **Cada enemigo se reconoce de lejos por su silueta**, además de por su color e icono: el matón, cazadora acolchada, vaqueros y cabeza rapada; el escolta, traje con portaplacas, gafas de sol, auricular y pistolera; el tirador, abrigo largo con capucha, cuello tapado y visor de dos lentes; el blindado, placas de los hombros a las espinillas, gola y casco con pantalla; el Juez, abrigo blanco hasta la rodilla, guantes negros y pelo engominado.
+  - El Sommelier trabaja sin chaqueta: camisa blanca, chaleco burdeos, pajarita, delantal largo, catavinos de plata y bigote encerado. Charon y Winston llevan terno. Los civiles, chaquetas y cazadoras de colores vivos.
 - **Armas reconocibles por la silueta:** pistola con compensador, carabina con visor y empuñadura delantera, subfusil de culata plegable, escopeta de corredera con madera y cartuchos al costado, y cuchillo táctico. Los enemigos llevan además un rifle de tirador con mira y bípode, una escopeta táctica y, el Juez, un revólver. El color de cada tipo de enemigo marca un detalle de su arma.
 - **Proyectiles:** las trazadoras viajan como balas desde la boca del arma hasta el impacto, el fogonazo tiene forma de estrella y los casquillos de latón rebotan en el suelo.
 - **Lluvia, humo y reflejos** solo como acento.

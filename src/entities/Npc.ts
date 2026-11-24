@@ -12,7 +12,7 @@ export interface NpcDef {
   yaw: number;
   colors: RigColors;
   hair: HairStyle;
-  vest?: boolean;
+  beard?: boolean;
   bulk?: number;
   outfit?: Outfit;
 }
@@ -25,7 +25,7 @@ const MAX_TURN = 1.1;
 const EYE_Y = 1.62;
 
 /**
- * Personaje no jugable del hub (Charon, Sommelier, Winston): rig low-poly con
+ * Personaje no jugable del hub (Charon, Sommelier, Winston): su personaje con
  * etiqueta de nombre, que se gira hacia el jugador cuando se acerca y lo sigue con la mirada.
  * Su cuerpo físico es una caja `invisible` declarada en los datos del nivel.
  */
@@ -49,7 +49,7 @@ export class Npc {
       rimColor: 0xd4af37,
       rimStrength: 0.55,
       hair: def.hair,
-      vest: def.vest,
+      beard: def.beard,
       bulk: def.bulk,
       outfit: def.outfit,
       weapon: 'none',
@@ -95,11 +95,12 @@ export class Npc {
 }
 
 /** Paletas de los NPC del Continental. */
-export const NPC_LOOKS: Record<'charon' | 'sommelier' | 'winston', Pick<NpcDef, 'name' | 'colors' | 'hair' | 'vest' | 'bulk' | 'outfit'>> = {
+export const NPC_LOOKS: Record<'charon' | 'sommelier' | 'winston', Pick<NpcDef, 'name' | 'colors' | 'hair' | 'beard' | 'bulk' | 'outfit'>> = {
   charon: {
     name: 'Charon · Conserje',
-    colors: { jacket: 0x1b1d22, shirt: 0xf1ece0, tie: 0x7a1020, pants: 0x1b1d22, shoes: 0x0b0b0d, skin: 0x5a3b2a, hair: 0x1a1512, accent: 0xd4af37 },
+    colors: { jacket: 0x1b1d22, shirt: 0xf1ece0, tie: 0x7a1020, pants: 0x1b1d22, shoes: 0x0b0b0d, skin: 0x6b4630, hair: 0x1a1512, accent: 0xd4af37 },
     hair: 'bald',
+    outfit: { waistcoat: 0x7a1020 },
   },
   // Sumiller de la armería: sin chaqueta (camisa blanca a la vista), chaleco burdeos, pajarita,
   // delantal largo, catavinos de plata, bigote encerado y pelo engominado hacia atrás.
@@ -112,6 +113,8 @@ export const NPC_LOOKS: Record<'charon' | 'sommelier' | 'winston', Pick<NpcDef, 
   winston: {
     name: 'Winston · Gerente',
     colors: { jacket: 0x3b3f4a, shirt: 0xe9e4d8, tie: 0x9a7b2e, pants: 0x34373f, shoes: 0x0b0b0d, skin: 0xd8b398, hair: 0x9a9a9a, accent: 0xd4af37 },
-    hair: 'short',
+    hair: 'slick',
+    beard: true,
+    outfit: { waistcoat: 0x5c4a22 },
   },
 };

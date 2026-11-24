@@ -66,6 +66,42 @@ const SHEETS = {
       { label: 'cabeza por detrás', show: ['player'], weapon: 'pistol', target: 'head', cam: [0.35, 0.12, 0.95], fov: 30 },
     ],
   },
+  enemigos: {
+    tile: [300, 420],
+    cols: 5,
+    views: ['thug', 'escort', 'marksman', 'heavy', 'boss']
+      .flatMap((t) => [{ label: `${t}: frente`, show: [t], target: 'body', cam: [0.9, 0.35, -4.2], fov: 30 }])
+      .concat(
+        ['thug', 'escort', 'marksman', 'heavy', 'boss'].map((t) => ({ label: `${t}: espalda`, show: [t], target: 'body', cam: [-1.2, 0.35, 4.1], fov: 30 })),
+        ['thug', 'escort', 'marksman', 'heavy', 'boss'].map((t) => ({ label: `${t}: busto`, show: [t], target: 'head', cam: [0.45, 0.02, -1.15], fov: 30 })),
+      ),
+  },
+  huesped: {
+    tile: [300, 420],
+    cols: 4,
+    views: [
+      { label: 'frente', show: ['player'], weapon: 'pistol', target: 'body', cam: [0.5, 0.2, -4.3], fov: 30 },
+      { label: 'perfil', show: ['player'], weapon: 'pistol', target: 'body', cam: [4.3, 0.2, 0], fov: 30 },
+      { label: 'espalda', show: ['player'], weapon: 'rifle', target: 'body', cam: [-0.9, 0.5, 4.2], fov: 30 },
+      { label: 'apuntando', show: ['player'], weapon: 'rifle', aim: 1, target: 'body', cam: [2.6, 0.5, -3.2], fov: 30 },
+      { label: 'cabeza', show: ['player'], weapon: 'pistol', target: 'head', cam: [0, 0.01, -0.95], fov: 30 },
+      { label: 'cabeza 3/4', show: ['player'], weapon: 'pistol', target: 'head', cam: [0.65, 0.04, -0.7], fov: 30 },
+      { label: 'cabeza por detrás', show: ['player'], weapon: 'pistol', target: 'head', cam: [0.4, 0.1, 0.95], fov: 30 },
+      { label: 'manos', show: ['player'], weapon: 'pistol', target: [0.2, 0.98, -0.25], cam: [0.5, 0.2, -0.9], fov: 30 },
+    ],
+  },
+  civiles: {
+    tile: [300, 420],
+    cols: 4,
+    views: ['civ0', 'civ1', 'civ2', 'civ3'].map((t) => ({ label: t, show: [t], target: 'body', cam: [0.8, 0.3, -4.2], fov: 30 })),
+  },
+  hotel: {
+    tile: [300, 420],
+    cols: 3,
+    views: ['charon', 'sommelier', 'winston']
+      .flatMap((t) => [{ label: t, show: [t], target: 'body', cam: [0.6, 0.3, -4.2], fov: 30 }])
+      .concat(['charon', 'sommelier', 'winston'].map((t) => ({ label: `${t}: busto`, show: [t], target: 'head', cam: [0.4, 0.02, -1.15], fov: 30 }))),
+  },
   sommelier: {
     tile: [300, 400],
     cols: 4,
@@ -127,6 +163,7 @@ try {
       const Rig = await load('/src/entities/CharacterRig.ts');
       const { NPC_LOOKS } = await load('/src/entities/Npc.ts');
       const { ENEMY_TYPES } = await load('/src/entities/ai/enemyTypes.ts');
+      const { CIVILIAN_LOOKS } = await load('/src/entities/CivilianView.ts');
       const { GameRenderer } = await load('/src/render/Renderer.ts');
       const [TW, TH] = s.tile;
       const host = document.createElement('div');
@@ -154,31 +191,36 @@ try {
         actors[name] = { rig, obj: rig.root };
       };
       add('player', new Rig.CharacterRig('player', playerLook));
-      const sl = NPC_LOOKS.sommelier;
-      add(
-        'sommelier',
-        new Rig.CharacterRig('npc:sommelier', {
-          colors: sl.colors,
-          rimColor: 0xd4af37,
-          rimStrength: 0.55,
-          hair: sl.hair,
-          vest: sl.vest,
-          bulk: sl.bulk,
-          outfit: sl.outfit,
-          weapon: 'none',
-        }),
-      );
-      for (const t of ['escort', 'heavy']) {
+      for (const id of ['charon', 'sommelier', 'winston']) {
+        const l = NPC_LOOKS[id];
+        add(
+          id,
+          new Rig.CharacterRig(`npc:${id}`, {
+            colors: l.colors,
+            rimColor: 0xd4af37,
+            rimStrength: 0.4,
+            hair: l.hair,
+            beard: l.beard,
+            bulk: l.bulk,
+            outfit: l.outfit,
+            weapon: 'none',
+          }),
+        );
+      }
+      for (const [i, l] of CIVILIAN_LOOKS.entries())
+        add(`civ${i}`, new Rig.CharacterRig('civ', { ...l, rimColor: 0x5ee6c8, rimStrength: 0.5, weapon: 'none' }));
+      for (const t of ['thug', 'escort', 'marksman', 'heavy', 'boss']) {
         const d = ENEMY_TYPES[t];
         add(
           t,
           new Rig.CharacterRig(`enemy:${t}`, {
             colors: d.colors,
             rimColor: d.color,
-            rimStrength: 0.8,
+            rimStrength: 0.5,
             hair: d.hair,
+            beard: d.beard,
             bulk: d.bulk,
-            vest: d.vest,
+            outfit: d.outfit,
             weapon: d.weapon.model,
             uniqueMaterial: true,
           }),

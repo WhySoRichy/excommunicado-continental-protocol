@@ -7,6 +7,8 @@ export const HIP_CROUCH = 0.44;
 export const HIP_SLIDE = 0.3;
 export const HIP_KNEEL = 0.5;
 export const SHOULDER_Y = 0.56;
+/** Del centro a la articulación del hombro (se multiplica por la corpulencia). */
+export const SHOULDER_X = 0.228;
 export const NECK_Y = 0.7;
 export const ELBOW_Y = -0.32;
 export const HAND_Y = -0.315;

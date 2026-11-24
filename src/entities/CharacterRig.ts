@@ -1,25 +1,11 @@
-import {
-  Bone,
-  Box3,
-  type BufferGeometry,
-  Float32BufferAttribute,
-  Group,
-  Matrix4,
-  Mesh,
-  MeshStandardMaterial,
-  Skeleton,
-  Quaternion,
-  SkinnedMesh,
-  Sphere,
-  Uint16BufferAttribute,
-  Vector3,
-} from 'three';
+import { Bone, Box3, type BufferGeometry, Group, Matrix4, Mesh, type MeshStandardMaterial, Skeleton, Quaternion, SkinnedMesh, Sphere, Vector3 } from 'three';
 import { clamp, damp, lerp } from '../core/math';
-import { addRim, type RimUniforms } from '../render/materials';
+import type { RimUniforms } from '../render/materials';
+import { createRigMaterial } from '../render/rigMaterial';
 import { weaponMaterial } from '../render/weaponMaterial';
-import { forearmGeometry, footGeometry, headGeometry, shinGeometry, thighGeometry, torsoGeometry, upperArmGeometry } from './rig/body';
-import { acquire, merge, release, type SharedGeometry } from './rig/geometry';
-import { ANKLE_Y, ELBOW_Y, HAND_Y, HIP_CROUCH, HIP_KNEEL, HIP_SLIDE, HIP_STAND, NECK_Y, SHOULDER_Y, SPIN_Y } from './rig/skeleton';
+import { characterGeometry, type MeshDetail } from './rig/character';
+import { acquire, release, type SharedGeometry } from './rig/geometry';
+import { ANKLE_Y, ELBOW_Y, HAND_Y, HIP_CROUCH, HIP_KNEEL, HIP_SLIDE, HIP_STAND, NECK_Y, SHOULDER_X, SHOULDER_Y, SPIN_Y } from './rig/skeleton';
 import type { RigColors, RigOptions, RigPose, WeaponModel } from './rig/types';
 import { GRIP, gearGeometry, STOCK, weaponGeometry } from './rig/weapons';
 
@@ -42,8 +28,6 @@ import {
   spring,
 } from './rigMath';
 
-const _rootInv = new Matrix4();
-const _local = new Matrix4();
 const _grip = new Vector3();
 const _hand = new Vector3();
 const _ikQ = new Quaternion();
@@ -63,7 +47,21 @@ const CULL_CENTER = new Vector3(0, 0.9, 0);
 const CULL_RADIUS = 1.6;
 const GEAR_KEY = 'gear|stun';
 const GEAR_ACCENT = 0xd4af37;
-const bodyGeometries = new Map<string, SharedGeometry>();
+/**
+ * Mallas de cuerpo por aspecto y detalle. Se quedan para toda la partida: son pocas (un par por aspecto) y rehacerlas al
+ * aparecer un enemigo costaría un tirón.
+ */
+const bodyGeometries = new Map<string, BufferGeometry>();
+
+function bodyGeometry(look: string, o: RigOptions, detail: MeshDetail): BufferGeometry {
+  const key = `${look}|${detail}`;
+  let g = bodyGeometries.get(key);
+  if (!g) {
+    g = characterGeometry(o, detail);
+    bodyGeometries.set(key, g);
+  }
+  return g;
+}
 const weaponGeometries = new Map<string, SharedGeometry>();
 
 /**
@@ -112,11 +110,16 @@ function appearanceKey(o: RigOptions): string {
     c.accent,
     o.hair,
     o.bulk ?? 1,
-    o.vest ? 1 : 0,
     o.beard ? 1 : 0,
     JSON.stringify(o.outfit ?? {}),
     o.face ?? 'stern',
   ].join('|');
+}
+
+/** Desde dónde se mira y a qué distancia (m, corregida por el aumento de la cámara) se pasa a las mallas lejanas. */
+export interface DetailView {
+  readonly eye: Vector3;
+  limit: number;
 }
 
 const materialCache = new Map<string, { mat: MeshStandardMaterial; rim: RimUniforms }>();
@@ -125,21 +128,19 @@ const materialCache = new Map<string, { mat: MeshStandardMaterial; rim: RimUnifo
 function rigMaterial(key: string, rimColor: number, rimStrength: number, unique: boolean): { mat: MeshStandardMaterial; rim: RimUniforms } {
   const hit = unique ? undefined : materialCache.get(key);
   if (hit) return hit;
-  // Sombreado plano: las facetas son parte del diseño (low-poly deliberado, no realismo).
-  const mat = new MeshStandardMaterial({ vertexColors: true, roughness: 0.78, metalness: 0.04, flatShading: true });
-  mat.name = `rig:${key}`;
-  const rim = addRim(mat, rimColor, rimStrength, 2.2);
-  const entry = { mat, rim };
+  const entry = createRigMaterial(rimColor, rimStrength);
+  entry.mat.name = `rig:${key}`;
   if (!unique) materialCache.set(key, entry);
   return entry;
 }
 
 /**
- * Humanoide low-poly procedural con animación procedural.
+ * Personaje procedural con animación procedural.
  *
  * Huesos: root(pies, yaw) → spin(centro de masa: voltereta/caída) → hips → torso → cabeza y
  * brazos (hombro + codo); hips → piernas (cadera + rodilla). Todo el cuerpo es UNA SkinnedMesh
- * (cada pieza pesa 1 en su hueso): 1 draw call. El arma va aparte porque cambia de modelo.
+ * (`rig/character.ts`; las articulaciones reparten su peso entre dos huesos): 1 draw call. El arma
+ * va aparte porque cambia de modelo.
  *
  * Convención: el personaje mira a −Z. En huesos que cuelgan (brazos, piernas) la rotación X
  * positiva los lleva hacia delante; en los que suben (torso, cabeza) positiva = hacia atrás.
@@ -167,17 +168,18 @@ export class CharacterRig {
   private readonly shinR = new Bone();
   private readonly footL = new Bone();
   private readonly footR = new Bone();
-  /** Piezas pendientes de fusionar en la malla con skinning. */
-  private readonly pieces: Array<{ bone: Bone; make: () => BufferGeometry }> = [];
   private skeleton: Skeleton | null = null;
   readonly weaponMount = new Group();
   private weaponMesh: Mesh | null = null;
+  private weaponShadow = true;
   /** Color de acento del arma (el del tipo de enemigo; en el jugador, el suyo). */
   private accent = 0x888888;
   private weaponModel: WeaponModel = 'none';
-  /** Claves de la geometría compartida que usa (cuerpo y arma). */
-  private bodyKey = '';
+  /** Clave de la geometría compartida del arma. */
   private weaponKey = '';
+  private skin: SkinnedMesh | null = null;
+  private near: BufferGeometry | null = null;
+  private far: BufferGeometry | null = null;
   private readonly meshes: Array<Mesh | SkinnedMesh> = [];
   private phase = 0;
   private time = 0;
@@ -243,33 +245,20 @@ export class CharacterRig {
     this.material = mat;
     this.ownsMaterial = !!o.uniqueMaterial;
     this.rim = rim;
-    const c = o.colors;
     const b = o.bulk ?? 1;
     this.bulk = b;
 
-    // --- Torso en V: pelvis, faldón, pecho, hombros rectos, cuello de camisa, solapas y corbata ---
-    this.addMesh(this.torso, () => torsoGeometry(o));
-
-    // --- Cabeza facetada (hueso propio): cráneo, pómulos, mandíbula marcada y rasgos mínimos ---
-    this.addMesh(this.head, () => headGeometry(o));
     this.head.position.set(0, NECK_Y, 0);
     // Primero gira sobre la columna (compensa el giro del torso) y después cabecea.
     this.head.rotation.order = 'YXZ';
     this.torso.add(this.head);
 
-    // --- Brazos: hombrera, brazo y antebrazo que se afinan, puño de camisa y mano con pulgar ---
-    const upperGeo = (): BufferGeometry => upperArmGeometry(o);
-    const foreGeo = (): BufferGeometry => forearmGeometry(o);
-    this.armL.position.set(-0.285 * b, SHOULDER_Y, 0);
-    this.armR.position.set(0.285 * b, SHOULDER_Y, 0);
+    this.armL.position.set(-SHOULDER_X * b, SHOULDER_Y, 0);
+    this.armR.position.set(SHOULDER_X * b, SHOULDER_Y, 0);
     // El giro vertical del hombro (perfil con arma larga) va antes que la elevación y la apertura.
     this.armR.rotation.order = 'YXZ';
     this.foreL.position.set(0, ELBOW_Y, 0);
     this.foreR.position.set(0, ELBOW_Y, 0);
-    this.addMesh(this.armL, upperGeo);
-    this.addMesh(this.armR, upperGeo);
-    this.addMesh(this.foreL, foreGeo);
-    this.addMesh(this.foreR, foreGeo);
     this.armL.add(this.foreL);
     this.armR.add(this.foreR);
     this.torso.add(this.armL, this.armR);
@@ -278,22 +267,12 @@ export class CharacterRig {
     this.weaponMount.rotation.x = -HALF_PI;
     this.foreR.add(this.weaponMount);
 
-    // --- Piernas: muslo y espinilla que se afinan; el zapato va en su propio hueso (tobillo) ---
-    const thighGeo = (): BufferGeometry => thighGeometry(o);
-    const shinGeo = (): BufferGeometry => shinGeometry(o);
-    const footGeo = (): BufferGeometry => footGeometry(o);
     this.thighL.position.set(-0.1 * b, 0, 0);
     this.thighR.position.set(0.1 * b, 0, 0);
     this.shinL.position.set(0, -0.46, 0);
     this.shinR.position.set(0, -0.46, 0);
     this.footL.position.set(0, ANKLE_Y, 0);
     this.footR.position.set(0, ANKLE_Y, 0);
-    this.addMesh(this.thighL, thighGeo);
-    this.addMesh(this.thighR, thighGeo);
-    this.addMesh(this.shinL, shinGeo);
-    this.addMesh(this.shinR, shinGeo);
-    this.addMesh(this.footL, footGeo);
-    this.addMesh(this.footR, footGeo);
     this.shinL.add(this.footL);
     this.shinR.add(this.footR);
     this.thighL.add(this.shinL);
@@ -304,22 +283,17 @@ export class CharacterRig {
     this.spin.position.set(0, SPIN_Y, 0);
     this.spin.add(this.hips);
     this.root.add(this.spin);
-    this.buildSkin(appearanceKey(o));
-    this.accent = c.accent;
+    this.buildSkin(o);
+    this.accent = o.colors.accent;
     this.setWeapon(o.weapon);
   }
 
-  /** Registra una pieza; su geometría solo se construye si ese aspecto aún no existe (`buildSkin`). */
-  private addMesh(bone: Bone, make: () => BufferGeometry): void {
-    this.pieces.push({ bone, make });
-  }
-
   /**
-   * Fusiona las piezas en una SkinnedMesh: cada vértice va a su hueso con peso 1. Los personajes de
-   * igual aspecto (todos los matones, los civiles con el mismo atuendo) comparten esta geometría:
-   * solo se construye la primera vez. El esqueleto sí es de cada uno.
+   * La malla con skinning. Los personajes de igual aspecto (todos los matones, los civiles con el mismo atuendo)
+   * comparten la geometría: solo se construye la primera vez. El esqueleto sí es de cada uno.
    */
-  private buildSkin(key: string): void {
+  private buildSkin(o: RigOptions): void {
+    // El orden de los huesos es el de `BONE` (rig/skin.ts).
     const bones = [
       this.spin,
       this.hips,
@@ -337,28 +311,10 @@ export class CharacterRig {
       this.footR,
     ];
     this.root.updateMatrixWorld(true);
-    const geo = acquire(bodyGeometries, key, () => {
-      _rootInv.copy(this.root.matrixWorld).invert();
-      const geos: BufferGeometry[] = [];
-      for (const { bone, make } of this.pieces) {
-        // Pose de reposo: la pieza pasa del espacio de su hueso al de la raíz.
-        const g = make().applyMatrix4(_local.multiplyMatrices(_rootInv, bone.matrixWorld));
-        const n = g.getAttribute('position').count;
-        const idx = bones.indexOf(bone);
-        const si = new Uint16Array(n * 4);
-        const sw = new Float32Array(n * 4);
-        for (let i = 0; i < n; i++) {
-          si[i * 4] = idx;
-          sw[i * 4] = 1;
-        }
-        g.setAttribute('skinIndex', new Uint16BufferAttribute(si, 4));
-        g.setAttribute('skinWeight', new Float32BufferAttribute(sw, 4));
-        geos.push(g);
-      }
-      return merge(geos);
-    });
-    this.bodyKey = key;
-    this.pieces.length = 0;
+    const key = appearanceKey(o);
+    const geo = bodyGeometry(key, o, 'near');
+    this.near = geo;
+    this.far = o.lod ? bodyGeometry(key, o, 'far') : geo;
     const mesh = new SkinnedMesh(geo, this.material);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
@@ -368,6 +324,21 @@ export class CharacterRig {
     this.skeleton = new Skeleton(bones);
     mesh.bind(this.skeleton);
     this.meshes.push(mesh);
+    this.skin = mesh;
+  }
+
+  /** Malla de cerca o de lejos según la distancia a la cámara, con un margen para no ir y venir en la frontera. */
+  updateDetail(v: DetailView): void {
+    const mesh = this.skin;
+    if (!mesh) return;
+    const d = this.root.position.distanceTo(v.eye);
+    const isFar = mesh.geometry === this.far;
+    const want = d > v.limit + (isFar ? -1 : 1) ? this.far : this.near;
+    if (!want || mesh.geometry === want) return;
+    mesh.geometry = want;
+    // De lejos, la sombra del arma no se distingue de la del cuerpo.
+    this.weaponShadow = want === this.near;
+    if (this.weaponMesh) this.weaponMesh.castShadow = this.weaponShadow;
   }
 
   /** Cambia el arma visible. La misma arma del mismo color se comparte entre personajes. */
@@ -384,7 +355,7 @@ export class CharacterRig {
       acquire(weaponGeometries, this.weaponKey, () => weaponGeometry(model, accent)),
       weaponMaterial(),
     );
-    this.weaponMesh.castShadow = true;
+    this.weaponMesh.castShadow = this.weaponShadow;
     this.weaponMount.add(this.weaponMesh);
   }
 
@@ -1137,9 +1108,8 @@ export class CharacterRig {
   }
 
   dispose(): void {
-    // La geometría es compartida: se libera cuando la suelta el último personaje que la usa.
-    release(bodyGeometries, this.bodyKey);
-    this.bodyKey = '';
+    // La malla del cuerpo es compartida y se queda (`bodyGeometries`).
+    this.skin = null;
     if (this.gearMesh) {
       release(weaponGeometries, GEAR_KEY);
       this.gearMesh = null;
@@ -1154,27 +1124,24 @@ export class CharacterRig {
 
 /** Paleta del Huésped (jugador): traje negro, camisa y corbata negras, media melena y barba oscuras. */
 export const PLAYER_COLORS: RigColors = {
-  jacket: 0x1b1d23,
+  jacket: 0x22252d,
   shirt: 0x0c0d10,
   tie: 0x060608,
-  pants: 0x17191e,
+  pants: 0x1e2128,
   shoes: 0x09090b,
   skin: 0xcca48b,
   hair: 0x1f1712,
   accent: 0xc9a227,
 };
 
-/**
- * Aspecto del Huésped, inspirado en John Wick, por bloques. Traje negro de tres
- * piezas sin pañuelo, media melena con raya al medio y barba corta.
- */
+/** Aspecto del Huésped: traje negro de tres piezas sin pañuelo, media melena con raya al medio y barba corta. */
 export const PLAYER_LOOK: RigOptions = {
   colors: PLAYER_COLORS,
   rimColor: 0xe8e2d0,
   rimStrength: 0.16,
   hair: 'parted',
   beard: true,
-  face: 'wick',
+  face: 'calm',
   weapon: 'pistol',
-  outfit: { waistcoat: 0x111216, pocketSquare: false },
+  outfit: { waistcoat: 0x17181d, pocketSquare: false },
 };

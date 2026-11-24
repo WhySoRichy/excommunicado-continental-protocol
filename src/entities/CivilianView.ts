@@ -1,27 +1,32 @@
 import type { Scene } from 'three';
 import { FIXED_DT } from '../core/Loop';
-import { CharacterRig, type HairStyle, idlePose, type RigColors, type RigPose } from './CharacterRig';
+import { CharacterRig, type DetailView, type HairStyle, idlePose, type Outfit, type RigColors, type RigPose } from './CharacterRig';
 import type { Civilian } from './Civilian';
 
 /** Rim verde azulado: los civiles se distinguen de los enemigos a simple vista. */
 export const CIVILIAN_COLOR = 0x5ee6c8;
 
-const OUTFITS: ReadonlyArray<{ colors: RigColors; hair: HairStyle }> = [
+/** Cómo van vestidos los civiles. */
+export const CIVILIAN_LOOKS: ReadonlyArray<{ colors: RigColors; hair: HairStyle; outfit: Outfit }> = [
   {
     colors: { jacket: 0xb33a5a, shirt: 0xf0e6e0, tie: 0xb33a5a, pants: 0x2b2b30, shoes: 0x111, skin: 0xd9b08c, hair: 0x3b2a1e, accent: 0xff2e88 },
     hair: 'long',
+    outfit: { tie: false, pocketSquare: false },
   },
   {
     colors: { jacket: 0x2d6cb5, shirt: 0xf5f5f5, tie: 0x2d6cb5, pants: 0x1f2a3a, shoes: 0x111, skin: 0x8c5a3c, hair: 0x1a1512, accent: 0x19e3ff },
     hair: 'short',
+    outfit: { top: 'bomber' },
   },
   {
     colors: { jacket: 0xe8c04a, shirt: 0x141414, tie: 0xe8c04a, pants: 0x3a3a3a, shoes: 0x111, skin: 0xf0c8a8, hair: 0xc9a46a, accent: 0xffd23f },
     hair: 'long',
+    outfit: { top: 'bomber' },
   },
   {
     colors: { jacket: 0x6a3cff, shirt: 0xe9e9f2, tie: 0x6a3cff, pants: 0x202030, shoes: 0x111, skin: 0xb98a6a, hair: 0x2a1e18, accent: 0x7a3cff },
     hair: 'cap',
+    outfit: { tie: false, pocketSquare: false },
   },
 ];
 
@@ -37,15 +42,24 @@ class CivilianView {
     private readonly civ: Civilian,
     private readonly scene: Scene,
   ) {
-    const outfit = OUTFITS[civ.index % OUTFITS.length]!;
+    const outfit = CIVILIAN_LOOKS[civ.index % CIVILIAN_LOOKS.length]!;
     // Material compartido por todos los civiles (los colores van por vértice; el rim no cambia).
-    this.rig = new CharacterRig('civ', { colors: outfit.colors, rimColor: CIVILIAN_COLOR, rimStrength: 0.7, hair: outfit.hair, weapon: 'none' });
+    this.rig = new CharacterRig('civ', {
+      colors: outfit.colors,
+      rimColor: CIVILIAN_COLOR,
+      rimStrength: 0.7,
+      hair: outfit.hair,
+      outfit: outfit.outfit,
+      weapon: 'none',
+      lod: true,
+    });
     scene.add(this.rig.root);
     this.dancePhase = civ.dancePhase0;
   }
 
-  update(alpha: number, dt: number): void {
+  update(alpha: number, dt: number, view: DetailView): void {
     const c = this.civ;
+    this.rig.updateDetail(view);
     const m = c.mover;
     const root = this.rig.root;
     m.renderFeet(alpha, root.position);
@@ -82,8 +96,8 @@ export class CivilianViews {
     this.views = civilians.map((c) => new CivilianView(c, scene));
   }
 
-  update(alpha: number, dt: number): void {
-    for (const v of this.views) v.update(alpha, dt);
+  update(alpha: number, dt: number, view: DetailView): void {
+    for (const v of this.views) v.update(alpha, dt, view);
   }
 
   dispose(): void {

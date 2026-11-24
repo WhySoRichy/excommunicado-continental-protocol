@@ -4,7 +4,7 @@ import { playerName } from '../text/coop';
 import type { PlayerSlot } from '../combat/PlayerRoster';
 import type { WeaponId } from '../combat/weapons';
 import { FIXED_DT } from '../core/Loop';
-import { CharacterRig, idlePose, PLAYER_LOOK, type RigOptions, type RigPose, type WeaponModel } from './CharacterRig';
+import { CharacterRig, type DetailView, idlePose, PLAYER_LOOK, type RigOptions, type RigPose, type WeaponModel } from './CharacterRig';
 import { type BodyYaw, bodyYaw, updateBodyYaw } from './rigMath';
 
 /** Modelo que se dibuja para cada arma del jugador. */
@@ -29,6 +29,7 @@ const ALLY_LOOK: RigOptions = {
   rimColor: 0x5aa9ff,
   rimStrength: 0.35,
   weapon: 'none',
+  lod: true,
 };
 
 /**
@@ -58,7 +59,8 @@ class PlayerView {
     scene.add(this.label);
   }
 
-  update(alpha: number, dt: number, eye: Vector3): void {
+  update(alpha: number, dt: number, view: DetailView): void {
+    this.rig.updateDetail(view);
     const p = this.slot.controller;
     const look = this.slot.look;
     const model: WeaponModel = look.weapon === 'none' ? 'none' : WEAPON_MODEL[look.weapon];
@@ -98,7 +100,7 @@ class PlayerView {
     pose.death = 1;
     this.rig.update(pose, dt);
     const lp = root.position;
-    this.updateLabel(lp.x, lp.y + (p.posture === 'crouch' ? 1.55 : 2.15), lp.z, look.dead, eye);
+    this.updateLabel(lp.x, lp.y + (p.posture === 'crouch' ? 1.55 : 2.15), lp.z, look.dead, view.eye);
   }
 
   /**
@@ -130,8 +132,7 @@ export class PlayerViews {
 
   constructor(private readonly scene: Scene) {}
 
-  /** `eye`: dónde está la cámara (para el tamaño de los nombres). */
-  update(slots: readonly PlayerSlot[], alpha: number, dt: number, eye: Vector3): void {
+  update(slots: readonly PlayerSlot[], alpha: number, dt: number, view: DetailView): void {
     const t = ++this.tick;
     for (const s of slots) {
       if (s.local) continue;
@@ -141,7 +142,7 @@ export class PlayerViews {
         this.views.set(s, v);
       }
       v.seen = t;
-      v.update(alpha, dt, eye);
+      v.update(alpha, dt, view);
     }
     // Quien se fue de la partida ya no está en la lista: su personaje se retira.
     for (const [s, v] of this.views) {

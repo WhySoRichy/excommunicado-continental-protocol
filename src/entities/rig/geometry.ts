@@ -1,4 +1,4 @@
-import { BoxGeometry, type BufferGeometry, Color, CylinderGeometry, Float32BufferAttribute } from 'three';
+import { type BufferGeometry, Color, Float32BufferAttribute } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const tmpColor = new Color();
@@ -15,41 +15,6 @@ export function paint(g: BufferGeometry, color: number): BufferGeometry {
   }
   g.setAttribute('color', new Float32BufferAttribute(cols, 3));
   return g;
-}
-
-/** Caja con color por vértice, desplazada. `rz` y `rx` la inclinan antes de colocarla. */
-export function cbox(w: number, h: number, d: number, color: number, x = 0, y = 0, z = 0, rz = 0, rx = 0): BufferGeometry {
-  const g = new BoxGeometry(w, h, d);
-  if (rx !== 0) g.rotateX(rx);
-  if (rz !== 0) g.rotateZ(rz);
-  g.translate(x, y, z);
-  return paint(g, color);
-}
-
-/** Tronco de cono elíptico (miembros y torso): `taper` es el radio inferior respecto al superior. */
-export function ccyl(rx: number, rz: number, h: number, color: number, x = 0, y = 0, z = 0, taper = 1, seg = 8): BufferGeometry {
-  const g = new CylinderGeometry(1, taper, h, seg);
-  g.scale(rx, 1, rz);
-  g.translate(x, y, z);
-  return paint(g, color);
-}
-
-/**
- * Prisma: caja cuya cara superior e inferior tienen medidas distintas. Es la pieza base del
- * diseño facetado (torso en V, mandíbula, miembros que se afinan).
- */
-export function cprism(wTop: number, dTop: number, wBot: number, dBot: number, h: number, color: number, x = 0, y = 0, z = 0, rz = 0): BufferGeometry {
-  const g = new BoxGeometry(1, h, 1);
-  const pos = g.getAttribute('position');
-  for (let i = 0; i < pos.count; i++) {
-    const top = pos.getY(i) > 0;
-    pos.setX(i, pos.getX(i) * (top ? wTop : wBot));
-    pos.setZ(i, pos.getZ(i) * (top ? dTop : dBot));
-  }
-  g.computeVertexNormals();
-  if (rz !== 0) g.rotateZ(rz);
-  g.translate(x, y, z);
-  return paint(g, color);
 }
 
 /** Color de contraste para ribetes: aclara los tonos muy oscuros y oscurece el resto. */
