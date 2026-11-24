@@ -48,7 +48,8 @@ export class WeaponPreview {
     r.outputColorSpace = SRGBColorSpace;
     r.toneMapping = NeutralToneMapping;
     r.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
-    r.setSize(width, height);
+    // El tamaño en pantalla lo pone la hoja de estilos: con el suyo en línea, se salía de su hueco.
+    r.setSize(width, height, false);
     this.canvas = r.domElement;
     this.canvas.className = 'weapon-preview';
     this.canvas.setAttribute('aria-hidden', 'true');

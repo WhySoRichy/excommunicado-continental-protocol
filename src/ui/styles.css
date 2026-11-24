@@ -151,6 +151,13 @@ body {
   color: var(--c-text-dim);
 }
 
+/* Donde hace falta desplazarse, una barra fina del color de la casa (la del sistema desentona). */
+#ui-root,
+#ui-root * {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(212, 175, 55, 0.5) transparent;
+}
+
 /* ===== Botones, teclas ===== */
 .btn {
   min-width: 240px;
@@ -231,7 +238,7 @@ body {
   gap: 1.1rem;
   max-width: min(760px, 94vw);
   max-height: 92vh;
-  overflow: auto;
+  overflow: hidden auto;
   padding: 2rem 2.4rem;
   background: rgba(18, 20, 24, 0.9);
   border: 1px solid rgba(212, 175, 55, 0.45);
@@ -240,6 +247,7 @@ body {
 }
 
 .screen-title {
+  max-width: min(900px, 94vw);
   background: rgba(18, 20, 24, 0.78);
 }
 
@@ -249,8 +257,10 @@ body {
 }
 
 .title-main {
-  font-size: clamp(2.2rem, 6vw, 4.2rem);
+  font-size: clamp(1.4rem, 6vw, 4.2rem);
   letter-spacing: 0.16em;
+  /* El espacio tras la última letra lo descentraba. */
+  margin-right: -0.16em;
   color: var(--c-gold);
   text-shadow: 0 0 24px rgba(212, 175, 55, 0.35);
 }
@@ -259,6 +269,7 @@ body {
   margin-top: 0.3rem;
   font-size: clamp(0.8rem, 1.6vw, 1.1rem);
   letter-spacing: 0.55em;
+  margin-right: -0.55em;
   color: var(--c-text-dim);
 }
 
@@ -1904,26 +1915,51 @@ body {
 }
 
 /* ---------- Armería: equipo (huecos, piezas y la que se mira) ---------- */
+/* Tamaño fijo: ni la pieza que se mira ni la pestaña cambian lo que ocupa la ventana. */
 .screen.screen-armory {
-  max-width: min(1060px, 96vw);
-  padding: 1.6rem 1.8rem;
+  gap: 0.8rem;
+  width: min(1060px, 96vw);
+  max-width: none;
+  height: min(43rem, 92vh);
+  padding: 1.3rem 1.8rem;
+  overflow: hidden;
+}
+
+.screen-armory > .armory-body,
+.screen-armory > .shop-list {
+  flex: 1 1 0;
+  min-height: 0;
+  max-height: none;
 }
 
 .armory-tabs {
   display: flex;
   gap: 0.5rem;
   justify-content: center;
-  margin: 0.2rem 0 0.7rem;
 }
 
 .armory-body {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 380px;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+  grid-template-rows: minmax(0, 1fr);
   gap: 1.1rem;
-  width: min(980px, 90vw);
-  max-height: 60vh;
-  overflow: auto;
+  width: 100%;
   text-align: left;
+}
+
+/* Las mejoras, en dos columnas donde quepan: así se ven todas de una vez. */
+.screen-armory > .shop-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr));
+  align-content: start;
+  width: 100%;
+}
+
+/* Si la ventana es muy baja, se desplaza la lista; el panel se ajusta encogiendo la vista previa. */
+.armory-slots {
+  min-height: 0;
+  overflow: hidden auto;
+  scrollbar-gutter: stable;
 }
 
 .armory-hint {
@@ -1998,18 +2034,49 @@ body {
 }
 
 .armory-detail {
+  display: flex;
+  flex-direction: column;
+  align-self: start;
+  min-height: 0;
+  max-height: 100%;
   padding: 0.8rem;
+  overflow: hidden auto;
   background: rgba(18, 20, 24, 0.9);
   border: 1px solid var(--c-line);
   border-radius: 8px;
 }
 
+/* Los textos de todas las piezas, uno sobre otro: el hueco es siempre el del más largo. */
+.armory-infos {
+  display: grid;
+  flex: none;
+}
+
+.armory-info {
+  grid-area: 1 / 1;
+  visibility: hidden;
+}
+
+.armory-info.on {
+  visibility: visible;
+}
+
+.armory-action {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  min-height: 3rem;
+}
+
 .weapon-preview {
   display: block;
+  flex: 1 1 190px;
   width: 100%;
-  max-width: 360px;
-  height: 170px;
+  min-height: 84px;
+  max-height: 190px;
   margin: 0 auto 0.6rem;
+  object-fit: contain;
   border-radius: 6px;
   background: radial-gradient(ellipse at 50% 40%, #2a2f38 0%, #14161b 75%);
 }
@@ -2052,7 +2119,24 @@ body {
 
 @media (max-width: 860px) {
   .armory-body {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    overflow: hidden auto;
+    scrollbar-gutter: stable;
+  }
+
+  .armory-slots,
+  .armory-detail {
+    overflow: visible;
+  }
+
+  .armory-detail {
+    max-height: none;
+  }
+
+  .weapon-preview {
+    flex: none;
+    height: 150px;
   }
 }
 

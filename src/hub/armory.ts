@@ -83,6 +83,8 @@ export interface StatBar {
 }
 
 const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
+/** Con coma decimal, como en el resto de los textos. */
+const num = (v: number, digits: number): string => v.toFixed(digits).replace('.', ',');
 
 /** Las barras de un arma: daño por disparo, cadencia, alcance, precisión y cargador (el cuchillo, daño y alcance). */
 export function weaponStats(id: WeaponId): StatBar[] {
@@ -90,7 +92,7 @@ export function weaponStats(id: WeaponId): StatBar[] {
   if (d.kind === 'melee') {
     return [
       { label: 'Daño', value: clamp01(d.damage / 120), text: String(d.damage) },
-      { label: 'Alcance', value: clamp01((d.meleeRange ?? d.range) / 2.5), text: `${(d.meleeRange ?? d.range).toFixed(1)} m` },
+      { label: 'Alcance', value: clamp01((d.meleeRange ?? d.range) / 2.5), text: `${num(d.meleeRange ?? d.range, 1)} m` },
       { label: 'Velocidad', value: clamp01(d.rpm / 160), text: `${d.rpm} golpes/min` },
     ];
   }
@@ -99,7 +101,7 @@ export function weaponStats(id: WeaponId): StatBar[] {
     { label: 'Daño', value: clamp01(perShot / 120), text: d.pellets > 1 ? `${d.pellets} × ${d.damage}` : String(d.damage) },
     { label: 'Cadencia', value: clamp01(d.rpm / 600), text: `${d.rpm} disparos/min` },
     { label: 'Alcance', value: clamp01(d.range / 200), text: `${d.range} m` },
-    { label: 'Precisión', value: clamp01(1 - d.spreadAim / 3.5), text: `${d.spreadAim.toFixed(2)}° apuntando` },
+    { label: 'Precisión', value: clamp01(1 - d.spreadAim / 3.5), text: `${num(d.spreadAim, 2)}° apuntando` },
     { label: 'Cargador', value: clamp01(d.mag / 30), text: `${d.mag}` },
   ];
 }
@@ -110,8 +112,8 @@ export function gearStats(id: GearId): StatBar[] {
   return [
     { label: 'Cantidad', value: clamp01(g.count / 4), text: `${g.count} por contrato` },
     { label: 'Radio', value: clamp01(STUN.radius / 12), text: `${STUN.radius} m` },
-    { label: 'Aturde', value: clamp01(STUN.near / 6), text: `hasta ${STUN.near.toFixed(1)} s` },
-    { label: 'Mecha', value: clamp01(g.fuse / 3), text: `${g.fuse.toFixed(1)} s` },
+    { label: 'Aturde', value: clamp01(STUN.near / 6), text: `hasta ${num(STUN.near, 1)} s` },
+    { label: 'Mecha', value: clamp01(g.fuse / 3), text: `${num(g.fuse, 1)} s` },
   ];
 }
 

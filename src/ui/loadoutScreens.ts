@@ -53,19 +53,16 @@ function stateBadge(item: ArmoryItem, s: ItemState): string {
   }
 }
 
-/** El panel de la pieza que se mira: vista previa, nombre, descripción, barras y la acción que toca. */
-function detailPanel(api: LoadoutApi, item: ArmoryItem, preview: WeaponPreview | null, onAfter: () => void): HTMLElement {
+/** Lo que se puede hacer con una pieza: equiparla, comprarla o saber por qué no. */
+function itemAction(api: LoadoutApi, item: ArmoryItem, onAfter: () => void): HTMLElement {
   const p = api.profile();
   const id = itemId(item);
   const s = itemState(p, item);
   const shop = itemShop(item);
-  if (preview) preview.show('weapon' in item ? WEAPON_MODEL[item.weapon] : item.gear, 0xd4af37);
-  const stats = 'weapon' in item ? weaponStats(item.weapon) : gearStats(item.gear);
-  let action: HTMLElement;
-  if (s === 'equipped') action = h('span', { class: 'shop-status owned', text: LOADOUT_TEXT.equipped });
-  else if (s === 'owned') action = button(LOADOUT_TEXT.equip, () => api.onEquip(item.slot, id), 'btn btn-primary');
-  else if (s === 'buy' && shop)
-    action = button(
+  if (s === 'equipped') return h('span', { class: 'shop-status owned', text: LOADOUT_TEXT.equipped });
+  if (s === 'owned') return button(LOADOUT_TEXT.equip, () => api.onEquip(item.slot, id), 'btn btn-primary');
+  if (s === 'buy' && shop)
+    return button(
       LOADOUT_TEXT.buy(shop.price),
       () => {
         api.onBuy(shop.id);
@@ -75,10 +72,15 @@ function detailPanel(api: LoadoutApi, item: ArmoryItem, preview: WeaponPreview |
       },
       'btn btn-primary',
     );
-  else if (s === 'poor' && shop) action = h('span', { class: 'shop-status poor', text: LOADOUT_TEXT.poor(shop.price - p.coins) });
-  else action = h('span', { class: 'shop-status locked', text: LOADOUT_TEXT.locked });
-  return h('div', { class: 'armory-detail-body' }, [
-    preview ? preview.canvas : h('div', { class: 'weapon-preview weapon-preview-off', text: LOADOUT_TEXT.previewUnavailable }),
+  if (s === 'poor' && shop) return h('span', { class: 'shop-status poor', text: LOADOUT_TEXT.poor(shop.price - p.coins) });
+  return h('span', { class: 'shop-status locked', text: LOADOUT_TEXT.locked });
+}
+
+/** Nombre, descripción y barras de una pieza. */
+function itemInfo(item: ArmoryItem): HTMLElement {
+  const id = itemId(item);
+  const stats = 'weapon' in item ? weaponStats(item.weapon) : gearStats(item.gear);
+  return h('div', { class: 'armory-info', dataset: { info: id } }, [
     h('div', { class: 'armory-name', text: ITEM_NAMES[id] }),
     h('div', { class: 'armory-desc', text: ITEM_DESC[id] }),
     h(
@@ -92,8 +94,32 @@ function detailPanel(api: LoadoutApi, item: ArmoryItem, preview: WeaponPreview |
         ]),
       ),
     ),
-    h('div', { class: 'menu menu-row' }, [action]),
   ]);
+}
+
+/**
+ * El panel de la pieza que se mira: vista previa, texto y la acción que toca. Los textos de todas están superpuestos y
+ * solo se ve el de la elegida: el panel mide siempre lo que la más larga, así al pasar de una a otra nada se mueve ni
+ * aparecen barras de desplazamiento.
+ */
+function detailPanel(api: LoadoutApi, preview: WeaponPreview | null, onAfter: () => void): { el: HTMLElement; select(item: ArmoryItem): void } {
+  const infos = LOADOUT_SLOTS.flatMap(armoryItems).map(itemInfo);
+  const action = h('div', { class: 'armory-action' });
+  const el = h('div', { class: 'armory-detail', ariaLabel: 'Pieza seleccionada' }, [
+    preview ? preview.canvas : h('div', { class: 'weapon-preview weapon-preview-off', text: LOADOUT_TEXT.previewUnavailable }),
+    h('div', { class: 'armory-infos' }, infos),
+    action,
+  ]);
+  let shown = '';
+  const select = (item: ArmoryItem): void => {
+    const id = itemId(item);
+    if (id === shown) return;
+    shown = id;
+    if (preview) preview.show('weapon' in item ? WEAPON_MODEL[item.weapon] : item.gear, 0xd4af37);
+    for (const i of infos) i.classList.toggle('on', i.dataset.info === id);
+    action.replaceChildren(itemAction(api, item, onAfter));
+  };
+  return { el, select };
 }
 
 /**
@@ -138,10 +164,11 @@ function loadoutTab(api: LoadoutApi, view: ArmoryView, preview: WeaponPreview | 
   const p = api.profile();
   // Lo que se mira: lo elegido, o lo equipado en la principal.
   const selected = view.selected ?? { slot: 'primary', weapon: p.loadout.primary };
-  const detail = h('div', { class: 'armory-detail', ariaLabel: 'Pieza seleccionada' }, [detailPanel(api, selected, preview, redraw)]);
+  const detail = detailPanel(api, preview, redraw);
+  detail.select(selected);
   const select = (item: ArmoryItem): void => {
     view.selected = item;
-    detail.replaceChildren(detailPanel(api, item, preview, redraw));
+    detail.select(item);
   };
   const slots = LOADOUT_SLOTS.map((slot) =>
     h('div', { class: 'armory-slot', dataset: { slot } }, [
@@ -169,7 +196,7 @@ function loadoutTab(api: LoadoutApi, view: ArmoryView, preview: WeaponPreview | 
   );
   return h('div', { class: 'armory-body' }, [
     h('div', { class: 'armory-slots' }, [h('p', { class: 'armory-hint', text: LOADOUT_TEXT.loadoutHint }), ...slots]),
-    detail,
+    detail.el,
   ]);
 }
 

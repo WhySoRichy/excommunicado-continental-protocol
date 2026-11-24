@@ -56,6 +56,34 @@ test.describe('Arsenal', () => {
     await expect(page.locator('.armory-item[data-item="carbine"]')).not.toHaveClass(/equipped/);
     expect(await page.evaluate(() => window.__EXCOM__!.loadout())).toEqual({ primary: 'dmr', secondary: 'revolver', melee: 'knife', gear: null });
     await page.screenshot({ path: 'qa-screenshots/armeria-equipo.png' });
+    // Al señalar una pieza tras otra nada se mueve ni aparecen barras de desplazamiento, en varios tamaños de ventana.
+    for (const [width, height] of [
+      [1280, 720],
+      [1366, 768],
+      [1920, 1080],
+    ] as const) {
+      await page.setViewportSize({ width, height });
+      const state = (): Promise<string> =>
+        page.evaluate(() => {
+          const box = (sel: string): number[] => {
+            const r = document.querySelector(sel)!.getBoundingClientRect();
+            return [r.x, r.y, r.width, r.height].map(Math.round);
+          };
+          const scroll = [...document.querySelectorAll('.screen-armory, .screen-armory *')]
+            .filter((e) => /auto|scroll/.test(getComputedStyle(e).overflow) && (e.scrollHeight > e.clientHeight || e.scrollWidth > e.clientWidth))
+            .map((e) => e.className);
+          return JSON.stringify({ screen: box('.screen-armory'), detail: box('.armory-detail'), action: box('.armory-action'), scroll });
+        });
+      await page.locator('.armory-item').first().hover();
+      const first = await state();
+      expect(JSON.parse(first).scroll, `sin barras a ${width}×${height}`).toEqual([]);
+      for (const id of ['shotgun', 'dmr', 'pistol', 'revolver', 'knife', 'stun']) {
+        await page.locator(`.armory-item[data-item="${id}"]`).hover();
+        await expect(page.locator('.armory-info.on')).toHaveAttribute('data-info', id);
+        expect(await state(), `${id} a ${width}×${height}`).toBe(first);
+      }
+    }
+    await page.setViewportSize({ width: 1280, height: 720 });
     await page.evaluate(() => window.__EXCOM__!.closeMenu());
     // En la arena, con lo equipado.
     await page.evaluate(() => window.__EXCOM__!.playLevel('arena'));
