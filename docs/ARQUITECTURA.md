@@ -28,7 +28,7 @@ Este documento explica cómo está construido el juego por dentro, qué decision
 | Pruebas | Vitest (lógica pura) y Playwright (juego completo en Chromium) |
 | Despliegue | GitHub Actions + GitHub Pages |
 
-No hay modelos, texturas, sonidos ni fuentes externas: la geometría y las texturas se generan por código y el audio se sintetiza. Por eso la carga es rápida y no hay problemas de licencias.
+No hay modelos, sonidos ni fuentes externas: la geometría se genera por código y el audio se sintetiza. Lo único de fuera son las texturas fotoescaneadas de los escenarios, todas CC0 ([CREDITOS.md](CREDITOS.md)). Por eso la carga es rápida y no hay problemas de licencias.
 
 ## 2. Estructura del código
 
@@ -43,12 +43,12 @@ src/
   levels/     tipos de datos de nivel, helpers, constructor, validación
     data/     un archivo por nivel (hub, práctica, club, muelle, torre, arena de pruebas)
     nav/      rejilla de navegación 2.5D y A*
-  hub/        reglas del Continental (Excomunicado), economía, diálogos
+  hub/        reglas del Continental (Excomunicado), economía, armería, diálogos
   missions/   director de misión, tutorial, Gauntlet, logros, catálogo de contratos
   game/       Game (orquestador), sesión de nivel, cámara, cooperativo (Coop)
   net/        cooperativo en red: protocolo, anfitrión, invitado, interpolación, compensación de latencia
     transport/  servicio de salas, WebRTC (también con códigos a mano) y BroadcastChannel entre pestañas
-  text/       catálogo de textos (el primero: el del cooperativo)
+  text/       catálogo de textos (cooperativo y equipo)
   ui/         HUD, pantallas (título, pausa, ajustes, tienda, sala...), Intel, estilos
   audio/      motor de audio, patrones y reproductor de música
   render/     renderer, materiales, texturas procedurales, VFX, resolución dinámica
@@ -68,7 +68,9 @@ La lógica que no necesita three.js ni el DOM vive en archivos propios y tiene t
 | `combat/damage.ts` | Daño por zona, armadura, caída con la distancia |
 | `combat/StyleMeter.ts` | Puntos de estilo, variedad, decaimiento, multiplicador ×1–×8 |
 | `combat/rank.ts` | Nota del contrato y rango D–S |
-| `combat/weapons.ts` | Armas, mejoras de la tienda y qué armas recorre cada tecla (`SLOT_GROUPS`) |
+| `combat/weapons.ts` | Armas, huecos del equipo (`WEAPON_SLOTS`), qué se tiene y qué se lleva (`normalizeLoadout` sanea el equipo de la partida guardada, de la armería y de los invitados) y mejoras de la tienda |
+| `combat/Grenades.ts` | Vuelo de lo que se lanza (gravedad, rebotes, rodadura), el arco previsto y a quién aturde. Necesita física, pero no vista |
+| `hub/armory.ts` | Qué hay en cada hueco de la armería, en qué estado está cada pieza y sus barras |
 | `hub/economy.ts` | Tienda, recompensas, multa del Excomunicado |
 | `hub/ExcommunicadoRules.ts` | Zona neutral → aviso → Excomunicado → oleadas → readmisión |
 | `entities/ai/EnemyBrain.ts` | Patrulla, sospecha, combate, cobertura, flanqueo, búsqueda |
@@ -87,7 +89,7 @@ La lógica que no necesita three.js ni el DOM vive en archivos propios y tiene t
 requestAnimationFrame
   ├─ entrada (teclado, ratón, mando) y acciones de frame (pausa, ayuda, Intel)
   ├─ simulación a paso fijo de 1/60 s (0 a 5 pasos según el tiempo real):
-  │    interacción → jugador → combate → enemigos → civiles → pickups
+  │    interacción → jugador → combate → granadas → enemigos → civiles → pickups
   │    → director del hub o de la misión → física (Rapier) → invariantes de QA
   ├─ vista: interpolación, cámara con colisión, animación de los rigs, VFX, HUD, baliza
   ├─ música (programa las notas de la siguiente ventana con el reloj de audio)
@@ -116,6 +118,8 @@ Las transiciones válidas están declaradas y cualquier otra lanza un error: no 
 | Estado | Una sola FSM de juego | Transiciones explícitas y comprobadas |
 | Niveles | Módulos TS de datos (cajas, rampas, luces, spawns, objetivos) cargados con `import()` dinámico | Un chunk por nivel y una sola fuente de verdad para mallas y colliders |
 | Navegación | Rejilla 2.5D de celdas de 0,5 m generada a partir de los datos del nivel, con A*, suavizado y replanificación si un enemigo se atasca | Se genera sola y su conectividad se comprueba en los tests |
+| Inventario | El equipo (`Loadout`: principal, secundaria, cuerpo a cuerpo y lo que se lanza) vive en el perfil y pasa siempre por `normalizeLoadout`: lo que no se tiene o no es de su hueco vuelve a lo de serie. La armería y los selectores del briefing y la sala (`ui/loadoutScreens.ts`) solo piden `Game.equip`. La vista previa en 3D usa su propio renderer pequeño, creado al abrir la armería y liberado al cerrarla; sin otro contexto WebGL, la armería funciona igual | Un solo sitio decide qué se puede llevar, también en red; añadir un arma es añadir sus datos y su modelo |
+| Granadas | Simulación determinista por pasos contra el escenario, con rayos (sin cuerpos dinámicos de Rapier). El arco que se enseña ejecuta ese mismo paso, así que acaba donde estalla | Predecible, barata y la misma en todos los equipos |
 | Armas | Piezas con forma real (perfiles laterales extruidos con bisel y esquinas redondeadas, torneados para cañones, frenos y miras, el tambor estriado del revólver) fusionadas en una geometría por arma y color de acento, compartida entre personajes. Cada vértice lleva su color, rugosidad y metalicidad (atributo `pbr`): un solo material para todas con su propio reflejo del entorno (`render/weaponMaterial.ts`). El acabado (`WeaponFinish`: color y brillo de cada parte) es lo que cambiará una skin | Una draw call por arma, como antes, y entre 800 y 4.400 triángulos (`weaponModels.test.ts` vigila el presupuesto, que la cantonera quede donde la espera el encare y que la mano izquierda agarre el arma) |
 | Personajes | Un `SkinnedMesh` por personaje (14 huesos, incluidos los tobillos) + el arma aparte; geometría de prismas con sombreado plano, compartida con recuento de usos entre personajes de igual aspecto (la libera `CharacterRig.dispose`, nunca a mano); el aspecto se declara en `RigOptions`: colores, peinado, prendas opcionales (`Outfit`) y rostro (`FaceStyle`), y la geometría vive en `entities/rig/` | Una draw call por cuerpo en lugar de siete y ninguna geometría nueva al aparecer un enemigo repetido; el facetado es una decisión de diseño, no una limitación |
 | Render | `NeutralToneMapping`, IBL tenue, luz hemisférica, una direccional con sombra, neón emisivo en HDR y rim light Fresnel; bloom y viñeta en los presets Medio y Alto, sobre un destino multimuestreado; oclusión ambiental (GTAO a media resolución) en Alto; cielo nocturno procedural en los niveles a cielo abierto (`render/sky.ts`) | Legibilidad antes que efectos |

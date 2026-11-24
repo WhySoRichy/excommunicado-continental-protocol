@@ -20,6 +20,8 @@ export interface HudData {
   reserve: number;
   isGun: boolean;
   slots: Array<{ key: string; name: string; active: boolean }>;
+  /** El equipo que se lanza (`on`: lleva alguno) y cuántos quedan. */
+  gear: { on: boolean; key: string; name: string; left: number };
   reload: number;
   perfect: [number, number] | null;
   spreadPx: number;
@@ -40,6 +42,12 @@ export interface HudData {
   focusReady: boolean;
   focusKey: string;
 }
+
+/** Destello: opacidad máxima (nunca tapa la pantalla del todo) y duración (s). */
+const FLASH_MAX = 0.82;
+const FLASH_TIME = 1.5;
+/** Cuánto equipo queda, sin construir texto en cada fotograma. */
+const GEAR_COUNT = ['×0', '×1', '×2', '×3', '×4'] as const;
 
 /**
  * HUD de juego (DOM). Siempre legible (texto grande, contraste, sin tapar el centro).
@@ -102,6 +110,13 @@ export class Hud implements MissionHud {
   private readonly ammoMag: HTMLSpanElement;
   private readonly ammoRes: HTMLSpanElement;
   private readonly slots: HTMLDivElement;
+  private readonly gear: HTMLDivElement;
+  private readonly gearKey: HTMLElement;
+  private readonly gearName: HTMLSpanElement;
+  private readonly gearLeft: HTMLElement;
+  private readonly flashLayer: HTMLDivElement;
+  private flashT = 0;
+  private flashPeak = 0;
   private readonly reloadBar: HTMLDivElement;
   private readonly reloadFill: HTMLDivElement;
   private readonly reloadWindow: HTMLDivElement;
@@ -174,10 +189,16 @@ export class Hud implements MissionHud {
     this.ammoMag = h('span', { class: 'ammo-mag' });
     this.ammoRes = h('span', { class: 'ammo-res' });
     this.slots = h('div', { class: 'slots' });
+    this.gearKey = keycap('G');
+    this.gearName = h('span');
+    this.gearLeft = h('b', { class: 'gear-left' });
+    this.gear = h('div', { class: 'gear-slot', ariaLabel: 'Equipo' }, [this.gearKey, this.gearName, this.gearLeft]);
+    this.gear.hidden = true;
     this.weaponPanel = h('div', { class: 'weapon-panel', ariaLabel: 'Arma y munición' }, [
       this.weaponName,
       h('div', { class: 'ammo' }, [this.ammoMag, this.ammoRes]),
       this.slots,
+      this.gear,
     ]);
 
     this.reloadFill = h('div', { class: 'reload-fill' });
@@ -212,6 +233,7 @@ export class Hud implements MissionHud {
 
     this.vignette = h('div', { class: 'vignette' });
     this.focusTint = h('div', { class: 'focus-tint' });
+    this.flashLayer = h('div', { class: 'flash-layer' });
     this.deathCause = h('p', { class: 'death-cause' });
     this.deathHint = h('p', { class: 'death-hint' });
     this.death = h('div', { class: 'death', role: 'alertdialog', ariaLabel: 'Has caído' }, [h('h2', { text: 'HAS CAÍDO' }), this.deathCause, this.deathHint]);
@@ -226,6 +248,7 @@ export class Hud implements MissionHud {
     this.team = h('div', { class: 'team', ariaLabel: 'Equipo' }, [this.teamList, this.teamPing]);
     this.team.hidden = true;
     this.root.append(
+      this.flashLayer,
       this.focusTint,
       this.vignette,
       this.beacon,
@@ -389,10 +412,29 @@ export class Hud implements MissionHud {
 
   /** Al cambiar de nivel: nada transitorio del nivel anterior sigue en pantalla. */
   clearTransient(): void {
+    this.flashT = 0;
+    this.set(this.flashLayer, 'opacity', '0');
     this.toastT = 0;
     this.toast.hidden = true;
     this.setBeacon(null);
     this.setIntel(null);
+  }
+
+  /** Destello en pantalla (0..1): sube de golpe y se va apagando. */
+  flash(k: number): void {
+    if (k < 0.03) return;
+    this.flashPeak = Math.min(FLASH_MAX, Math.max(k * FLASH_MAX, this.flashOpacity()));
+    this.flashT = FLASH_TIME * (0.45 + 0.55 * Math.min(1, k));
+    this.flashSpan = this.flashT;
+    this.set(this.flashLayer, 'opacity', this.flashPeak.toFixed(2));
+  }
+
+  private flashSpan = 1;
+
+  private flashOpacity(): number {
+    if (this.flashT <= 0) return 0;
+    const u = this.flashT / this.flashSpan;
+    return this.flashPeak * u * u;
   }
 
   showToast(text: string, seconds = 2.5): void {
@@ -441,6 +483,20 @@ export class Hud implements MissionHud {
       this.shownSlots.length = 0;
       for (const s of d.slots) this.shownSlots.push({ key: s.key, name: s.name, active: s.active });
       this.slots.replaceChildren(...d.slots.map((s) => h('span', { class: `slot${s.active ? ' active' : ''}` }, [keycap(s.key), h('span', { text: s.name })])));
+    }
+
+    // Equipo.
+    const g = d.gear;
+    setVisible(this.gear, g.on);
+    if (g.on) {
+      setText(this.gearKey, g.key);
+      setText(this.gearName, g.name);
+      setText(this.gearLeft, GEAR_COUNT[g.left] ?? `×${g.left}`);
+      this.gear.classList.toggle('empty', g.left <= 0);
+    }
+    if (this.flashT > 0) {
+      this.flashT = Math.max(0, this.flashT - dt);
+      this.set(this.flashLayer, 'opacity', this.flashOpacity().toFixed(2));
     }
 
     // Recarga con ventana perfecta.

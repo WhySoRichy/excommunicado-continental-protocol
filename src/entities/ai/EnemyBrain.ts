@@ -153,10 +153,56 @@ export class EnemyBrain {
   private coverFor = 10;
   private retreatIn = 0;
 
+  /** Lo que le queda aturdido (s); infinito si no se le pasa solo (un takedown, el jefe arrodillado). */
+  stunLeft = 0;
+  /** Lo que hacía cuando lo aturdieron. */
+  private stunFrom: AiState = 'patrol';
+
   stun(): void {
     if (this.state === 'dead') return;
+    if (this.state !== 'stunned') this.stunFrom = this.state;
     this.state = 'stunned';
     this.stateTime = 0;
+    this.stunLeft = Number.POSITIVE_INFINITY;
+  }
+
+  /** Aturdido por un destello: se le pasa solo. */
+  get dazed(): boolean {
+    return this.state === 'stunned' && Number.isFinite(this.stunLeft);
+  }
+
+  /** Un destello en `at` lo deja sin ver `seconds` segundos (otro destello solo lo alarga). */
+  daze(seconds: number, at: Vector3): void {
+    if (this.state === 'dead') return;
+    if (this.state === 'stunned') {
+      if (this.dazed) this.stunLeft = Math.max(this.stunLeft, seconds);
+      return;
+    }
+    this.stunFrom = this.state;
+    if (!this.hasLastKnown) {
+      this.lastKnown.copy(at);
+      this.hasLastKnown = true;
+    }
+    this.state = 'stunned';
+    this.stateTime = 0;
+    this.stunLeft = seconds;
+    this.telegraphT = 0;
+  }
+
+  /** Un destello que no lo aturde (el jefe): pierde el disparo que preparaba y tarda en volver a apuntar. */
+  dazzle(seconds: number): void {
+    this.telegraphT = 0;
+    this.reactionLeft = Math.max(this.reactionLeft, seconds);
+  }
+
+  /** Se le pasa: si ya peleaba, sigue, tardando en volver a apuntar; si no sabía de nadie, registra la zona. */
+  private recover(): void {
+    const fighting = this.stunFrom === 'combat' || this.stunFrom === 'cover' || this.stunFrom === 'flank';
+    this.stunLeft = 0;
+    this.go(fighting ? 'combat' : 'search');
+    this.unseen = 0;
+    this.vigilant = Math.max(this.vigilant, 12);
+    this.reactionLeft = this.def.reaction * 1.4;
   }
 
   /** Sale del aturdimiento (takedown cancelado) directo a combate. */
@@ -194,6 +240,10 @@ export class EnemyBrain {
     cmd.hasLook = false;
     cmd.crouch = false;
     cmd.run = false;
+    if (this.state === 'stunned') {
+      this.stunLeft -= dt;
+      if (this.stunLeft <= 0) this.recover();
+    }
     if (this.state === 'dead' || this.state === 'stunned') {
       cmd.telegraph = 0;
       cmd.icon = 'none';

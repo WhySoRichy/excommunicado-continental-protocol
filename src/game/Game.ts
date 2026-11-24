@@ -2,10 +2,11 @@ import { surfaceAt, surfaceInside } from '../levels/surface';
 import { Vector3 } from 'three';
 import { AudioEngine } from '../audio/AudioEngine';
 import { type IntensityInput, musicIntensity } from '../audio/music';
+import { simulateThrow, STUN } from '../combat/Grenades';
 import { type CombatIntent, emptyCombatIntent, SWITCH_TIME } from '../combat/PlayerCombat';
 import { type PlayerSlot, REMOTE_RESPAWN } from '../combat/PlayerRoster';
 import { STYLE_RANKS } from '../combat/StyleMeter';
-import type { UpgradeId } from '../combat/weapons';
+import { GEAR, gearFor, type GearId, type LoadoutSlot, loadoutFor, normalizeLoadout, type UpgradeId, type WeaponId } from '../combat/weapons';
 import type { Action } from '../core/actions';
 import { GameStateMachine, type GameStateId } from '../core/GameStateMachine';
 import { Input, type InputEvent, type Vec2 } from '../core/Input';
@@ -46,7 +47,8 @@ import { formatObjective } from '../missions/tutorial';
 import { MissionDirector, type MissionOutcome } from '../missions/MissionDirector';
 import { type MissionId, MISSIONS } from '../missions/types';
 import type { CoopResults, MissionNet } from '../net/protocol';
-import { loadRapier, type Rapier } from '../physics/Physics';
+import { loadRapier, QueryGroups, type Rapier, type Vec3Like } from '../physics/Physics';
+import { ARC_EVERY } from '../render/ThrowArc';
 import { GameRenderer, type QualityPreset } from '../render/Renderer';
 import { type FatalText, hideBoot, setBootProgress, showFatal } from '../ui/boot';
 import { button, h } from '../ui/dom';
@@ -92,6 +94,8 @@ const LEVEL_LOAD_FAILED: FatalText = {
 
 const _feet = new Vector3();
 const _beacon = new Vector3();
+const _throwFrom = new Vector3();
+const _throwVel = new Vector3();
 const _orbitTarget = new Vector3(0, 1, 0);
 const _attractFrom = new Vector3();
 const _attractTo = new Vector3();
@@ -217,7 +221,10 @@ export class Game {
     this.settings = loadSettings(this.store);
     // Primera vez: si el sistema pide menos movimiento, la cámara no tiembla (se puede cambiar en Ajustes).
     const firstRun = this.store.get(SETTINGS_KEY) === null;
-    if (firstRun && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) this.settings.shake = 0;
+    if (firstRun && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      this.settings.shake = 0;
+      this.settings.flash = 0.35;
+    }
     // Primera vez y sin `?preset=`: el preset se elige por la GPU (integradas → Bajo).
     if (firstRun && !opts.preset) this.settings.preset = suggestPreset(probeGpu());
     this.renderer = new GameRenderer(gameRoot, opts.preset ?? this.settings.preset);
@@ -239,6 +246,7 @@ export class Game {
         onQuitToTitle: () => this.quitToTitle(),
         onCloseMenu: () => this.closeMenu(),
         onBuy: (id) => this.buyUpgrade(id),
+        onEquip: (slot, id) => this.equip(slot, id),
         onStartMission: (id) => this.startMission(id),
         settings: () => this.settings,
         onSettingsChange: (s) => this.applySettings(s),
@@ -289,6 +297,7 @@ export class Game {
       reserve: 0,
       isGun: true,
       slots: [],
+      gear: { on: false, key: '', name: '', left: 0 },
       reload: -1,
       perfect: null,
       spreadPx: 9,
@@ -362,6 +371,7 @@ export class Game {
       rng: this.rng,
       camera: this.camera,
       upgrades: new Set(this.profile.upgrades),
+      loadout: this.profile.loadout,
       accuracyMult: 1,
       damageMult: 1,
       onEnemyAlert: (e) => this.mission?.onEnemyAlert(e),
@@ -369,6 +379,7 @@ export class Game {
       net: this.coop?.sessionNet(),
     });
     this.sessionCoop = !!this.coop;
+    this.session.vfx.onBurst = (pos) => this.onBurst(pos);
     this.currentLevel = id;
     this.renderer.setExposure(data.ambient.exposure);
     this.camera.setYawPitch(data.spawn.yaw, -0.12);
@@ -656,6 +667,7 @@ export class Game {
     // Siempre la tecla asignada de verdad (también las de movimiento y armas).
     const move = formatObjective('{move}', lab);
     const slots = `${lab('weapon1')} / ${lab('weapon2')} / ${lab('weapon3')}`;
+    const gear = this.profile.loadout.gear ? [{ key: lab('gear'), text: 'Lanzar equipo (mantén para ver el arco)' }] : [];
     if (id === 'hub') {
       this.hud.setHints([
         { key: move, text: 'Mover' },
@@ -681,7 +693,8 @@ export class Game {
         { key: lab('fire'), text: 'Disparar' },
         { key: lab('aim'), text: 'Apuntar' },
         { key: lab('reload'), text: 'Recargar (otra vez en la zona dorada = perfecta)' },
-        { key: slots, text: 'Carabina · pistola · cuchillo' },
+        { key: slots, text: 'Principal · secundaria · cuerpo a cuerpo' },
+        ...gear,
         { key: lab('takedown'), text: 'Takedown (cerca del enemigo)' },
         // En cooperativo no hay Foco: el tiempo del mundo es de todos.
         ...(this.coop ? [] : [{ key: lab('focus'), text: 'Foco: cámara lenta' }]),
@@ -695,6 +708,9 @@ export class Game {
   pause(): void {
     if (this.fsm.state === 'playing' || this.fsm.state === 'hub') {
       this.session?.player.haltOnPause();
+      // Al reanudar, la tecla ya no estaría mantenida y se lanzaría sola. En cooperativo se guarda con la intención en
+      // reposo (`fixedUpdate`), para que el anfitrión haga lo mismo.
+      if (!this.coop?.inMatch) this.session?.combat.cancelThrow();
       this.fsm.go('paused');
     }
   }
@@ -730,6 +746,33 @@ export class Game {
     this.fsm.go('hub');
   }
 
+  /**
+   * Equipa un arma o un equipo en su hueco (armería, briefing, sala del cooperativo): se guarda, el combate del
+   * jugador lo toma al momento y, si es invitado de una partida en red, se lo cuenta al anfitrión.
+   */
+  equip(slot: LoadoutSlot, id: WeaponId | GearId | null): void {
+    const next = { ...this.profile.loadout, [slot]: id };
+    const owned = new Set(this.profile.upgrades);
+    const clean = normalizeLoadout(next, owned);
+    if (clean[slot] !== id) {
+      this.audio.ui('error');
+      return;
+    }
+    this.profile.loadout = clean;
+    this.audio.ui('click');
+    this.saveNow();
+    this.applyLoadout();
+    this.screens.refresh();
+  }
+
+  /** Lleva el equipo guardado al combate del jugador y, en red, al anfitrión. */
+  private applyLoadout(): void {
+    const owned = new Set(this.profile.upgrades);
+    this.profile.loadout = normalizeLoadout(this.profile.loadout, owned);
+    this.session?.combat.applyLoadout(owned, loadoutFor(owned, this.profile.loadout), gearFor(owned, this.profile.loadout));
+    this.coop?.guest?.setLoadout(this.profile.loadout);
+  }
+
   private buyUpgrade(id: UpgradeId): void {
     if (!buy(this.profile, id)) {
       this.audio.ui('error');
@@ -737,7 +780,7 @@ export class Game {
     }
     this.audio.ui('coin');
     this.saveNow();
-    this.session?.combat.applyOwned(new Set(this.profile.upgrades));
+    this.applyLoadout();
     this.screens.refresh();
   }
 
@@ -916,6 +959,7 @@ export class Game {
       s.enemyViews.update(s.enemies.enemies, alpha, scaledDt);
       s.civilianViews?.update(alpha, scaledDt);
       s.pickupViews.update(s.pickups.items, scaledDt);
+      s.grenadeViews.update(s.grenades.items, alpha);
       s.playerViews.update(s.roster.slots, alpha, scaledDt, this.renderer.camera.position);
       s.vfx.update(scaledDt);
       s.renderNpcs(scaledDt);
@@ -1061,6 +1105,7 @@ export class Game {
     // La cobertura a la que correr es la que se mira.
     it.lookFrom = this.camera.position;
     it.lookDir = this.camera.forward;
+    it.faceCamera = this.session?.combat.throwing ?? false;
     return it;
   }
 
@@ -1074,7 +1119,10 @@ export class Game {
     c.takedownPressed = inp.pressed('takedown');
     c.focusPressed = inp.pressed('focus');
     if (c.focusPressed && this.coop?.inMatch) this.hud.showToast(COOP_TEXT.noFocus, 1.8);
-    c.select = inp.pressed('weapon1') ? 'carbine' : inp.pressed('weapon2') ? 'pistol' : inp.pressed('weapon3') ? 'knife' : null;
+    c.gearPressed = inp.pressed('gear');
+    c.gearHeld = inp.isDown('gear');
+    // Cada tecla, un hueco del equipo: 1 principal, 2 secundaria, 3 cuerpo a cuerpo.
+    c.select = inp.pressed('weapon1') ? 'primary' : inp.pressed('weapon2') ? 'secondary' : inp.pressed('weapon3') ? 'melee' : null;
     c.cycle = inp.pressed('weaponNext') ? 1 : inp.pressed('weaponPrev') ? -1 : 0;
     return c;
   }
@@ -1138,12 +1186,15 @@ export class Game {
       }
     }
     const ci = controlling ? this.buildCombatIntent() : this.idleCIntent;
+    // Sin el control (pausa en cooperativo, una pantalla), lo que se iba a lanzar se guarda.
+    if (!controlling) ci.reloadPressed = s.combat.throwAiming;
     // El rayo de apuntado sale de la cámara del jugador local.
     ci.aimFrom.copy(this.camera.position);
     ci.aimDir.copy(this.camera.forward);
     if (s.infiniteAmmo) s.combat.weapon.mag = Math.max(s.combat.weapon.mag, 1);
     s.combat.fixedUpdate(dt, ci, s.ctx);
     if (guest) {
+      s.grenades.fixedUpdate(dt);
       this.guestFixedUpdate(s, ci);
       return;
     }
@@ -1156,6 +1207,7 @@ export class Game {
     s.roster.step(dt);
     // Anfitrión: el paso de cada invitado (su movimiento y su combate).
     this.coop?.host?.step(dt);
+    s.grenades.fixedUpdate(dt);
     s.roster.updateLooks();
     const tE = this.profiling ? performance.now() : 0;
     s.enemies.fixedUpdate(dt, s.updateTargets(dt));
@@ -1264,6 +1316,7 @@ export class Game {
     s.respawnAt(new Vector3(pos.x, pos.y + 0.02, pos.z), yaw);
     s.combat.respawnReset();
     if (!keepWorld) {
+      s.grenades.clear();
       s.enemies.resetAlive();
       m?.onPlayerRespawned();
     }
@@ -1578,9 +1631,9 @@ export class Game {
     if (this.opts.qa) checkCameraInvariants(s, this.camera, this.invariants);
     const rig = s.playerRig;
     rig.root.position.copy(_feet);
-    const yaw = updateBodyYaw(this.playerYaw, p.renderYaw(alpha), p.aiming, scaledDt);
-    rig.root.rotation.y = yaw;
     const c = s.combat;
+    const yaw = updateBodyYaw(this.playerYaw, p.renderYaw(alpha), p.aiming || c.throwing, scaledDt);
+    rig.root.rotation.y = yaw;
     const model: WeaponModel = c.holstered ? 'none' : WEAPON_MODEL[c.current];
     // El modelo cambia a mitad del gesto, cuando la mano está en la cadera.
     const swapT = c.switchT > 0 ? 1 - c.switchT / SWITCH_TIME : 1;
@@ -1610,6 +1663,7 @@ export class Game {
     pose.look = 1;
     pose.swap = c.switchT > 0 ? Math.sin(swapT * Math.PI) : 0;
     pose.takedown = c.takedown ? c.takedown.t : -1;
+    pose.throw = c.throwPhase;
     pose.vault = p.vaultProgress;
     pose.cover = p.state === 'cover' && p.cover ? p.cover.height : 'none';
     pose.peek = p.peekAmount;
@@ -1618,6 +1672,37 @@ export class Game {
     pose.coverTop = p.cover ? p.cover.top : 1.2;
     rig.update(pose, scaledDt);
     rig.setOpacity(this.camera.distanceToHead < 0.55 ? 0 : 1);
+    this.updateThrowArc(s, realDt);
+  }
+
+  /** El arco de lo que se lanzaría, con el mismo vuelo que hará la granada. */
+  private updateThrowArc(s: LevelSession, dt: number): void {
+    const c = s.combat;
+    let n = 0;
+    if (this.fsm.controlling && c.throwReady && c.gear) {
+      c.throwPlan(s.player, s.physics, _throwFrom, _throwVel);
+      n = simulateThrow(s.physics, _throwFrom, _throwVel, GEAR[c.gear].fuse, FIXED_DT, ARC_EVERY, s.throwArc.points);
+    }
+    s.throwArc.update(n, this.renderer.camera.position, dt);
+  }
+
+  /**
+   * Estalló una aturdidora: a este jugador le deslumbra según lo cerca que esté y si la mira, y le pitan los oídos. Solo
+   * es lo que ve y oye: no le quita el control.
+   */
+  private onBurst(pos: Vec3Like): void {
+    const s = this.session;
+    if (!s) return;
+    const eye = this.camera.position;
+    _throwVel.set(pos.x - eye.x, pos.y - eye.y, pos.z - eye.z);
+    const d = _throwVel.length();
+    const near = 1 - d / (STUN.radius * 1.7);
+    if (near <= 0) return;
+    this.audio.earRing(near);
+    this.camera.addTrauma(0.4 * near);
+    if (!s.physics.lineOfSight(eye, pos, QueryGroups.STATIC)) return;
+    const facing = d > 1e-3 ? _throwVel.dot(this.camera.forward) / d : 1;
+    this.hud.flash(near * (facing > 0 ? 0.3 + 0.7 * facing : 0.12) * this.settings.flash);
   }
 
   private updateAttractCamera(dt: number): void {

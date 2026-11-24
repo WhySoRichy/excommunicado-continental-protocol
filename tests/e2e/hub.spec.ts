@@ -139,6 +139,9 @@ test.describe('Fase 3 · El Continental', () => {
     await page.evaluate(() => window.__EXCOM__!.advanceDialog());
     await expect.poll(() => page.evaluate(() => window.__EXCOM__!.menu())).toBe('shop');
     await expect(page.locator('.coin-count')).toHaveText('8');
+    // La armería se abre por el equipo; las mejoras, en su pestaña.
+    await expect(page.locator('.armory-slot')).toHaveCount(4);
+    await page.getByRole('tab', { name: 'Mejoras' }).click();
     // Compensador (5 monedas) → quedan 3; Punta hueca (7) ya no alcanza.
     await page.locator('.shop-item[data-item="compensator"] button').click();
     await expect(page.locator('.coin-count')).toHaveText('3');

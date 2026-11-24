@@ -9,6 +9,7 @@ import { boxToOriented } from '../levels/levelPhysics';
 import type { NavGrid } from '../levels/nav/NavGrid';
 import type { EnemySpawnDef, EnemyType, LevelData } from '../levels/types';
 import { type PhysicsWorld, QueryGroups } from '../physics/Physics';
+import { STUN, stunSeconds } from './Grenades';
 import type { CombatAudio, CombatVfx } from './ports';
 
 interface CoverPoint {
@@ -141,6 +142,29 @@ export class EnemyManager implements Tactics {
   noise(pos: Vector3, radius: number): void {
     const r2 = radius * radius;
     for (const e of this.enemies) if (e.alive && e.feet.distanceToSquared(pos) <= r2) e.hear(pos);
+  }
+
+  /**
+   * Destello de una aturdidora en `at`: aturde a los enemigos del radio que lo ven (a la cara o al pecho), más cuanto
+   * más cerca y menos a quien le pilla de espaldas. Devuelve a cuántos.
+   */
+  stunBlast(at: Vector3): number {
+    const ph = this.deps.physics;
+    let n = 0;
+    for (const e of this.enemies) {
+      if (!e.alive) continue;
+      const f = e.feet;
+      const d = Math.hypot(f.x - at.x, f.y + e.height * 0.55 - at.y, f.z - at.z);
+      if (d > STUN.radius) continue;
+      _a.set(f.x, f.y + e.height * 0.88, f.z);
+      _b.set(f.x, f.y + e.height * 0.55, f.z);
+      if (!ph.lineOfSight(at, _a, QueryGroups.STATIC) && !ph.lineOfSight(at, _b, QueryGroups.STATIC)) continue;
+      const l = Math.hypot(at.x - f.x, at.z - f.z) || 1;
+      const yaw = e.mover.yaw;
+      const facing = (-Math.sin(yaw) * (at.x - f.x) - Math.cos(yaw) * (at.z - f.z)) / l;
+      if (e.daze(stunSeconds(d, facing), at)) n++;
+    }
+    return n;
   }
 
   /** Alerta a todos (alarma). */

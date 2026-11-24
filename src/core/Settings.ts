@@ -29,6 +29,8 @@ export interface Settings {
   ui: number;
   /** 0..1: intensidad de la sacudida de cámara. */
   shake: number;
+  /** 0..1: intensidad de los destellos en pantalla (la aturdidora). */
+  flash: number;
   /** Escala de toda la interfaz. */
   uiScale: number;
   /** Muestra la columna de pistas de teclas. */
@@ -47,6 +49,7 @@ export const SETTING_RANGES = {
   sfx: [0, 1],
   ui: [0, 1],
   shake: [0, 1],
+  flash: [0, 1],
   uiScale: [0.85, 1.4],
 } as const satisfies Record<string, readonly [number, number]>;
 
@@ -71,6 +74,7 @@ export function defaultSettings(): Settings {
     sfx: 0.9,
     ui: 0.7,
     shake: 1,
+    flash: 1,
     uiScale: 1,
     hints: true,
     bindings: cloneBindings(DEFAULT_BINDINGS),
@@ -108,6 +112,7 @@ export function validateSettings(x: unknown): Settings {
     sfx: num(o.sfx, 'sfx', d.sfx),
     ui: num(o.ui, 'ui', d.ui),
     shake: num(o.shake, 'shake', d.shake),
+    flash: num(o.flash, 'flash', d.flash),
     uiScale: num(o.uiScale, 'uiScale', d.uiScale),
     hints: bool(o.hints, d.hints),
     bindings: d.bindings,
@@ -122,8 +127,34 @@ export function validateSettings(x: unknown): Settings {
       // Una acción nunca se queda sin ninguna tecla de teclado/ratón: si pasa, vuelve la de fábrica.
       if (codes.some((c) => !c.startsWith('Pad'))) s.bindings[a] = [...new Set(codes)];
     }
+    placeNewActions(s.bindings, raw);
   }
   return s;
+}
+
+/** Teclas a las que recurrir si la de fábrica de una acción nueva ya la usa otra. */
+const SPARE_CODES: readonly string[] = ['KeyG', 'KeyB', 'KeyX', 'KeyT', 'KeyZ', 'KeyY', 'KeyN'];
+
+/**
+ * Acciones que no existían cuando se guardaron los ajustes (que guardan todas las teclas): reciben las de fábrica,
+ * menos las que el jugador ya dio a otra; si se quedan sin ninguna de teclado, una libre.
+ */
+function placeNewActions(b: Bindings, raw: Record<string, unknown>): void {
+  const fresh = REBINDABLE.filter((a) => !Array.isArray(raw[a]));
+  if (fresh.length === REBINDABLE.length) return;
+  // El equipo llegó con la cruceta izquierda, que antes era «arma anterior»: quien no la había cambiado, la cede.
+  const prev = raw.weaponPrev;
+  if (fresh.includes('gear') && Array.isArray(prev) && prev.length === 2 && prev[0] === 'WheelUp' && prev[1] === 'Pad14') b.weaponPrev = ['WheelUp'];
+  for (const a of fresh) {
+    const taken = (code: string): boolean =>
+      REBINDABLE.some((x) => x !== a && b[x].includes(code) && !(DEFAULT_BINDINGS[x].includes(code) && DEFAULT_BINDINGS[a].includes(code)));
+    const free = DEFAULT_BINDINGS[a].filter((c) => !taken(c));
+    if (!free.some((c) => !c.startsWith('Pad'))) {
+      const spare = SPARE_CODES.find((c) => !taken(c));
+      if (spare) free.unshift(spare);
+    }
+    if (free.some((c) => !c.startsWith('Pad'))) b[a] = free;
+  }
 }
 
 export function loadSettings(kv: KeyValueStore): Settings {

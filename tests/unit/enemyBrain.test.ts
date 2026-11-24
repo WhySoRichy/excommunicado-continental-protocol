@@ -177,6 +177,60 @@ describe('EnemyBrain', () => {
     expect(b.state).toBe('dead');
   });
 
+  it('un destello se le pasa solo: si peleaba sigue peleando, si no sabía de nadie registra la zona', () => {
+    const fighting = brain();
+    const p = seeing(emptyPerception(), 8);
+    fighting.alert(p.playerPos);
+    run(fighting, p, 0.2);
+    fighting.daze(2, new Vector3(1, 0, 1));
+    expect(fighting.dazed).toBe(true);
+    const during = run(fighting, p, 1.5);
+    expect(during.fire || during.hasMove).toBe(false);
+    expect(fighting.state).toBe('stunned');
+    run(fighting, p, 0.6);
+    expect(fighting.state).toBe('combat');
+
+    const calm = brain();
+    const blind = emptyPerception();
+    const at = new Vector3(4, 0, 2);
+    run(calm, blind, 0.2);
+    calm.daze(1, at);
+    run(calm, blind, 1.1);
+    expect(calm.state).toBe('search');
+    expect(calm.lastKnown.distanceTo(at), 'va a donde estalló').toBeLessThan(0.01);
+  });
+
+  it('otro destello lo alarga, pero no despierta a quien está a merced (takedown, jefe arrodillado)', () => {
+    const b = brain();
+    b.daze(1, new Vector3());
+    b.daze(3, new Vector3());
+    expect(b.stunLeft).toBe(3);
+    b.daze(0.5, new Vector3());
+    expect(b.stunLeft, 'uno más flojo no lo acorta').toBe(3);
+    // Agarrado para un takedown: ya no se le pasa solo.
+    b.stun();
+    b.daze(2, new Vector3());
+    expect(b.dazed).toBe(false);
+    run(b, emptyPerception(), 6);
+    expect(b.state).toBe('stunned');
+  });
+
+  it('deslumbrar al jefe le corta el disparo sin aturdirlo', () => {
+    const b = brain('boss');
+    const p = seeing(emptyPerception(), 10);
+    b.alert(p.playerPos);
+    const shots = (seconds: number): number => {
+      let n = 0;
+      run(b, p, seconds, (fired) => (n += fired ? 1 : 0));
+      return n;
+    };
+    expect(shots(2.5)).toBeGreaterThan(0);
+    b.dazzle(1.2);
+    expect(shots(1.1), 'no dispara mientras está deslumbrado').toBe(0);
+    expect(b.state).not.toBe('stunned');
+    expect(shots(3), 'después, sí').toBeGreaterThan(0);
+  });
+
   it('alerta de un aliado lo une al combate', () => {
     const b = brain();
     const p = emptyPerception();

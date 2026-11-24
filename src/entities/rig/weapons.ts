@@ -1,6 +1,7 @@
 import { type BufferGeometry, Shape } from 'three';
 import type { WeaponModel } from './types';
-import { along, assemble, block, cube, knob, lathe, type P, post, repeat, side, type Surf, tube } from './weaponParts';
+import type { GearId } from '../../combat/weapons';
+import { along, assemble, block, cube, knob, lathe, type P, post, repeat, ring, side, type Surf, tube } from './weaponParts';
 
 /** Distancia (m) de la empuñadura a la cantonera de las armas que se encaran al hombro; 0 si no tienen culata. */
 export const STOCK: Record<WeaponModel, number> = {
@@ -935,4 +936,37 @@ const BUILD: Record<Exclude<WeaponModel, 'none'>, (k: Kit) => BufferGeometry[]> 
 export function weaponGeometry(model: Exclude<WeaponModel, 'none'>, accent: number, finish: WeaponFinish = DEFAULT_FINISH): BufferGeometry {
   const f = finish === DEFAULT_FINISH ? { ...finish, ...MODEL_FINISH[model] } : finish;
   return assemble(BUILD[model](kit(f, accent)));
+}
+
+/**
+ * Granada aturdidora de pie (eje +Y, base en el origen): cuerpo perforado verde oliva con sus bandas, espoleta,
+ * cuchara y anilla. La misma en la armería, en la mano y en vuelo.
+ */
+function stun(k: Kit): BufferGeometry[] {
+  const body: Surf = { c: 0x3c4434, r: 0.7, m: 0 };
+  const holes: BufferGeometry[] = [];
+  for (let row = 0; row < 3; row++) {
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + row * 0.5;
+      // Cada agujero mira hacia fuera: el disco (eje X) se gira hacia su dirección radial.
+      const hole = knob(0.0042, 0.003, k.slot, 0, 0, 0, 8);
+      hole.rotateY(a - Math.PI / 2);
+      hole.translate(Math.sin(a) * 0.0188, 0.026 + row * 0.018, Math.cos(a) * 0.0188);
+      holes.push(hole);
+    }
+  }
+  return [
+    post(0.019, 0.08, body, 0, 0.04, 0, 14),
+    post(0.0196, 0.006, k.accent, 0, 0.012, 0, 14),
+    post(0.0196, 0.006, k.accent, 0, 0.074, 0, 14),
+    ...holes,
+    post(0.012, 0.016, k.metal, 0, 0.088, 0, 12),
+    block(0.008, 0.06, 0.003, k.metal, 0, 0.066, 0.021, 0.0015),
+    ring(0.009, 0.0013, k.steel, 0, 0.094, -0.012),
+  ];
+}
+
+/** Geometría del equipo que se lanza (por ahora, la aturdidora). */
+export function gearGeometry(_id: GearId, accent: number): BufferGeometry {
+  return assemble(stun(kit(DEFAULT_FINISH, accent)));
 }

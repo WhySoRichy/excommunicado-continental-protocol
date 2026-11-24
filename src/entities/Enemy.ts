@@ -45,6 +45,8 @@ export interface EnemyNet {
   telegraphX: number;
   telegraphY: number;
   telegraphZ: number;
+  /** Aturdido por un destello (se tambalea; el otro aturdimiento lo deja de rodillas). */
+  dazed: boolean;
 }
 
 export function emptyEnemyNet(): EnemyNet {
@@ -74,6 +76,7 @@ export function emptyEnemyNet(): EnemyNet {
     telegraphX: 0,
     telegraphY: 0,
     telegraphZ: 0,
+    dazed: false,
   };
 }
 
@@ -148,6 +151,8 @@ const _dir = new Vector3();
 const _hitPt = new Vector3();
 /** Lo que tarda el agarre del takedown en tumbar al enemigo (s). */
 export const THROW_DELAY = 0.1;
+/** Lo que un destello le corta el disparo a quien no se aturde (s). */
+const DAZZLE = 1.2;
 /** Tiempo tras la muerte en el que el cuerpo termina de caer; después ni se simula ni se anima (s). */
 export const CORPSE_SETTLE = 3;
 
@@ -206,6 +211,8 @@ export class Enemy {
   deathStyle: 0 | 1 | 2 = 0;
   /** Al morir proyectado en un takedown, lo que ya llevaba de caída (s). */
   deathFallStart = 0;
+  /** Murió aturdido por un destello (puntúa distinto). */
+  diedDazed = false;
   /** Tiempo desde que el jugador lo agarró en un takedown (s); −1 si no lo están proyectando. */
   thrownT = -1;
   /** Altura del pecho del objetivo sobre sus pies (se mira y se apunta ahí). */
@@ -257,6 +264,11 @@ export class Enemy {
     return this.brain.state;
   }
 
+  /** Aturdido por un destello: se tambalea y se le pasa solo. */
+  get dazed(): boolean {
+    return this.alive && this.brain.dazed;
+  }
+
   get collider(): Collider {
     return this.mover.collider;
   }
@@ -296,6 +308,8 @@ export class Enemy {
     this.pathEvent = null;
     p.selfPos.copy(this.mover.feet);
     this.brain.update(dt, p, this.w.tactics, this.cmd);
+    // Se le pasó el aturdimiento: vuelve a moverse.
+    if (this.mover.state === 'locked' && this.brain.state !== 'stunned' && this.thrownT < 0) this.mover.setLocked(false);
     // Los eventos de un paso ya se consumieron.
     p.heard = false;
     p.damaged = false;
@@ -592,6 +606,7 @@ export class Enemy {
   }
 
   private die(): void {
+    this.diedDazed = this.brain.dazed;
     this.brain.kill();
     this.mover.kill();
     // Si lo estaban proyectando, la caída sigue donde iba en vez de empezar de pie.
@@ -604,6 +619,25 @@ export class Enemy {
   stun(): void {
     this.brain.stun();
     this.mover.setLocked(true);
+  }
+
+  /** Un destello en `at` (aturdidora). Devuelve si lo aturdió. */
+  daze(seconds: number, at: Vector3): boolean {
+    if (!this.alive || this.thrownT >= 0 || seconds <= 0) return false;
+    // Arrodillado o agarrado: ya no puede hacer nada.
+    if (this.brain.state === 'stunned' && !this.brain.dazed) return false;
+    const yaw = this.mover.yaw;
+    const f = this.mover.feet;
+    this.flinch = 1;
+    this.flinchSide = Math.cos(yaw) * (at.x - f.x) - Math.sin(yaw) * (at.z - f.z) > 0 ? -1 : 1;
+    const k = this.def.stun ?? 1;
+    if (k <= 0) {
+      this.brain.dazzle(DAZZLE);
+      return false;
+    }
+    this.brain.daze(seconds * k, at);
+    this.mover.setLocked(true);
+    return true;
   }
 
   /** El jugador lo agarra para un takedown: tras un instante cae de espaldas, aún vivo. */
@@ -660,6 +694,7 @@ export class Enemy {
     out.telegraphX = this.telegraphAt.x;
     out.telegraphY = this.telegraphAt.y;
     out.telegraphZ = this.telegraphAt.z;
+    out.dazed = this.dazed;
     return out;
   }
 
@@ -670,6 +705,7 @@ export class Enemy {
   applyNet(s: EnemyNet, snap = false): void {
     this.mover.applyNet(s.move, snap);
     this.brain.state = s.ai;
+    this.brain.stunLeft = s.dazed ? 1 : Number.POSITIVE_INFINITY;
     this.intent.aim = s.aim;
     this.vitals.health = s.health;
     if (this.vitals.dead === s.alive) {

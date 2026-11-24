@@ -21,9 +21,10 @@ export const SHOP: readonly ShopItem[] = [
   { id: 'suit2', name: 'Traje balístico II', desc: '+20 de integridad (requiere el I).', price: 7, requires: 'suit1' },
   { id: 'suit3', name: 'Traje balístico III', desc: '+20 de integridad (requiere el II).', price: 10, requires: 'suit2' },
   { id: 'tacticalKnife', name: 'Cuchillo táctico', desc: 'Alcance 2,2 m y golpe más rápido.', price: 4 },
-  { id: 'shotgun', name: 'Escopeta "Sommelier"', desc: 'Nueva arma primaria (tecla 1 alterna con la carabina).', price: 8 },
-  { id: 'revolver', name: 'Revólver "Juez"', desc: 'Seis tiros de 70 de daño, recarga lenta. La tecla 2 alterna con la pistola.', price: 9 },
-  { id: 'dmr', name: 'Rifle de tirador "Meridian"', desc: 'Primaria de largo alcance con mira de aumento. Sin apuntar, poco precisa.', price: 11 },
+  { id: 'shotgun', name: 'Escopeta "Sommelier"', desc: 'Arma principal: demoledora de cerca. Se equipa en la armería.', price: 8 },
+  { id: 'revolver', name: 'Revólver "Juez"', desc: 'Arma secundaria: seis tiros de 70 de daño, recarga lenta.', price: 9 },
+  { id: 'dmr', name: 'Rifle de tirador "Meridian"', desc: 'Arma principal de largo alcance con mira de aumento. Sin apuntar, poco precisa.', price: 11 },
+  { id: 'stunGrenade', name: 'Granadas aturdidoras', desc: 'Equipo: dos por contrato. Aturden a los enemigos cercanos que la ven estallar.', price: 6 },
   { id: 'extraMarker', name: 'Marcador adicional', desc: '4 marcadores de sangre (vidas) por contrato.', price: 12 },
 ];
 

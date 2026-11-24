@@ -56,7 +56,7 @@ Título ─► Continental (hub) ─► Charon: contratos ─► Briefing ─►
 - Aparecen de uno en uno cada 0,5 s por las entradas de las oleadas del Excomunicado, nunca a menos de 4 m del jugador ni encima de otro enemigo.
 - Al morir se guarda el resultado en el top 10 local (oleadas y, a igualdad, puntos de estilo).
 
-Cada contrato sigue el flujo **briefing** (3 líneas: objetivo, regla especial, rango objetivo) → ejecución → **resultados** con rango D/C/B/A/S y recompensa. Los contratos se desbloquean en orden: el tutorial desbloquea Kairos (y el Gauntlet), Kairos desbloquea Muelle 9 y Muelle 9 desbloquea Torre Meridian.
+Cada contrato sigue el flujo **briefing** (3 líneas: objetivo, regla especial, rango objetivo; y el equipo que se lleva, que se puede cambiar ahí mismo) → ejecución → **resultados** con rango D/C/B/A/S y recompensa. Los contratos se desbloquean en orden: el tutorial desbloquea Kairos (y el Gauntlet), Kairos desbloquea Muelle 9 y Muelle 9 desbloquea Torre Meridian.
 
 ### 2.4 Cooperativo (hasta cuatro jugadores)
 - Uno abre la sala desde el título (Cooperativo → Crear partida) y elige la arena o un contrato que tenga desbloqueado. La sala tiene un código de cinco letras: los demás entran escribiéndolo, desde «Buscar partida» si la sala es pública (lo es salvo que el anfitrión diga lo contrario) o, en el mismo equipo, desde otra pestaña. Si el servicio de salas no responde, queda la invitación manual: el anfitrión crea una invitación, el invitado devuelve una respuesta y el anfitrión la pega.
@@ -102,21 +102,27 @@ Cada contrato sigue el flujo **briefing** (3 líneas: objetivo, regla especial, 
 
 ## 4. Combate gun-fu
 
-### 4.1 Armas (slots 1/2/3, también con rueda o D-pad)
-| Arma | Slot | Daño | Headshot | Cadencia | Cargador | Recarga | Notas |
+### 4.1 Armas e inventario
+| Arma | Hueco | Daño | Headshot | Cadencia | Cargador | Recarga | Notas |
 |---|---|---|---|---|---|---|---|
-| Carabina TR-4 | 1 | 30 | ×3 | 540 rpm automática | 24 (+96) | 1,9 s | Patrón de recoil fijo y aprendible |
-| Escopeta "Sommelier" (se compra) | 1 | 8×14 | ×1,5 | 70 rpm | 6 (+30) | 2,4 s | Corto alcance |
-| Rifle de tirador "Meridian" (se compra) | 1 | 75 | ×2,5 | Semiautomático, 150 rpm | 10 (+40) | 2,3 s | Mira de aumento al apuntar; poco preciso sin apuntar |
-| Pistola P-45 | 2 | 34 | ×3 | Semiautomática | 12 (reserva ∞) | 1,25 s | **Reserva infinita: nunca te quedas sin poder disparar** |
-| Revólver "Juez" (se compra) | 2 | 70 | ×3 | Semiautomático, 120 rpm | 6 (reserva ∞) | 2,1 s | Mucho retroceso y ruido; el cargador extendido no le afecta |
-| Cuchillo | 3 | 120 | — | 0,55 s | — | — | Silencioso; por la espalda mata siempre |
+| Carabina TR-4 | Principal | 30 | ×3 | 540 rpm automática | 24 (+96) | 1,9 s | Patrón de recoil fijo y aprendible |
+| Escopeta "Sommelier" (se compra) | Principal | 8×14 | ×1,5 | 70 rpm | 6 (+30) | 2,4 s | Corto alcance |
+| Rifle de tirador "Meridian" (se compra) | Principal | 75 | ×2,5 | Semiautomático, 150 rpm | 10 (+40) | 2,3 s | Mira de aumento al apuntar; poco preciso sin apuntar |
+| Pistola P-45 | Secundaria | 34 | ×3 | Semiautomática | 12 (reserva ∞) | 1,25 s | **Reserva infinita: nunca te quedas sin poder disparar** |
+| Revólver "Juez" (se compra) | Secundaria | 70 | ×3 | Semiautomático, 120 rpm | 6 (reserva ∞) | 2,1 s | Mucho retroceso y ruido; el cargador extendido no le afecta |
+| Cuchillo | Cuerpo a cuerpo | 120 | — | 0,55 s | — | — | Silencioso; por la espalda mata siempre |
 
-- **Cada tecla recorre su grupo** entre las armas que tengas: 1 carabina, escopeta y rifle de tirador; 2 pistola y revólver; 3 cuchillo. La munición que sueltan los enemigos sirve para todas las armas de reserva limitada.
+- **Inventario y equipo.** Se guardan todas las armas que se consiguen, pero al contrato se llevan cuatro piezas, una por hueco: **principal** (fusiles, escopetas y tirador compiten por él), **secundaria** (armas cortas), **cuerpo a cuerpo** y **equipo** (lo que se lanza). Se elige en la armería del Sommelier, donde cada pieza se ve girar en 3D con sus barras de daño, cadencia, alcance, precisión y cargador, y lo comprado se equipa solo; también en el briefing y, en cooperativo, en la sala (cada jugador el suyo). La elección se guarda.
+- **Cada tecla, un hueco:** 1 la principal, 2 la secundaria, 3 la de cuerpo a cuerpo (también rueda o D-pad) y G el equipo. La munición que sueltan los enemigos sirve para todas las armas de reserva limitada.
 - **Hitscan:** rayo desde la cámara por la mira para encontrar el punto apuntado y después rayo desde la boca del arma hasta ese punto. Si una pared tapa el arma, la mira se pone gris con una X ("bloqueado").
 - **Spread:** sube al moverte y al disparar seguido, y baja al apuntar o agacharte. La mira muestra el spread real.
 - **Postura con armas largas** (carabina, escopeta, rifle y subfusil): de perfil, con el hombro izquierdo hacia el objetivo. Al apuntar, la culata va al hombro y el cañón sigue exactamente la línea de mira, sin ladearse; al esprintar, cruzada y con el cuerpo de frente. Los enemigos usan la misma postura.
 - **Recarga perfecta:** durante la recarga aparece una barra con una ventana dorada. Si pulsas R dentro, recargas al instante y ganas un bonus de estilo. Si fallas, la recarga tarda +0,35 s.
+- **Aturdidora (G).** Equipo: dos por contrato, se reponen al reaparecer y una por oleada superada en el Gauntlet.
+  - **Lanzarla.** Un toque la lanza. Manteniendo la tecla, el brazo espera armado y se ve el arco con el mismo vuelo que hará la granada (rebotes incluidos) y un anillo donde estallará; al soltar, vuela. Antes de soltarla se guarda recargando (sin recargar), cambiando de arma, rodando o con un takedown. Se puede lanzar corriendo, en el aire, deslizándose y a cubierto: por encima de la cobertura baja o tras el borde de la alta. Con la granada en la mano no se dispara.
+  - **Vuelo.** 14,5 m/s, 0,27 rad por encima de la mirada: mirando de frente cae a unos 12 m; hacia arriba, más lejos. Rebota, rueda y estalla a los 1,6 s de salir de la mano.
+  - **Efecto.** Aturde a los enemigos a menos de 9 m que ven el destello: 4,6 s pegados a ella y 2,4 s en el borde; un 40 % menos si les pilla de espaldas, y otro 40 % menos al blindado. Se tambalean con la mano en la cara, no disparan y admiten takedown. Se les pasa solo: quien peleaba vuelve a pelear, tardando en apuntar; quien no sabía de nadie registra la zona. Al jefe no lo aturde: solo le corta el disparo que preparaba. Quien la oye sin verla (26 m) acude, y los civiles huyen.
+  - **En pantalla.** Si estalla cerca y la miras, te deslumbra un instante y te pitan los oídos, sin quitarte el control ni taparte la pantalla del todo (se regula en Ajustes).
 - **Takedown (F)** a ≤ 1,8 m mirando al enemigo: agarre → proyección → **doble tap automático** y kill garantizado. Tienes i-frames durante la animación. Funciona incluso contra blindados.
 - **Foco (Q):** se llena con estilo. Desde el 30 % activa cámara lenta (×0,35) mientras dura la barra. La mirada sigue a velocidad real, así que tienes más tiempo para apuntar.
 - **Integridad del traje:** armadura (60, mejorable) que absorbe primero y se regenera a 20/s tras 4 s sin daño, más salud (100) que no se regenera. Hay botiquines en los niveles y se restaura al reaparecer.
@@ -162,6 +168,8 @@ Un headshot mata de un tiro a matón, escolta y tirador. Esa regla es simple y p
 | Kill en Foco | 80 |
 | Multi-kill (2 en ≤ 1,5 s) | 150 |
 | Tiro largo (> 30 m) | 100 |
+| Aturdir a uno o más enemigos con una granada | 60 |
+| Kill a un enemigo aturdido por un destello | 130 |
 
 - **Variedad:** repetir una acción que está entre las 3 últimas rinde ×0,5, y si aparece 2 veces o más, ×0,25. Spamear no sube el medidor.
 - **Decaimiento:** sin acciones durante 2,5 s el medidor baja. Recibir daño le resta 0,35 y puede bajar un nivel.
@@ -193,9 +201,10 @@ Hay cinco subnotas de 0 a 100: **tiempo** (frente al par), **precisión** (impac
 | Compensador | 5 | −35 % de recoil |
 | Traje balístico I / II / III | 4 / 7 / 10 | +20 de armadura cada uno |
 | Cuchillo táctico | 4 | Alcance 2,2 m y golpe 0,4 s |
-| Escopeta "Sommelier" | 8 | Nueva arma primaria |
-| Revólver "Juez" | 9 | Arma corta de seis tiros con mucho daño |
-| Rifle de tirador "Meridian" | 11 | Primaria de largo alcance con mira de aumento |
+| Escopeta "Sommelier" | 8 | Arma principal, demoledora de cerca |
+| Revólver "Juez" | 9 | Arma secundaria de seis tiros con mucho daño |
+| Rifle de tirador "Meridian" | 11 | Arma principal de largo alcance con mira de aumento |
+| Granadas aturdidoras | 6 | Equipo: dos por contrato |
 | Marcador adicional | 12 | 4 vidas por contrato |
 
 ### 5.3 Logros y desafíos (dan monedas una vez)
@@ -225,7 +234,7 @@ Hay cinco subnotas de 0 a 100: **tiempo** (frente al par), **precisión** (impac
 - **HUD siempre legible:**
   - Objetivo arriba y baliza dorada en el mundo con la distancia (flecha en el borde si está fuera de pantalla).
   - Abajo a la izquierda: integridad (armadura y salud) y marcadores.
-  - Abajo a la derecha: arma, munición y slots.
+  - Abajo a la derecha: arma, munición, huecos y el equipo con cuántos quedan.
   - Arriba a la derecha: zona, Style Meter y feed de acciones. A la izquierda: barra de Foco.
   - En el centro: mira dinámica, hit markers distintos para cuerpo, cabeza y baja, e indicadores direccionales de daño.
 - **Avisos contextuales** solo cuando aplican: "[E] Hablar con Charon", "[F] Takedown", "[C] Cubrirse", "[Mantén C] Correr a cubierto (6 m)" en combate, y a cubierto lo que se puede hacer desde ella.
@@ -233,7 +242,7 @@ Hay cinco subnotas de 0 a 100: **tiempo** (frente al par), **precisión** (impac
 - **Pausa:** Reanudar, Controles, Ajustes, Volver al Continental (fuera del hub) y Salir al título. H muestra los controles en cualquier momento y, manteniendo Tab, la Intel (objetivo, marcadores, reglas del contrato y leyenda de enemigos).
 - **Accesibilidad:**
   - Escala de UI, sensibilidad (ratón y mando), invertir Y y FOV.
-  - Brillo, sacudida de cámara regulable (desactivada si el sistema pide movimiento reducido) y apuntar en modo mantener o alternar.
+  - Brillo, sacudida de cámara y destellos en pantalla regulables (sin sacudida y con destellos suaves si el sistema pide movimiento reducido) y apuntar en modo mantener o alternar.
   - Reasignación de teclas, menús navegables con teclado y textos con alto contraste.
   - Los tipos de enemigo se distinguen por color **e** icono.
 
@@ -251,7 +260,8 @@ Hay cinco subnotas de 0 a 100: **tiempo** (frente al par), **precisión** (impac
 | Saltar / Vault | Espacio | A (en combate) |
 | Esquiva / Voltereta | Doble Espacio o Alt | RB |
 | Foco | Q | LB |
-| Cambiar arma | 1 / 2 / 3 o rueda | D-pad |
+| Cambiar arma | 1 / 2 / 3 o rueda | D-pad ↑ / → / ↓ |
+| Lanzar equipo (mantener: ver el arco) | G | D-pad ← |
 | Cambiar hombro | V | R3 |
 | Contratos / Intel | Tab | Select |
 | Pausa / Controles | Esc / H | Start |

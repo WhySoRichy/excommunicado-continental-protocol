@@ -2,7 +2,7 @@ import type { Surface } from '../levels/surface';
 import type { AmbienceKind, MusicMood } from '../levels/types';
 import { MusicPlayer } from './MusicPlayer';
 import type { Vec3Like } from '../physics/Physics';
-import type { CombatAudio, ShotSound } from '../combat/ports';
+import type { CombatAudio, GrenadeSound, ShotSound } from '../combat/ports';
 import type { MissionAudio } from '../missions/ports';
 
 /**
@@ -494,6 +494,40 @@ export class AudioEngine implements CombatAudio, MissionAudio {
     if (!this.ready) return;
     const d = this.out(this.sfxBus, pos);
     this.tone(d, { type: 'square', f0: 700 + progress * 900, gain: 0.07 + progress * 0.08, decay: 0.05 });
+  }
+
+  /** Granada: la anilla, el lanzamiento, cada rebote y el estallido. */
+  grenade(kind: GrenadeSound, pos?: Vec3Like): void {
+    if (!this.ready) return;
+    const d = this.out(this.sfxBus, pos);
+    switch (kind) {
+      case 'pin':
+        this.noiseHit(d, { freq: 5200, q: 6, gain: 0.16, decay: 0.03 });
+        this.tone(d, { type: 'triangle', f0: 2600, f1: 2100, gain: 0.05, decay: 0.09, delay: 0.03 });
+        break;
+      case 'throw':
+        this.noiseHit(d, { freq: 1100, q: 0.7, gain: 0.2, attack: 0.05, decay: 0.16 });
+        this.noiseHit(d, { freq: 4200, q: 5, gain: 0.1, decay: 0.03, delay: 0.08 });
+        break;
+      case 'bounce':
+        this.noiseHit(d, { freq: 1900, q: 3, gain: 0.3, decay: 0.05 });
+        this.tone(d, { type: 'triangle', f0: 760, f1: 520, gain: 0.16, decay: 0.08 });
+        break;
+      case 'burst':
+        // Estampido seco con cola grave y el chasquido agudo de la carga.
+        this.noiseHit(d, { freq: 2600, q: 0.35, gain: 0.95, attack: 0.001, decay: 0.16 });
+        this.noiseHit(d, { freq: 420, q: 0.5, type: 'lowpass', gain: 0.8, decay: 0.5 });
+        this.tone(d, { type: 'triangle', f0: 190, f1: 34, gain: 0.8, decay: 0.32 });
+        break;
+    }
+  }
+
+  /** Pitido en los oídos de quien tiene el estallido cerca: `k` (0..1) según la distancia. */
+  earRing(k: number): void {
+    if (!this.ready || k < 0.05) return;
+    const d = this.sfxBus;
+    this.tone(d, { type: 'sine', f0: 3900, f1: 3700, gain: 0.05 * k, attack: 0.05, decay: 0.5 + 1.3 * k });
+    this.tone(d, { type: 'sine', f0: 5200, f1: 5100, gain: 0.02 * k, attack: 0.05, decay: 0.4 + 0.9 * k });
   }
 
   takedown(): void {

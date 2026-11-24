@@ -40,6 +40,8 @@ export interface EnemyTypeDef {
   runScale: number;
   /** Solo admite takedown cuando está aturdido (el jefe, al arrodillarse por fase). */
   takedownWhenStunned?: boolean;
+  /** Cuánto le dura un aturdimiento (por defecto 1). Con 0 no se aturde: el destello solo le corta el disparo. */
+  stun?: number;
   walkScale: number;
   prefersCover: number;
   flanker: boolean;
@@ -141,6 +143,7 @@ export const ENEMY_TYPES: Record<EnemyType, EnemyTypeDef> = {
     sightRange: 22,
     fovDeg: 100,
     runScale: 0.7,
+    stun: 0.6,
     walkScale: 0.35,
     prefersCover: 0,
     flanker: false,
@@ -166,6 +169,7 @@ export const ENEMY_TYPES: Record<EnemyType, EnemyTypeDef> = {
     fovDeg: 140,
     runScale: 0.85,
     takedownWhenStunned: true,
+    stun: 0,
     walkScale: 0.4,
     prefersCover: 0.5,
     flanker: false,

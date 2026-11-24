@@ -16,7 +16,9 @@ export type StyleAction =
   | 'knifeKill'
   | 'focusKill'
   | 'multiKill'
-  | 'longShot';
+  | 'longShot'
+  | 'stunned'
+  | 'stunKill';
 
 export const STYLE_BASE: Record<StyleAction, number> = {
   kill: 100,
@@ -31,6 +33,8 @@ export const STYLE_BASE: Record<StyleAction, number> = {
   focusKill: 80,
   multiKill: 150,
   longShot: 100,
+  stunned: 60,
+  stunKill: 130,
 };
 
 export const STYLE_LABELS: Record<StyleAction, string> = {
@@ -46,6 +50,8 @@ export const STYLE_LABELS: Record<StyleAction, string> = {
   focusKill: 'Foco',
   multiKill: 'Multi-baja',
   longShot: 'Tiro largo',
+  stunned: 'Aturdidos',
+  stunKill: 'Baja aturdida',
 };
 
 export const STYLE_RANKS = ['Discreto', 'Preciso', 'Letal', 'Implacable', 'Despiadado', 'Mítico', 'Baba Yaga', 'Leyenda'] as const;

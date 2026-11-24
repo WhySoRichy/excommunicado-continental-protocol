@@ -710,6 +710,52 @@ body {
   background: var(--c-gold-soft);
 }
 
+.gear-slot {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.3rem;
+  font-size: 0.72rem;
+  color: var(--c-text);
+}
+
+.gear-slot[hidden] {
+  display: none;
+}
+
+.gear-slot .keycap {
+  min-width: 1.4em;
+  padding: 0 0.3em;
+  font-size: 0.75em;
+  background: var(--c-gold-soft);
+  box-shadow: none;
+}
+
+.gear-slot.empty {
+  color: var(--c-text-dim);
+}
+
+.gear-slot.empty .keycap {
+  background: #6b6452;
+}
+
+.gear-left {
+  font-variant-numeric: tabular-nums;
+}
+
+.gear-slot.empty .gear-left {
+  color: #ff6a5a;
+}
+
+.flash-layer {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, rgba(255, 252, 242, 1) 0%, rgba(255, 250, 235, 0.92) 100%);
+}
+
 .reload {
   position: absolute;
   left: 50%;
@@ -1596,6 +1642,40 @@ body {
   width: min(560px, 94vw);
 }
 
+.screen-lobby {
+  width: min(960px, 95vw);
+}
+
+.lobby-cols {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 2.2rem;
+  align-items: start;
+  width: 100%;
+}
+
+.lobby-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  align-items: center;
+  min-width: 0;
+}
+
+.lobby-col .loadout-bar {
+  grid-template-columns: 1fr;
+  margin: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+@media (max-width: 820px) {
+  .lobby-cols {
+    grid-template-columns: 1fr;
+    gap: 1.2rem 0;
+  }
+}
+
 .coop-players {
   display: flex;
   flex-direction: column;
@@ -1821,4 +1901,207 @@ body {
 
 .coop-roomcode .coop-label {
   align-self: center;
+}
+
+/* ---------- Armería: equipo (huecos, piezas y la que se mira) ---------- */
+.screen.screen-armory {
+  max-width: min(1060px, 96vw);
+  padding: 1.6rem 1.8rem;
+}
+
+.armory-tabs {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+  margin: 0.2rem 0 0.7rem;
+}
+
+.armory-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 1.1rem;
+  width: min(980px, 90vw);
+  max-height: 60vh;
+  overflow: auto;
+  text-align: left;
+}
+
+.armory-hint {
+  margin: 0 0 0.6rem;
+  font-size: 0.82rem;
+  color: var(--c-text-dim);
+}
+
+.armory-slot {
+  margin-bottom: 0.8rem;
+}
+
+.armory-slot-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--c-gold-soft);
+}
+
+.armory-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.armory-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 168px;
+  padding: 0.5rem 0.7rem;
+  text-align: left;
+  font: inherit;
+  color: var(--c-text);
+  background: rgba(30, 33, 40, 0.85);
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.armory-item:hover,
+.armory-item:focus-visible {
+  border-color: var(--c-gold-soft);
+  outline: none;
+}
+
+.armory-item.equipped {
+  border-color: var(--c-gold);
+  box-shadow: inset 0 0 0 1px var(--c-gold);
+}
+
+.armory-item.locked,
+.armory-item.poor {
+  opacity: 0.6;
+}
+
+.armory-item-name {
+  font-weight: 600;
+}
+
+.armory-item-state {
+  font-size: 0.76rem;
+  color: var(--c-text-dim);
+}
+
+.armory-item.equipped .armory-item-state {
+  color: var(--c-gold);
+}
+
+.armory-detail {
+  padding: 0.8rem;
+  background: rgba(18, 20, 24, 0.9);
+  border: 1px solid var(--c-line);
+  border-radius: 8px;
+}
+
+.weapon-preview {
+  display: block;
+  width: 100%;
+  max-width: 360px;
+  height: 170px;
+  margin: 0 auto 0.6rem;
+  border-radius: 6px;
+  background: radial-gradient(ellipse at 50% 40%, #2a2f38 0%, #14161b 75%);
+}
+
+.weapon-preview-off {
+  display: grid;
+  place-items: center;
+  font-size: 0.82rem;
+  color: var(--c-text-dim);
+}
+
+.armory-name {
+  font-family: var(--font-title);
+  font-size: 1.15rem;
+  color: var(--c-gold-soft);
+}
+
+.armory-desc {
+  margin: 0.25rem 0 0.6rem;
+  font-size: 0.85rem;
+  color: var(--c-text-dim);
+}
+
+.armory-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.6rem;
+}
+
+.armory-stats .sub {
+  grid-template-columns: 82px 1fr 128px;
+  font-size: 0.8rem;
+}
+
+.armory-stats .sub-value {
+  text-align: right;
+  color: var(--c-text-dim);
+}
+
+@media (max-width: 860px) {
+  .armory-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- Equipo en una fila: briefing y sala del cooperativo ---------- */
+.loadout-bar {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.4rem 1.4rem;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 680px;
+  margin: 0.8rem auto 1rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid rgba(212, 175, 55, 0.22);
+}
+
+.loadout-bar .achv-title {
+  grid-column: 1 / -1;
+  text-align: center;
+}
+
+.loadout-pick {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.loadout-slot {
+  flex: 0 0 6.6rem;
+  font-size: 0.8rem;
+  color: var(--c-text-dim);
+}
+
+.loadout-item {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 600;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.loadout-step {
+  min-width: 2rem;
+}
+
+@media (max-width: 640px) {
+  .loadout-bar {
+    grid-template-columns: 1fr;
+  }
 }

@@ -1,14 +1,15 @@
-import type { UpgradeId } from '../combat/weapons';
+import type { GearId, LoadoutSlot, UpgradeId, WeaponId } from '../combat/weapons';
 import { ACTION_LABELS, type Action, codeLabel, REBINDABLE } from '../core/actions';
 import type { Input } from '../core/Input';
 import type { Profile } from '../core/Save';
 import { defaultSettings, type NumericSetting, type QualityPresetId, rebind, SETTING_RANGES, type Settings } from '../core/Settings';
-import { canBuy, SHOP } from '../hub/economy';
 import type { Dialogue } from '../hub/dialogue';
 import { MISSION_ORDER, type MissionDef, type MissionId, MISSIONS } from '../missions/types';
 import { COOP_TEXT } from '../text/coop';
 import { buildCoopBrowse, buildCoopJoin, buildCoopLobby, buildCoopMenu, type CoopScreenApi } from './coopScreens';
 import { button, h, keycap } from './dom';
+import { type ArmoryView, buildArmory, buildLoadoutBar, type LoadoutApi } from './loadoutScreens';
+import { WeaponPreview } from './weaponPreview';
 
 export type ScreenId =
   | 'title'
@@ -76,6 +77,8 @@ export interface ScreenCallbacks {
   /** Cierra diálogo/tienda/contratos y devuelve el control al jugador. */
   onCloseMenu(): void;
   onBuy(id: UpgradeId): void;
+  /** Equipa un arma o un equipo en su hueco (armería, briefing, sala del cooperativo). */
+  onEquip(slot: LoadoutSlot, id: WeaponId | GearId | null): void;
   onStartMission(id: MissionId): void;
   settings(): Settings;
   onSettingsChange(s: Settings): void;
@@ -98,7 +101,8 @@ const CONTROL_ROWS: Array<{ label: string; actions: Action[] }> = [
   { label: 'Saltar / Vault', actions: ['jump'] },
   { label: 'Esquiva (o doble Espacio)', actions: ['dodge'] },
   { label: 'Foco (cámara lenta)', actions: ['focus'] },
-  { label: 'Armas', actions: ['weapon1', 'weapon2', 'weapon3'] },
+  { label: 'Armas: principal · secundaria · cuerpo a cuerpo', actions: ['weapon1', 'weapon2', 'weapon3'] },
+  { label: 'Lanzar equipo (aturdidora)', actions: ['gear'] },
   { label: 'Cambiar de hombro', actions: ['shoulder'] },
   { label: 'Contratos / Intel', actions: ['intel'] },
   { label: 'Pausa · Controles', actions: ['pause', 'help'] },
@@ -144,6 +148,9 @@ export class Screens {
   }
 
   show(id: ScreenId): void {
+    // La vista previa de la armería solo vive mientras se ve la armería; al abrirla de nuevo, se empieza por el equipo.
+    if (id !== 'shop') this.closePreview();
+    else if (this.current !== 'shop') this.armoryView = { tab: 'loadout', selected: null };
     // Controles y Ajustes son subpantallas: recuerdan desde dónde se abrieron (título o pausa).
     if ((id === 'controls' || id === 'settings') && this.current !== id) this.back = this.current;
     if (id !== 'settings') this.cancelRebind();
@@ -156,6 +163,7 @@ export class Screens {
   }
 
   hide(): void {
+    this.closePreview();
     this.cancelRebind();
     this.current = null;
     this.dialog = null;
@@ -201,8 +209,42 @@ export class Screens {
   }
 
   /** Vuelve a pintar la pantalla actual (tras comprar, por ejemplo). */
+  /** Redibuja la pantalla actual sin perder dónde estaba el foco (al equipar o comprar, el teclado sigue en su sitio). */
   refresh(): void {
-    if (this.current) this.show(this.current);
+    if (!this.current) return;
+    const focus = (document.activeElement as HTMLElement | null)?.dataset?.focus;
+    this.show(this.current);
+    if (focus) this.root.querySelector<HTMLElement>(`[data-focus="${CSS.escape(focus)}"]`)?.focus({ preventScroll: true });
+  }
+
+  private armoryView: ArmoryView = { tab: 'loadout', selected: null };
+  private preview: WeaponPreview | null = null;
+  /** El navegador no dio otro contexto WebGL: la armería sigue sin vista previa. */
+  private previewFailed = false;
+
+  private loadoutApi(): LoadoutApi {
+    return {
+      profile: () => this.cb.profile(),
+      onBuy: (id) => this.cb.onBuy(id),
+      onEquip: (slot, id) => this.cb.onEquip(slot, id),
+      label: (a) => this.input.label(a),
+    };
+  }
+
+  private ensurePreview(): WeaponPreview | null {
+    if (this.preview || this.previewFailed) return this.preview;
+    try {
+      this.preview = new WeaponPreview(360, 170);
+      this.preview.run();
+    } catch {
+      this.previewFailed = true;
+    }
+    return this.preview;
+  }
+
+  private closePreview(): void {
+    this.preview?.dispose();
+    this.preview = null;
   }
 
   /** Briefing de 3 líneas: objetivo, regla especial, rango objetivo. */
@@ -248,7 +290,7 @@ export class Screens {
       case 'coopBrowse':
         return buildCoopBrowse(this.cb.coop);
       case 'coopLobby':
-        return buildCoopLobby(this.cb.coop);
+        return buildCoopLobby(this.cb.coop, buildLoadoutBar(this.loadoutApi()));
     }
   }
 
@@ -265,6 +307,7 @@ export class Screens {
         h('li', {}, [h('b', { text: 'Regla. ' }), rule]),
         h('li', {}, [h('b', { text: 'Meta. ' }), target]),
       ]),
+      buildLoadoutBar(this.loadoutApi()),
       h('div', { class: 'menu menu-row' }, [
         button('Empezar', b.onStart, 'btn btn-primary'),
         ...(b.onSkip ? [button('Saltar tutorial', b.onSkip)] : []),
@@ -521,6 +564,7 @@ export class Screens {
       case 'access':
         body = [
           this.slider('Sacudida de cámara', 'shake', 0.05, pct),
+          this.slider('Destellos en pantalla', 'flash', 0.05, pct),
           this.slider('Tamaño de la interfaz', 'uiScale', 0.05, pct),
           this.toggle('Mostrar pistas de teclas', 'hints'),
         ];
@@ -665,34 +709,13 @@ export class Screens {
   }
 
   private buildShop(): HTMLElement {
-    const p = this.cb.profile();
-    const rows = SHOP.map((item) => {
-      const check = canBuy(p, item.id);
-      const status =
-        check === 'owned'
-          ? h('span', { class: 'shop-status owned', text: 'Comprado' })
-          : check === 'locked'
-            ? h('span', { class: 'shop-status locked', text: `Requiere ${SHOP.find((s) => s.id === item.requires)?.name ?? '…'}` })
-            : check === 'poor'
-              ? h('span', { class: 'shop-status poor', text: `Faltan ${item.price - p.coins} monedas` })
-              : button(`Comprar · ${item.price}`, () => this.cb.onBuy(item.id), 'btn btn-small btn-primary');
-      const el = h('div', { class: `shop-item ${check}`, dataset: { item: item.id } }, [
-        h('div', { class: 'shop-text' }, [h('div', { class: 'shop-name', text: item.name }), h('div', { class: 'shop-desc', text: item.desc })]),
-        h('div', { class: 'shop-price', text: check === 'owned' ? '✓' : `${item.price} ◉` }),
-        status,
-      ]);
-      return el;
-    });
-    return h('section', { class: 'screen screen-shop', role: 'dialog', ariaLabel: 'Armería del Sommelier' }, [
-      h('h2', { class: 'screen-heading', text: 'ARMERÍA DEL SOMMELIER' }),
-      h('div', { class: 'coins', ariaLabel: 'Monedas' }, [
-        h('span', { class: 'coin-icon', text: '◉' }),
-        h('b', { class: 'coin-count', text: String(p.coins) }),
-        ' Monedas Continental',
-      ]),
-      h('div', { class: 'shop-list' }, rows),
-      h('div', { class: 'menu' }, [button('Cerrar', () => this.cb.onCloseMenu(), 'btn')]),
-    ]);
+    return buildArmory(
+      this.loadoutApi(),
+      this.armoryView,
+      this.ensurePreview(),
+      () => this.cb.onCloseMenu(),
+      () => this.refresh(),
+    );
   }
 
   private buildContracts(): HTMLElement {

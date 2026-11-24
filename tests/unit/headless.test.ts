@@ -1,6 +1,7 @@
 import { Vector3 } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { EnemyManager } from '../../src/combat/EnemyManager';
+import { Grenades } from '../../src/combat/Grenades';
 import { Pickups } from '../../src/combat/Pickups';
 import { PlayerCombat } from '../../src/combat/PlayerCombat';
 import { PlayerRoster, type PlayerSlot, REMOTE_RESPAWN } from '../../src/combat/PlayerRoster';
@@ -52,7 +53,8 @@ function simWorld(level: LevelData, seed: number, onShot?: (target: PlayerTarget
     },
   });
   enemies.spawnInitial();
-  const r = new PlayerRoster({ physics, enemies, civilians: null, vfx: NO_VFX, audio, rng, pickups: new Pickups() });
+  const grenades = new Grenades({ physics, enemies, civilians: null, vfx: NO_VFX, audio });
+  const r = new PlayerRoster({ physics, enemies, civilians: null, vfx: NO_VFX, audio, rng, pickups: new Pickups(), grenades });
   roster = r;
   const join = (x: number, y: number, z: number, yaw = 0, local = false): PlayerSlot =>
     r.add(new PlayerController(physics, new Vector3(x, y + 0.02, z), yaw), new PlayerCombat(new Set()), { local });
@@ -60,6 +62,7 @@ function simWorld(level: LevelData, seed: number, onShot?: (target: PlayerTarget
   const step = (n = 1): void => {
     for (let i = 0; i < n; i++) {
       r.step(FIXED_DT, true);
+      grenades.fixedUpdate(FIXED_DT);
       r.updateLooks();
       enemies.fixedUpdate(FIXED_DT, r.updateTargets(FIXED_DT));
       physics.step();

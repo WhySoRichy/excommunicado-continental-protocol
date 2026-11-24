@@ -1,11 +1,12 @@
 import { Vector3 } from 'three';
 import type { EnemyManager } from '../combat/EnemyManager';
+import type { Grenades } from '../combat/Grenades';
 import type { CombatIntent } from '../combat/PlayerCombat';
 import type { Pickups } from '../combat/Pickups';
 import { emptyPlayerLook } from '../combat/playerLook';
 import type { PlayerRoster, PlayerSlot } from '../combat/PlayerRoster';
 import type { CombatAudio, CombatCamera, CombatVfx } from '../combat/ports';
-import type { UpgradeId } from '../combat/weapons';
+import type { Loadout, UpgradeId } from '../combat/weapons';
 import { type CivilianManager, type CivilianNet, emptyCivilianNet } from '../entities/Civilian';
 import { emptyEnemyNet, type EnemyNet } from '../entities/Enemy';
 import { ENEMY_TYPES } from '../entities/ai/enemyTypes';
@@ -23,6 +24,7 @@ import {
   emptyMissionNet,
   encodeGuestCtl,
   encodeInput,
+  type GrenadeNet,
   type GuestCtl,
   type HostCtl,
   INPUT_REDUNDANCY,
@@ -46,6 +48,7 @@ export interface GuestWorld {
   readonly enemies: EnemyManager;
   readonly civilians: CivilianManager | null;
   readonly pickups: Pickups;
+  readonly grenades: Grenades;
   /** Sonido y efectos de este equipo (lo que pasa en la partida se ve y se oye con ellos). */
   readonly ports: { vfx: CombatVfx; audio: CombatAudio };
   /** Plaza para dibujar a otro jugador (lo mueve lo que llega del anfitrión). */
@@ -71,6 +74,8 @@ export interface GuestEvents {
 export interface GuestOptions {
   now(): number;
   upgrades: ReadonlySet<UpgradeId>;
+  /** El equipo con el que juega (el anfitrión lo sanea con sus mejoras). */
+  loadout: Loadout;
   /** Vuelve tras un corte: la plaza que tenía y su contraseña. */
   rejoin?: RejoinTicket;
   events: GuestEvents;
@@ -91,6 +96,7 @@ interface AmmoEntry {
   seq: number;
   mag: number[];
   reserve: number[];
+  gear: number;
 }
 
 /**
@@ -126,6 +132,7 @@ export class NetGuest {
   private readonly civTmp: CivilianNet = emptyCivilianNet();
   private readonly moveTmp: MoveNet = emptyMoveNet();
   private readonly lookTmp = emptyPlayerLook();
+  private readonly grenadeTmp: GrenadeNet[] = [];
   private closed = false;
 
   constructor(
@@ -139,7 +146,14 @@ export class NetGuest {
       else this.onSim(data);
     };
     link.onClose = () => this.end(false);
-    this.send({ t: 'hello', v: PROTOCOL, tables: TABLES_HASH, upgrades: [...opts.upgrades], ...(opts.rejoin ? { rejoin: opts.rejoin } : {}) });
+    this.send({
+      t: 'hello',
+      v: PROTOCOL,
+      tables: TABLES_HASH,
+      upgrades: [...opts.upgrades],
+      loadout: opts.loadout,
+      ...(opts.rejoin ? { rejoin: opts.rejoin } : {}),
+    });
   }
 
   /** Lo que necesita para recuperar su plaza si se corta (null hasta tener plaza). */
@@ -162,6 +176,7 @@ export class NetGuest {
     this.lastOwnerTick = -1;
     world.local.combat.authority = false;
     world.local.combat.allowFocus = false;
+    world.grenades.authority = false;
     this.send({ t: 'ready', level });
   }
 
@@ -180,6 +195,11 @@ export class NetGuest {
   /** Corta la conexión sin despedirse, como un corte de red (para probar la vuelta tras un corte). */
   disconnect(): void {
     this.link.close();
+  }
+
+  /** Cambió el equipo en la sala: el anfitrión se lo dará en la siguiente partida. */
+  setLoadout(loadout: Loadout): void {
+    if (!this.closed) this.send({ t: 'loadout', loadout });
   }
 
   /** Sale de la partida. */
@@ -246,6 +266,8 @@ export class NetGuest {
     f.reloadPressed = ci.reloadPressed;
     f.takedownPressed = ci.takedownPressed;
     f.focusPressed = false;
+    f.gearPressed = ci.gearPressed;
+    f.gearHeld = ci.gearHeld;
     f.select = ci.select;
     f.cycle = ci.cycle;
     f.aimFrom.x = ci.aimFrom.x;
@@ -354,6 +376,7 @@ export class NetGuest {
         c.lastPlayerPos.copy(w.local.controller.feet);
         c.focusActive = false;
         c.weapon.cancelReload();
+        c.cancelThrow();
         c.takedown = null;
         w.local.controller.setLocked(false);
         w.local.controller.kill();
@@ -396,6 +419,18 @@ export class NetGuest {
     this.applyPlayers(w, a, b, k);
     this.applyCivilians(w, a, b, k);
     w.pickups.applyNet(b.pickups);
+    this.applyGrenades(w, a, b, k);
+  }
+
+  /** Las granadas de los demás, entre las dos instantáneas (las suyas ya vuelan aquí desde que salieron de la mano). */
+  private applyGrenades(w: GuestWorld, a: Snapshot, b: Snapshot, k: number): void {
+    const out = this.grenadeTmp;
+    out.length = 0;
+    for (const ga of a.grenades) {
+      const gb = b.grenades.find((x) => x.id === ga.id) ?? ga;
+      out.push({ ...ga, x: ga.x + (gb.x - ga.x) * k, y: ga.y + (gb.y - ga.y) * k, z: ga.z + (gb.z - ga.z) * k });
+    }
+    w.grenades.applyNet(out, this.id);
   }
 
   private applyEnemies(w: GuestWorld, a: Snapshot, b: Snapshot, k: number): void {
@@ -469,6 +504,11 @@ export class NetGuest {
     const entry = this.ammo.find((x) => x.seq === o.ack);
     if (!entry) return;
     const c = w.local.combat;
+    const dGear = o.gear - entry.gear;
+    if (dGear !== 0) {
+      c.gearLeft = Math.max(0, Math.min(c.gearMax, c.gearLeft + dGear));
+      for (const x of this.ammo) if (x.seq > o.ack) x.gear += dGear;
+    }
     c.loadout.forEach((id, i) => {
       const host = o.ammo.find((x) => x.weapon === id);
       const ws = c.weapons.get(id);
@@ -488,8 +528,9 @@ export class NetGuest {
 
   private rememberAmmo(w: GuestWorld, seq: number): void {
     const c = w.local.combat;
-    const e = this.ammo.length >= AMMO_HISTORY ? this.ammo.shift()! : { seq: 0, mag: [], reserve: [] };
+    const e = this.ammo.length >= AMMO_HISTORY ? this.ammo.shift()! : { seq: 0, mag: [], reserve: [], gear: 0 };
     e.seq = seq;
+    e.gear = c.gearLeft;
     e.mag.length = 0;
     e.reserve.length = 0;
     for (const id of c.loadout) {

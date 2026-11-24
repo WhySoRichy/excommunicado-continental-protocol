@@ -102,6 +102,7 @@ export function lerpEnemy(a: EnemyNet, b: EnemyNet, t: number, out: EnemyNet): E
   out.telegraphX = lerp(a.telegraphX, b.telegraphX, t);
   out.telegraphY = lerp(a.telegraphY, b.telegraphY, t);
   out.telegraphZ = lerp(a.telegraphZ, b.telegraphZ, t);
+  out.dazed = a.dazed;
   return out;
 }
 
@@ -121,6 +122,7 @@ export function lerpLook(a: PlayerLook, b: PlayerLook, t: number, out: PlayerLoo
   out.melee = lerp(a.melee, b.melee, t);
   out.slash = a.slash >= 0 && b.slash >= 0 ? lerp(a.slash, b.slash, t) : a.slash;
   out.takedown = a.takedown >= 0 && b.takedown >= 0 ? lerp(a.takedown, b.takedown, t) : a.takedown;
+  out.throw = a.throw >= 0 && b.throw >= 0 ? lerp(a.throw, b.throw, t) : a.throw;
   out.blind = a.blind;
   out.dead = a.dead;
   out.health = lerp(a.health, b.health, t);

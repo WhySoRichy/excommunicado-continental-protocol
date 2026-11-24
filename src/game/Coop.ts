@@ -134,6 +134,7 @@ export class Coop {
     const guest = new NetGuest(link, {
       now: () => performance.now(),
       upgrades: new Set(game.profile.upgrades),
+      loadout: game.profile.loadout,
       ...(opts.rejoin ? { rejoin: opts.rejoin } : {}),
       camera: game.camera,
       events: {

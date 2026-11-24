@@ -1,4 +1,15 @@
-import { BoxGeometry, type BufferGeometry, CylinderGeometry, ExtrudeGeometry, Float32BufferAttribute, LatheGeometry, Path, Shape, Vector2 } from 'three';
+import {
+  BoxGeometry,
+  type BufferGeometry,
+  CylinderGeometry,
+  ExtrudeGeometry,
+  Float32BufferAttribute,
+  LatheGeometry,
+  Path,
+  Shape,
+  TorusGeometry,
+  Vector2,
+} from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { paint } from './geometry';
 
@@ -188,6 +199,13 @@ export function along(section: Shape, z0: number, z1: number, s: Surf, x = 0, y 
     bevelSegments: 1,
   });
   g.translate(x, y, Math.min(z0, z1) + b);
+  return finish(g, s);
+}
+
+/** Anillo (toro) en el plano XY centrado en (x, y, z): la anilla de una granada. */
+export function ring(r: number, tube: number, s: Surf, x = 0, y = 0, z = 0): BufferGeometry {
+  const g = new TorusGeometry(r, tube, 6, 14);
+  g.translate(x, y, z);
   return finish(g, s);
 }
 

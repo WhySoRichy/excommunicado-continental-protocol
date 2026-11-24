@@ -1,6 +1,7 @@
 import { type Scene, Vector3 } from 'three';
 import type { AudioEngine } from '../audio/AudioEngine';
 import { EnemyManager } from '../combat/EnemyManager';
+import { Grenades } from '../combat/Grenades';
 import { EnemyViews } from '../entities/EnemyView';
 import { Pickups } from '../combat/Pickups';
 import { PlayerRoster, type PlayerSlot, type SlotPorts } from '../combat/PlayerRoster';
@@ -10,10 +11,12 @@ import type { HostWorld } from '../net/NetHost';
 import type { GuestWorld } from '../net/NetGuest';
 import { LevelAlarm } from '../render/LevelAlarm';
 import { CoverMarker } from '../render/CoverMarker';
+import { GrenadeViews } from '../render/GrenadeViews';
+import { ThrowArc } from '../render/ThrowArc';
 import { PickupViews } from '../render/PickupViews';
 import { PlayerViews } from '../entities/PlayerViews';
 import { type CombatCtx, PlayerCombat } from '../combat/PlayerCombat';
-import { loadoutFor, type UpgradeId } from '../combat/weapons';
+import { gearFor, type Loadout, loadoutFor, type UpgradeId } from '../combat/weapons';
 import type { Rng } from '../core/rng';
 import type { MoveNet } from '../entities/PlayerController';
 import type { Enemy, PlayerTarget } from '../entities/Enemy';
@@ -38,6 +41,8 @@ export interface SessionDeps {
   rng: Rng;
   camera: CameraRig;
   upgrades: ReadonlySet<UpgradeId>;
+  /** El equipo que lleva el jugador local (se sanea con sus mejoras). */
+  loadout: Loadout;
   accuracyMult: number;
   damageMult: number;
   /** Un enemigo dio la voz de alarma (misiones con panel de alarma). */
@@ -72,6 +77,11 @@ export class LevelSession implements HostWorld, GuestWorld {
   readonly pickups: Pickups;
   /** Lo que se ve de los objetos recogibles; `pickups` no sabe que existe. */
   readonly pickupViews: PickupViews;
+  readonly grenades: Grenades;
+  /** Lo que se ve de las granadas; `grenades` no sabe que existe. */
+  readonly grenadeViews: GrenadeViews;
+  /** El arco de lo que se lanzaría. */
+  readonly throwArc: ThrowArc;
   /** Marca de la cobertura a la que iría C. */
   readonly coverMarker: CoverMarker;
   /** Lo que se ve de los jugadores que no son el local. */
@@ -116,8 +126,10 @@ export class LevelSession implements HostWorld, GuestWorld {
     this.pickups = new Pickups();
     this.pickupViews = new PickupViews(scene);
     this.coverMarker = new CoverMarker(scene);
+    this.grenadeViews = new GrenadeViews(scene);
+    this.throwArc = new ThrowArc(scene);
     if (!this.replica) for (const p of data.pickups) this.pickups.add(p.kind, new Vector3(p.pos[0], p.pos[1], p.pos[2]));
-    this.combat = new PlayerCombat(deps.upgrades, loadoutFor(deps.upgrades));
+    this.combat = new PlayerCombat(deps.upgrades, loadoutFor(deps.upgrades, deps.loadout), gearFor(deps.upgrades, deps.loadout));
     this.enemies = new EnemyManager({
       level: data,
       physics: this.physics,
@@ -133,6 +145,7 @@ export class LevelSession implements HostWorld, GuestWorld {
     this.civilians = data.civilians.length > 0 ? new CivilianManager(data.civilians, this.physics, this.nav, deps.rng) : null;
     this.civilianViews = this.civilians ? new CivilianViews(this.civilians.list, scene) : null;
     if (this.civilians) this.civilians.onHurt = (_c, killed) => deps.onCivilianHurt?.(killed);
+    this.grenades = new Grenades({ physics: this.physics, enemies: this.enemies, civilians: this.civilians, vfx: world.vfx, audio: world.audio });
     this.roster = new PlayerRoster({
       physics: this.physics,
       enemies: this.enemies,
@@ -141,6 +154,7 @@ export class LevelSession implements HostWorld, GuestWorld {
       audio: world.audio,
       rng: deps.rng,
       pickups: this.pickups,
+      grenades: this.grenades,
     });
     let localPorts: SlotPorts | undefined;
     if (net?.role === 'host') {
@@ -184,15 +198,16 @@ export class LevelSession implements HostWorld, GuestWorld {
   addPlayer(x: number, y: number, z: number, yaw: number): PlayerSlot {
     const controller = new PlayerController(this.physics, new Vector3(x, y + 0.02, z), yaw);
     controller.killY = this.data.killY;
-    return this.roster.add(controller, new PlayerCombat(this.deps.upgrades, loadoutFor(this.deps.upgrades)));
+    const { upgrades, loadout } = this.deps;
+    return this.roster.add(controller, new PlayerCombat(upgrades, loadoutFor(upgrades, loadout), gearFor(upgrades, loadout)));
   }
 
   // ======================================================== red (fase 3)
-  /** El cuerpo y el combate de un invitado, con sus mejoras (el anfitrión lo añade al registro). */
-  createPlayer(at: Vector3, yaw: number, upgrades: ReadonlySet<UpgradeId>): { controller: PlayerController; combat: PlayerCombat } {
+  /** El cuerpo y el combate de un invitado, con sus mejoras y su equipo (el anfitrión lo añade al registro). */
+  createPlayer(at: Vector3, yaw: number, upgrades: ReadonlySet<UpgradeId>, loadout: Loadout): { controller: PlayerController; combat: PlayerCombat } {
     const controller = new PlayerController(this.physics, new Vector3(at.x, at.y + 0.02, at.z), yaw);
     controller.killY = this.data.killY;
-    return { controller, combat: new PlayerCombat(upgrades, loadoutFor(upgrades)) };
+    return { controller, combat: new PlayerCombat(upgrades, loadoutFor(upgrades, loadout), gearFor(upgrades, loadout)) };
   }
 
   /** Punto libre cerca de `base` para el jugador `index`: a un lado y a otro, sobre la rejilla de navegación. */
@@ -272,6 +287,9 @@ export class LevelSession implements HostWorld, GuestWorld {
     this.enemies.dispose();
     this.pickupViews.dispose();
     this.coverMarker.dispose();
+    this.grenadeViews.dispose();
+    this.throwArc.dispose();
+    this.grenades.clear();
     this.playerViews.dispose();
     this.pickups.dispose();
     this.vfx.dispose();

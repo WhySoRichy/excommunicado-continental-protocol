@@ -1,6 +1,6 @@
 import { DirectionalLight, type Material, Vector3 } from 'three';
 import type { MeterBus } from '../audio/AudioEngine';
-import type { UpgradeId } from '../combat/weapons';
+import type { GearId, Loadout, LoadoutSlot, UpgradeId, WeaponId } from '../combat/weapons';
 import type { Action } from '../core/actions';
 import { FIXED_DT } from '../core/Loop';
 import { deleteProfile, type Profile } from '../core/Save';
@@ -72,6 +72,10 @@ export interface CombatSnapshot {
   hitKind: string;
   aimOverEnemy: boolean;
   recoil0: number;
+  /** Equipo que lleva, cuántos le quedan y la fase del gesto de lanzar (−1: no lanza). */
+  gear: GearId | null;
+  gearLeft: number;
+  throwPhase: number;
 }
 
 export interface EnemySnapshot {
@@ -191,6 +195,10 @@ export interface QaApi {
   combatInconsistencies(): number;
   /** Trazadoras y casquillos que siguen activos. */
   vfx(): { tracers: number; casings: number };
+  /** Granadas en vuelo. */
+  grenades(): Array<{ x: number; y: number; z: number; fuse: number; owner: number }>;
+  /** Opacidad del destello en pantalla (0..1). */
+  flashLevel(): number;
   respawn(): void;
   hud(): { deathVisible: boolean; reloadVisible: boolean; hitmark: string; style: string; ammo: string; objective: string; zone: string; toast: string };
   // --- Hub, perfil y menús ---
@@ -206,6 +214,10 @@ export interface QaApi {
   advanceDialog(): void;
   closeMenu(): void;
   buy(id: UpgradeId): boolean;
+  /** Equipa un arma o un equipo en su hueco, como desde la armería. */
+  equip(slot: LoadoutSlot, id: WeaponId | GearId | null): void;
+  /** El equipo guardado. */
+  loadout(): Loadout;
   // --- Contratos ---
   startContract(id: MissionId): Promise<void>;
   /** "Empezar" en el briefing. */
@@ -453,6 +465,9 @@ export function installQa(game: Game): void {
         hitKind: c.hitMarker.t > 0 ? c.hitMarker.kind : 'none',
         aimOverEnemy: c.aimOver === 'enemy',
         recoil0: w.def.recoil[0]?.[0] ?? 0,
+        gear: c.gear,
+        gearLeft: c.gearLeft,
+        throwPhase: c.throwPhase,
       };
     },
     enemies: () =>
@@ -558,6 +573,8 @@ export function installQa(game: Game): void {
     },
     combatInconsistencies: () => game.combatInconsistencies,
     vfx: () => game.session?.vfx.activeEffects ?? { tracers: 0, casings: 0 },
+    grenades: () => (game.session?.grenades.items ?? []).map((g) => ({ x: g.pos.x, y: g.pos.y, z: g.pos.z, fuse: g.fuse, owner: g.owner })),
+    flashLevel: () => Number(document.querySelector<HTMLElement>('.flash-layer')?.style.opacity || 0),
     respawn: () => game.qaRespawn(),
     hud: () => {
       game.qaRefreshHud();
@@ -591,11 +608,21 @@ export function installQa(game: Game): void {
     advanceDialog: () => game.screens.advanceDialog(),
     closeMenu: () => game.closeMenu(),
     buy: (id) => {
+      // Como un jugador: las armas y el equipo, en la pestaña de equipo (la pieza y su botón); el resto, en mejoras.
       const before = game.profile.coins;
-      const btn = document.querySelector<HTMLButtonElement>(`#screens .shop-item[data-item="${id}"] button`);
-      btn?.click();
+      const root = document.querySelector('#screens');
+      const piece = root?.querySelector<HTMLButtonElement>(`.armory-item[data-item="${id === 'stunGrenade' ? 'stun' : id}"]`);
+      if (piece) {
+        piece.click();
+        root?.querySelector<HTMLButtonElement>('.armory-detail .btn-primary')?.click();
+      } else {
+        root?.querySelectorAll<HTMLButtonElement>('.armory-tabs [role="tab"]')[1]?.click();
+        document.querySelector<HTMLButtonElement>(`#screens .shop-item[data-item="${id}"] button`)?.click();
+      }
       return game.profile.coins < before;
     },
+    equip: (slot, id) => game.equip(slot, id),
+    loadout: () => ({ ...game.profile.loadout }),
     startContract: (id) => game.startContract(id),
     beginContract: () => game.beginContract(),
     mission: () => {

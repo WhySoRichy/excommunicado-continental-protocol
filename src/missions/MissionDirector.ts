@@ -510,6 +510,8 @@ export class MissionDirector {
       this.gauntletBreak = GAUNTLET_BREAK;
       this.waveEnemies.length = 0;
       heal(s.combat.vitals, GAUNTLET_HEAL);
+      // Cada oleada repone una pieza del equipo a cada jugador.
+      for (const p of s.players ?? []) p.combat.addGear(1);
       this.d.hud.showToast(`Oleada ${this.gauntletWave} superada · +${GAUNTLET_HEAL} salud`, 2.5);
       this.d.audio.ui('confirm');
       return;

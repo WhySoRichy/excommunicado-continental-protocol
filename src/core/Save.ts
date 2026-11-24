@@ -1,4 +1,4 @@
-import type { UpgradeId } from '../combat/weapons';
+import { DEFAULT_LOADOUT, type Loadout, normalizeLoadout, type UpgradeId } from '../combat/weapons';
 import { MISSION_ORDER, type MissionId, type Rank, RANKS } from '../missions/types';
 
 /**
@@ -33,6 +33,8 @@ export interface Profile {
   updatedAt: number;
   coins: number;
   upgrades: UpgradeId[];
+  /** El equipo que lleva a los contratos: un arma por hueco y el equipo que se lanza. */
+  loadout: Loadout;
   completed: MissionId[];
   best: Partial<Record<MissionId, BestResult>>;
   achievements: string[];
@@ -57,6 +59,7 @@ export const ALL_UPGRADES: readonly UpgradeId[] = [
   'revolver',
   'dmr',
   'extraMarker',
+  'stunGrenade',
 ];
 export const GAUNTLET_TOP = 10;
 /** Fondos iniciales: la "cortesía del Continental" (DISENO §5.2). */
@@ -70,6 +73,7 @@ export function newProfile(now = Date.now()): Profile {
     updatedAt: now,
     coins: STARTING_COINS,
     upgrades: [],
+    loadout: { ...DEFAULT_LOADOUT },
     completed: [],
     best: {},
     achievements: [],
@@ -108,6 +112,8 @@ export function validateProfile(x: unknown, now = Date.now()): Profile | null {
   p.updatedAt = num(x.updatedAt, now, 0, 8.64e15);
   p.coins = num(x.coins, STARTING_COINS, 0, MAX_COINS);
   p.upgrades = stringList(x.upgrades, ALL_UPGRADES);
+  // Las partidas anteriores al equipo no lo traen: se queda el de serie.
+  p.loadout = normalizeLoadout(x.loadout, new Set(p.upgrades));
   p.completed = stringList(x.completed, MISSION_ORDER);
   p.excommunicados = num(x.excommunicados, 0, 0, 1e6);
   p.playtimeSec = num(x.playtimeSec, 0, 0, 1e9);

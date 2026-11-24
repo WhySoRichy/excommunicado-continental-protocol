@@ -1,4 +1,4 @@
-import type { WeaponId } from '../combat/weapons';
+import { GEAR, type WeaponId, type WeaponSlot, WEAPONS } from '../combat/weapons';
 import type { CoverSpot } from '../entities/coverSensor';
 import type { Vec3Like } from '../physics/Physics';
 import type { Action } from '../core/actions';
@@ -16,15 +16,8 @@ import type { LevelSession } from './LevelSession';
  * `Game` reúne lo que hace falta de la cámara y la entrada y pasa el resultado a `Hud`.
  */
 
-/** Tecla de cada arma en el HUD. */
-const SLOT_ACTIONS: Record<WeaponId, Action> = {
-  carbine: 'weapon1',
-  shotgun: 'weapon1',
-  dmr: 'weapon1',
-  pistol: 'weapon2',
-  revolver: 'weapon2',
-  knife: 'weapon3',
-};
+/** La tecla de cada hueco del equipo. */
+const SLOT_ACTIONS: Record<WeaponSlot, Action> = { primary: 'weapon1', secondary: 'weapon2', melee: 'weapon3' };
 /** Nombre corto de cada arma en el HUD. */
 const SLOT_NAMES: Record<WeaponId, string> = {
   carbine: 'Carabina',
@@ -63,9 +56,15 @@ export function fillHudData(d: HudData, s: LevelSession, v: HudView): void {
   for (let i = 0; i < c.loadout.length; i++) {
     const id = c.loadout[i]!;
     const slot = d.slots[i]!;
-    slot.key = v.label(SLOT_ACTIONS[id]);
+    slot.key = v.label(SLOT_ACTIONS[WEAPONS[id].slot]);
     slot.name = SLOT_NAMES[id];
     slot.active = id === c.current;
+  }
+  d.gear.on = c.gear !== null;
+  if (c.gear) {
+    d.gear.key = v.label('gear');
+    d.gear.name = GEAR[c.gear].name;
+    d.gear.left = c.gearLeft;
   }
   d.reload = w.reloadProgress;
   d.perfect = w.perfectAvailable ? w.perfectWindow : null;
@@ -114,6 +113,7 @@ export interface PromptInput {
 export function contextPrompt(s: LevelSession, i: PromptInput): PromptSpec | null {
   const p = s.player;
   const lab = i.label;
+  if (s.combat.throwReady) return { key: `Suelta ${lab('gear')}`, text: `Lanzar  ·  ${lab('reload')}: guardarla` };
   const near = i.near;
   if (near) {
     const hold = near.hold ?? 0;

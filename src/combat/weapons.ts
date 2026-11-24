@@ -3,10 +3,19 @@ import type { WeaponModel } from '../entities/CharacterRig';
 /** Definiciones de armas (datos). Valores en grados, metros, segundos. DISENO §4.1. */
 export type WeaponId = 'carbine' | 'shotgun' | 'dmr' | 'pistol' | 'revolver' | 'knife';
 
+/**
+ * Los huecos del equipo (DISENO §4): al contrato se lleva un arma de cada tipo. Principal (fusiles, subfusiles,
+ * escopetas y tirador compiten por el mismo hueco), secundaria (armas cortas) y cuerpo a cuerpo; el cuarto, el equipo
+ * (granadas y aturdidoras), no es un arma que se empuñe: se lanza con su propia tecla.
+ */
+export const WEAPON_SLOTS = ['primary', 'secondary', 'melee'] as const;
+export type WeaponSlot = (typeof WEAPON_SLOTS)[number];
+export type LoadoutSlot = WeaponSlot | 'gear';
+
 export interface WeaponDef {
   id: WeaponId;
   name: string;
-  slot: 1 | 2 | 3;
+  slot: WeaponSlot;
   kind: 'gun' | 'melee';
   damage: number;
   headMult: number;
@@ -77,7 +86,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   carbine: {
     id: 'carbine',
     name: 'Carabina TR-4',
-    slot: 1,
+    slot: 'primary',
     kind: 'gun',
     damage: 30,
     headMult: 3,
@@ -107,7 +116,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   shotgun: {
     id: 'shotgun',
     name: 'Escopeta "Sommelier"',
-    slot: 1,
+    slot: 'primary',
     kind: 'gun',
     damage: 14,
     headMult: 1.5,
@@ -137,7 +146,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   dmr: {
     id: 'dmr',
     name: 'Rifle de tirador "Meridian"',
-    slot: 1,
+    slot: 'primary',
     kind: 'gun',
     damage: 75,
     headMult: 2.5,
@@ -172,7 +181,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   pistol: {
     id: 'pistol',
     name: 'Pistola P-45',
-    slot: 2,
+    slot: 'secondary',
     kind: 'gun',
     damage: 34,
     headMult: 3,
@@ -207,7 +216,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   revolver: {
     id: 'revolver',
     name: 'Revólver "Juez"',
-    slot: 2,
+    slot: 'secondary',
     kind: 'gun',
     damage: 70,
     headMult: 3,
@@ -241,7 +250,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
   knife: {
     id: 'knife',
     name: 'Cuchillo',
-    slot: 3,
+    slot: 'melee',
     kind: 'melee',
     damage: 120,
     headMult: 1,
@@ -274,10 +283,19 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
 
 /** Mejoras de la armería (DISENO §5.2). */
 export type UpgradeId =
-  'extMag' | 'suppressor' | 'hollowPoint' | 'compensator' | 'suit1' | 'suit2' | 'suit3' | 'tacticalKnife' | 'shotgun' | 'revolver' | 'dmr' | 'extraMarker';
-
-/** Cada tecla de arma recorre las que tengas de su grupo: 1 primarias, 2 armas cortas, 3 cuchillo. */
-export const SLOT_GROUPS: Readonly<Record<1 | 2 | 3, readonly WeaponId[]>> = { 1: ['carbine', 'shotgun', 'dmr'], 2: ['pistol', 'revolver'], 3: ['knife'] };
+  | 'extMag'
+  | 'suppressor'
+  | 'hollowPoint'
+  | 'compensator'
+  | 'suit1'
+  | 'suit2'
+  | 'suit3'
+  | 'tacticalKnife'
+  | 'shotgun'
+  | 'revolver'
+  | 'dmr'
+  | 'extraMarker'
+  | 'stunGrenade';
 
 /** Aplica las mejoras compradas a una definición (pura: devuelve una copia). */
 export function applyUpgrades(base: WeaponDef, owned: ReadonlySet<UpgradeId>): WeaponDef {
@@ -308,13 +326,86 @@ export function markersPerContract(owned: ReadonlySet<UpgradeId>): number {
   return owned.has('extraMarker') ? 4 : 3;
 }
 
-/** Equipo del jugador según las mejoras compradas: las armas compradas se suman a las de su grupo. */
-export function loadoutFor(owned: ReadonlySet<UpgradeId>): WeaponId[] {
-  const out: WeaponId[] = ['carbine'];
-  if (owned.has('shotgun')) out.push('shotgun');
-  if (owned.has('dmr')) out.push('dmr');
-  out.push('pistol');
-  if (owned.has('revolver')) out.push('revolver');
-  out.push('knife');
-  return out;
+/** Equipo que se lanza (el cuarto hueco). */
+export type GearId = 'stun';
+export const GEAR_IDS: readonly GearId[] = ['stun'];
+
+export interface GearDef {
+  /** Nombre corto (HUD). */
+  name: string;
+  /** Cuántas se llevan al contrato. */
+  count: number;
+  /** Mecha desde que sale de la mano (s). */
+  fuse: number;
+}
+
+export const GEAR: Record<GearId, GearDef> = {
+  stun: { name: 'Aturdidora', count: 2, fuse: 1.6 },
+};
+
+/** Lo que el jugador lleva al contrato: un arma por hueco y, si tiene, un equipo. */
+export interface Loadout {
+  primary: WeaponId;
+  secondary: WeaponId;
+  melee: WeaponId;
+  gear: GearId | null;
+}
+
+/** El equipo de serie: carabina, pistola y cuchillo, sin equipo que lanzar. */
+export const DEFAULT_LOADOUT: Readonly<Loadout> = { primary: 'carbine', secondary: 'pistol', melee: 'knife', gear: null };
+
+export const WEAPON_IDS: readonly WeaponId[] = ['carbine', 'shotgun', 'dmr', 'pistol', 'revolver', 'knife'];
+
+/** La mejora de la armería que desbloquea cada arma que no es de serie, y la de cada equipo. */
+const WEAPON_UNLOCK: Partial<Record<WeaponId, UpgradeId>> = { shotgun: 'shotgun', dmr: 'dmr', revolver: 'revolver' };
+const GEAR_UNLOCK: Record<GearId, UpgradeId> = { stun: 'stunGrenade' };
+
+/** La mejora que desbloquea un arma (null: es de serie) o un equipo. */
+export function weaponUnlock(id: WeaponId): UpgradeId | null {
+  return WEAPON_UNLOCK[id] ?? null;
+}
+
+export function gearUnlock(id: GearId): UpgradeId {
+  return GEAR_UNLOCK[id];
+}
+
+/** ¿Tiene el jugador esta arma? Las de serie siempre; las demás, si las compró. */
+export function ownsWeapon(owned: ReadonlySet<UpgradeId>, id: WeaponId): boolean {
+  const unlock = WEAPON_UNLOCK[id];
+  return unlock === undefined || owned.has(unlock);
+}
+
+export function ownsGear(owned: ReadonlySet<UpgradeId>, id: GearId): boolean {
+  return owned.has(GEAR_UNLOCK[id]);
+}
+
+/** Las armas de un hueco, en el orden de la armería. */
+export function weaponsFor(slot: WeaponSlot): WeaponId[] {
+  return WEAPON_IDS.filter((id) => WEAPONS[id].slot === slot);
+}
+
+/**
+ * Sanea un equipo (de la partida guardada o de un invitado): cada hueco con un arma de ese tipo que se tenga y, si no,
+ * la de serie; el equipo, si se tiene. Nunca falla.
+ */
+export function normalizeLoadout(x: unknown, owned: ReadonlySet<UpgradeId>): Loadout {
+  const o = typeof x === 'object' && x !== null ? (x as Record<string, unknown>) : {};
+  const pick = (slot: WeaponSlot): WeaponId => {
+    const v = o[slot];
+    const id = WEAPON_IDS.find((w) => w === v);
+    return id && WEAPONS[id].slot === slot && ownsWeapon(owned, id) ? id : DEFAULT_LOADOUT[slot];
+  };
+  const gear = GEAR_IDS.find((g) => g === o.gear) ?? null;
+  return { primary: pick('primary'), secondary: pick('secondary'), melee: pick('melee'), gear: gear && ownsGear(owned, gear) ? gear : null };
+}
+
+/** El equipo que se lanza con un inventario, si lo tiene. */
+export function gearFor(owned: ReadonlySet<UpgradeId>, chosen: Readonly<Loadout> = DEFAULT_LOADOUT): GearId | null {
+  return normalizeLoadout(chosen, owned).gear;
+}
+
+/** Las armas que se empuñan con un equipo (en el orden de sus teclas: principal, secundaria, cuerpo a cuerpo). */
+export function loadoutFor(owned: ReadonlySet<UpgradeId>, chosen: Readonly<Loadout> = DEFAULT_LOADOUT): WeaponId[] {
+  const l = normalizeLoadout(chosen, owned);
+  return [l.primary, l.secondary, l.melee];
 }

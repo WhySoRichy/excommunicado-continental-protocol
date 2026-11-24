@@ -1,14 +1,29 @@
 import { describe, expect, it } from 'vitest';
-import { applyUpgrades, loadoutFor, SLOT_GROUPS, type UpgradeId, WEAPONS } from '../../src/combat/weapons';
+import { applyUpgrades, DEFAULT_LOADOUT, loadoutFor, normalizeLoadout, type UpgradeId, WEAPONS, weaponsFor } from '../../src/combat/weapons';
 import { ALL_UPGRADES, newProfile } from '../../src/core/Save';
 import { buy, canBuy, SHOP } from '../../src/hub/economy';
 
 describe('arsenal: revólver y rifle de tirador', () => {
-  it('se suman al equipo al comprarlos, cada uno en el grupo de su tecla', () => {
+  it('cada arma ocupa un hueco del equipo: se lleva una por hueco, la de serie si no se elige otra', () => {
+    expect(weaponsFor('primary')).toEqual(['carbine', 'shotgun', 'dmr']);
+    expect(weaponsFor('secondary')).toEqual(['pistol', 'revolver']);
+    expect(weaponsFor('melee')).toEqual(['knife']);
     expect(loadoutFor(new Set())).toEqual(['carbine', 'pistol', 'knife']);
     const all = new Set<UpgradeId>(['shotgun', 'dmr', 'revolver']);
-    expect(loadoutFor(all)).toEqual(['carbine', 'shotgun', 'dmr', 'pistol', 'revolver', 'knife']);
-    for (const [slot, ids] of Object.entries(SLOT_GROUPS)) for (const id of ids) expect(WEAPONS[id].slot).toBe(Number(slot));
+    expect(loadoutFor(all, { ...DEFAULT_LOADOUT, primary: 'dmr', secondary: 'revolver' })).toEqual(['dmr', 'revolver', 'knife']);
+  });
+
+  it('el equipo se sanea: sin comprar, fuera de su hueco o inventado vuelve a la de serie', () => {
+    const none = new Set<UpgradeId>();
+    // Elegir el rifle de tirador sin haberlo comprado no lo da.
+    expect(normalizeLoadout({ primary: 'dmr', secondary: 'pistol', melee: 'knife', gear: null }, none).primary).toBe('carbine');
+    // Un arma en el hueco de otro tipo, un id inventado o un valor sin forma: lo de serie.
+    expect(normalizeLoadout({ primary: 'pistol', secondary: 'carbine', melee: 'x' }, none)).toEqual(DEFAULT_LOADOUT);
+    expect(normalizeLoadout('basura', none)).toEqual(DEFAULT_LOADOUT);
+    expect(normalizeLoadout(null, none)).toEqual(DEFAULT_LOADOUT);
+    // El equipo que se lanza solo si se tiene.
+    expect(normalizeLoadout({ gear: 'stun' }, none).gear).toBeNull();
+    expect(normalizeLoadout({ gear: 'stun' }, new Set<UpgradeId>(['stunGrenade'])).gear).toBe('stun');
   });
 
   it('el revólver pega más y dispara menos que la pistola; el rifle de tirador tiene más alcance y aumento que la carabina', () => {

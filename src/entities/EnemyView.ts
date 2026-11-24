@@ -103,7 +103,10 @@ export class EnemyView {
     const stunned = e.alive && e.state === 'stunned';
     const thrown = e.alive && e.thrownT >= 0;
     pose.state = e.alive && !thrown ? (stunned ? 'locked' : m.state) : 'dead';
-    pose.kneel = stunned && !thrown ? 1 : 0;
+    // De rodillas, quien se queda a merced (el jefe entre fases, el del takedown); con un destello, se tambalea.
+    const dazed = stunned && !thrown && e.dazed;
+    pose.kneel = stunned && !thrown && !dazed ? 1 : 0;
+    pose.daze = dazed ? 1 : 0;
     pose.posture = m.posture;
     pose.grounded = m.grounded;
     pose.aim = e.aiming ? 1 : 0;
@@ -131,11 +134,11 @@ export class EnemyView {
     }
     this.updateLaser(telegraph);
     // Icono de alerta (? / !) sobre la cabeza.
-    if (e.alive && e.cmd.icon !== 'none') {
+    if (dazed || (e.alive && e.cmd.icon !== 'none')) {
       this.icon.visible = true;
-      this.icon.material = alertIconMaterial(e.cmd.icon === 'alert' ? 'alert' : 'suspicious');
+      this.icon.material = alertIconMaterial(dazed ? 'stunned' : e.cmd.icon === 'alert' ? 'alert' : 'suspicious');
       this.icon.position.set(root.position.x, root.position.y + (m.posture === 'crouch' ? 1.55 : 2.2), root.position.z);
-      const s = e.cmd.icon === 'alert' ? 0.5 : 0.32 + e.cmd.detection * 0.16;
+      const s = dazed ? 0.42 : e.cmd.icon === 'alert' ? 0.5 : 0.32 + e.cmd.detection * 0.16;
       this.icon.scale.set(s, s, s);
     } else {
       this.icon.visible = false;

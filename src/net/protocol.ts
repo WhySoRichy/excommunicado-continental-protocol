@@ -1,9 +1,9 @@
 import type { BlindMode } from '../combat/PlayerCombat';
 import type { PlayerLook } from '../combat/playerLook';
 import type { HitMarkerKind } from '../combat/PlayerCombat';
-import type { ImpactKind, ShotSound } from '../combat/ports';
+import type { GrenadeSound, ImpactKind, ShotSound } from '../combat/ports';
 import type { StyleAction } from '../combat/StyleMeter';
-import type { UpgradeId, WeaponId } from '../combat/weapons';
+import type { GearId, Loadout, UpgradeId, WeaponId, WeaponSlot } from '../combat/weapons';
 import type { AiState } from '../entities/ai/EnemyBrain';
 import type { CivilianNet, CivState } from '../entities/Civilian';
 import { emptyEnemyNet, type EnemyNet } from '../entities/Enemy';
@@ -19,7 +19,7 @@ import type { MissionId } from '../missions/types';
  */
 
 /** Versión del protocolo: cambia con cualquier mensaje. Con versiones distintas no se juega juntos. */
-export const PROTOCOL = 3;
+export const PROTOCOL = 4;
 /** Jugadores por partida (anfitrión incluido). */
 export const MAX_PLAYERS = 4;
 /** Pasos de simulación entre instantáneas: 3 a 60 Hz son 20 por segundo. */
@@ -69,6 +69,7 @@ const SHOT_SOUNDS = table<ShotSound>()([
   'enemyRifle',
   'enemyShotgun',
 ]);
+const GRENADE_SOUNDS = table<GrenadeSound>()(['pin', 'throw', 'bounce', 'burst']);
 const IMPACT_KINDS = table<ImpactKind>()(['spark', 'blood', 'dust']);
 const HIT_MARKERS = table<HitMarkerKind>()(['body', 'head', 'kill', 'armor']);
 const STYLE_ACTIONS = table<StyleAction>()([
@@ -84,6 +85,8 @@ const STYLE_ACTIONS = table<StyleAction>()([
   'focusKill',
   'multiKill',
   'longShot',
+  'stunned',
+  'stunKill',
 ]);
 const LEVELS = table<LevelId>()(['arena', 'practice', 'hub', 'nightclub', 'docks', 'rooftop']);
 const MISSIONS = table<MissionId>()(['practice', 'nightclub', 'docks', 'rooftop', 'gauntlet']);
@@ -101,7 +104,11 @@ const UPGRADES = table<UpgradeId>()([
   'revolver',
   'dmr',
   'extraMarker',
+  'stunGrenade',
 ]);
+/** Huecos del equipo que se empuñan (lo que pide cada tecla de arma). */
+const WEAPON_SLOT_IDS = table<WeaponSlot>()(['primary', 'secondary', 'melee']);
+const GEARS = table<GearId>()(['stun']);
 
 /**
  * Huella de las tablas: dos versiones del juego con tablas distintas no se entenderían aunque el protocolo fuera el
@@ -117,8 +124,11 @@ export const TABLES_HASH = hashText(
     CIV_STATES,
     PICKUP_KINDS,
     WEAPON_IDS,
+    WEAPON_SLOT_IDS,
+    GEARS,
     ENEMY_TYPES,
     SHOT_SOUNDS,
+    GRENADE_SOUNDS,
     IMPACT_KINDS,
     HIT_MARKERS,
     STYLE_ACTIONS,
@@ -297,7 +307,9 @@ export interface InputFrame {
   reloadPressed: boolean;
   takedownPressed: boolean;
   focusPressed: boolean;
-  select: WeaponId | null;
+  gearPressed: boolean;
+  gearHeld: boolean;
+  select: WeaponSlot | null;
   cycle: number;
   aimFrom: { x: number; y: number; z: number };
   aimDir: { x: number; y: number; z: number };
@@ -315,6 +327,8 @@ export function emptyInputFrame(): InputFrame {
     reloadPressed: false,
     takedownPressed: false,
     focusPressed: false,
+    gearPressed: false,
+    gearHeld: false,
     select: null,
     cycle: 0,
     aimFrom: { x: 0, y: 0, z: 0 },
@@ -326,8 +340,15 @@ function writeFrame(f: InputFrame, out: number[]): void {
   out.push(f.seq, q(f.view, 100), f.epoch);
   writeMove(f.move, out);
   out.push(
-    (f.fireHeld ? 1 : 0) | (f.firePressed ? 2 : 0) | (f.aim ? 4 : 0) | (f.reloadPressed ? 8 : 0) | (f.takedownPressed ? 16 : 0) | (f.focusPressed ? 32 : 0),
-    f.select ? ix(WEAPON_IDS, f.select) : -1,
+    (f.fireHeld ? 1 : 0) |
+      (f.firePressed ? 2 : 0) |
+      (f.aim ? 4 : 0) |
+      (f.reloadPressed ? 8 : 0) |
+      (f.takedownPressed ? 16 : 0) |
+      (f.focusPressed ? 32 : 0) |
+      (f.gearPressed ? 64 : 0) |
+      (f.gearHeld ? 128 : 0),
+    f.select ? ix(WEAPON_SLOT_IDS, f.select) : -1,
     f.cycle,
     q(f.aimFrom.x),
     q(f.aimFrom.y),
@@ -345,14 +366,16 @@ function readFrame(v: unknown): InputFrame {
   f.view = r.num(0, 2 ** 31);
   f.epoch = r.int(0, 1e6);
   readMove(r, f.move);
-  const b = r.int(0, 63);
+  const b = r.int(0, 255);
   f.fireHeld = (b & 1) !== 0;
   f.firePressed = (b & 2) !== 0;
   f.aim = (b & 4) !== 0;
   f.reloadPressed = (b & 8) !== 0;
   f.takedownPressed = (b & 16) !== 0;
   f.focusPressed = (b & 32) !== 0;
-  f.select = r.pickOrNull(WEAPON_IDS);
+  f.gearPressed = (b & 64) !== 0;
+  f.gearHeld = (b & 128) !== 0;
+  f.select = r.pickOrNull(WEAPON_SLOT_IDS);
   f.cycle = r.int(-1, 1);
   f.aimFrom.x = r.num(-POS, POS);
   f.aimFrom.y = r.num(-POS, POS);
@@ -379,6 +402,16 @@ export interface PlayerNet {
 export interface PickupNet {
   id: number;
   kind: PickupKind;
+  x: number;
+  y: number;
+  z: number;
+}
+
+/** Una granada en vuelo (de quién es: cada invitado dibuja las suyas sin esperar al anfitrión). */
+export interface GrenadeNet {
+  id: number;
+  kind: GearId;
+  owner: number;
   x: number;
   y: number;
   z: number;
@@ -415,6 +448,8 @@ export interface OwnerNet {
   score: number;
   multiplier: number;
   gauge: number;
+  /** Cuánto equipo le queda por lanzar. */
+  gear: number;
   /** Cargador y reserva de cada arma (−1 = reserva infinita). */
   ammo: Array<{ weapon: WeaponId; mag: number; reserve: number }>;
 }
@@ -428,6 +463,7 @@ export interface Snapshot {
   enemies: EnemyNet[];
   civilians: CivilianNet[];
   pickups: PickupNet[];
+  grenades: GrenadeNet[];
   fx: FxTuple[];
   mission: MissionNet;
   owner: OwnerNet | null;
@@ -446,13 +482,14 @@ function writePlayer(p: PlayerNet): number[] {
     q(l.melee, 100),
     q(l.slash),
     q(l.takedown),
+    q(l.throw),
     q(l.health, 100),
   );
   return out;
 }
 
 function readPlayer(v: unknown): PlayerNet {
-  const r = tuple(v, 1 + MOVE_LEN + 9);
+  const r = tuple(v, 1 + MOVE_LEN + 10);
   const id = r.int(0, MAX_PLAYERS - 1);
   const move = readMove(r, emptyMoveNet());
   const weapon = r.pickOrNull(WEAPON_IDS) ?? 'none';
@@ -469,6 +506,7 @@ function readPlayer(v: unknown): PlayerNet {
     melee: r.num(0, 1),
     slash: r.num(-1, 1),
     takedown: r.num(-1, 10),
+    throw: r.num(-1, 1),
     health: r.num(0, 1),
   };
   r.end();
@@ -482,7 +520,7 @@ function writeEnemy(e: EnemyNet): number[] {
   writeMove(e.move, out);
   out.push(
     ix(AI_STATES, e.ai),
-    (e.aim ? 1 : 0) | (e.alive ? 2 : 0) | (e.hasLook ? 4 : 0),
+    (e.aim ? 1 : 0) | (e.alive ? 2 : 0) | (e.hasLook ? 4 : 0) | (e.dazed ? 8 : 0),
     q(e.health, 10),
     q(e.hitFlash),
     q(e.recoilVis, 100),
@@ -512,10 +550,11 @@ function readEnemy(v: unknown): EnemyNet {
   e.type = r.pick(ENEMY_TYPES);
   readMove(r, e.move);
   e.ai = r.pick(AI_STATES);
-  const f = r.int(0, 7);
+  const f = r.int(0, 15);
   e.aim = (f & 1) !== 0;
   e.alive = (f & 2) !== 0;
   e.hasLook = (f & 4) !== 0;
+  e.dazed = (f & 8) !== 0;
   e.health = r.num(-1e4, 1e5);
   e.hitFlash = r.num(0, 10);
   e.recoilVis = r.num(0, 1);
@@ -598,6 +637,7 @@ function writeOwner(o: OwnerNet): number[] {
     Math.round(o.score),
     o.multiplier,
     q(o.gauge),
+    o.gear,
     o.ammo.length,
   ];
   for (const a of o.ammo) out.push(ix(WEAPON_IDS, a.weapon), a.mag, Number.isFinite(a.reserve) ? a.reserve : -1);
@@ -617,6 +657,7 @@ function readOwner(v: unknown): OwnerNet {
     score: r.int(0, 1e9),
     multiplier: r.int(1, 99),
     gauge: r.num(0, 2),
+    gear: r.int(0, 99),
     ammo: [],
   };
   const n = r.int(0, WEAPON_IDS.length);
@@ -641,10 +682,12 @@ export const FX = {
   shot: 5,
   alert: 6,
   beep: 7,
+  grenade: 8,
+  burst: 9,
 } as const;
-const FX_LEN = [10, 10, 9, 8, 9, 6, 5, 6] as const;
+const FX_LEN = [10, 10, 9, 8, 9, 6, 5, 6, 6, 5] as const;
 
-export const fxTables = { impact: IMPACT_KINDS, shot: SHOT_SOUNDS } as const;
+export const fxTables = { impact: IMPACT_KINDS, shot: SHOT_SOUNDS, grenade: GRENADE_SOUNDS } as const;
 
 function readFx(v: unknown): FxTuple {
   const r = tuple(v);
@@ -656,6 +699,7 @@ function readFx(v: unknown): FxTuple {
   // Los valores de tabla, dentro de su tabla.
   if (code === FX.impact && !(Number.isInteger(a[8]) && a[8]! >= 0 && a[8]! < IMPACT_KINDS.length)) throw MALFORMED;
   if (code === FX.shot && !(Number.isInteger(a[2]) && a[2]! >= 0 && a[2]! < SHOT_SOUNDS.length)) throw MALFORMED;
+  if (code === FX.grenade && !(Number.isInteger(a[2]) && a[2]! >= 0 && a[2]! < GRENADE_SOUNDS.length)) throw MALFORMED;
   return a;
 }
 
@@ -686,7 +730,9 @@ export type RejectReason = 'version' | 'full' | 'closed';
 /** Mensajes fiables del invitado al anfitrión. */
 export type GuestCtl =
   /** `rejoin`: vuelve tras un corte con la plaza que tenía (su id y la contraseña que le dio el anfitrión). */
-  | { t: 'hello'; v: number; tables: string; upgrades: UpgradeId[]; rejoin?: RejoinTicket }
+  | { t: 'hello'; v: number; tables: string; upgrades: UpgradeId[]; loadout: Loadout; rejoin?: RejoinTicket }
+  /** Cambió su equipo en la sala: lo llevará en la siguiente partida (el anfitrión lo sanea con sus mejoras). */
+  | { t: 'loadout'; loadout: Loadout }
   | { t: 'ready'; level: LevelId }
   /** Usar un objeto de la misión (terminal, panel): el anfitrión comprueba que esté a su alcance. */
   | { t: 'interact'; id: string }
@@ -725,7 +771,7 @@ export function decodeGuestCtl(s: string): GuestCtl | null {
           if (!UPGRADES.includes(id)) throw MALFORMED;
           return id;
         });
-        const hello: GuestCtl = { t: 'hello', v: intOf(o.v, 0, 1e6), tables: str(o.tables, 32), upgrades: ups };
+        const hello: GuestCtl = { t: 'hello', v: intOf(o.v, 0, 1e6), tables: str(o.tables, 32), upgrades: ups, loadout: loadoutOf(o.loadout) };
         if (o.rejoin !== undefined) {
           const r = obj(o.rejoin);
           hello.rejoin = { id: intOf(r.id, 1, MAX_PLAYERS - 1), token: token(r.token) };
@@ -737,6 +783,8 @@ export function decodeGuestCtl(s: string): GuestCtl | null {
         if (!LEVELS.includes(level)) throw MALFORMED;
         return { t: 'ready', level };
       }
+      case 'loadout':
+        return { t: 'loadout', loadout: loadoutOf(o.loadout) };
       case 'ping':
         return { t: 'ping', n: intOf(o.n, 0, 2 ** 31) };
       case 'interact':
@@ -747,6 +795,25 @@ export function decodeGuestCtl(s: string): GuestCtl | null {
         throw MALFORMED;
     }
   });
+}
+
+/**
+ * Un equipo recibido: cada hueco con un arma conocida y el equipo conocido o ninguno. Que el arma sea de su hueco y que
+ * el invitado la tenga lo comprueba el anfitrión con sus mejoras (`normalizeLoadout`).
+ */
+function loadoutOf(v: unknown): Loadout {
+  const o = obj(v);
+  const weapon = (x: unknown): WeaponId => {
+    const id = str(x, 16) as WeaponId;
+    if (!WEAPON_IDS.includes(id)) throw MALFORMED;
+    return id;
+  };
+  let gear: GearId | null = null;
+  if (o.gear !== null && o.gear !== undefined) {
+    gear = str(o.gear, 16) as GearId;
+    if (!GEARS.includes(gear)) throw MALFORMED;
+  }
+  return { primary: weapon(o.primary), secondary: weapon(o.secondary), melee: weapon(o.melee), gear };
 }
 
 /** Contraseña para recuperar una plaza: la da el anfitrión y solo él la comprueba. */
@@ -900,6 +967,7 @@ export function encodeSnapshotBody(s: Omit<Snapshot, 'owner'>): string {
     e: s.enemies.map(writeEnemy),
     c: s.civilians.map(writeCivilian),
     u: s.pickups.map((p) => [p.id, ix(PICKUP_KINDS, p.kind), q(p.x, 100), q(p.y, 100), q(p.z, 100)]),
+    g: s.grenades.map((g) => [g.id, ix(GEARS, g.kind), g.owner, q(g.x, 100), q(g.y, 100), q(g.z, 100)]),
     f: s.fx.slice(0, MAX_FX),
     m: writeMission(s.mission),
     n: s.mission.used,
@@ -925,6 +993,19 @@ export function decodeSnapshot(s: string): Snapshot | null {
         const p: PickupNet = { id: r.int(1, 2 ** 31), kind: r.pick(PICKUP_KINDS), x: r.num(-POS, POS), y: r.num(-POS, POS), z: r.num(-POS, POS) };
         r.end();
         return p;
+      }),
+      grenades: list(o.g, 64).map((x) => {
+        const r = tuple(x, 6);
+        const g: GrenadeNet = {
+          id: r.int(1, 2 ** 31),
+          kind: r.pick(GEARS),
+          owner: r.int(0, MAX_PLAYERS - 1),
+          x: r.num(-POS, POS),
+          y: r.num(-POS, POS),
+          z: r.num(-POS, POS),
+        };
+        r.end();
+        return g;
       }),
       fx: list(o.f, MAX_FX).map(readFx),
       mission: { ...readMission(o.m), used: o.n === undefined ? [] : list(o.n, 64).map(objectId) },

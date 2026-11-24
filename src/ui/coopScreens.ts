@@ -180,7 +180,8 @@ function manualInvite(api: CoopScreenApi, v: CoopView): HTMLElement[] {
   ];
 }
 
-export function buildCoopLobby(api: CoopScreenApi): HTMLElement {
+/** `loadout`: el selector de equipo del jugador (lo construye `loadoutScreens.ts`). */
+export function buildCoopLobby(api: CoopScreenApi, loadout: HTMLElement | null = null): HTMLElement {
   const v = api.view();
   if (!v) return h('section', { class: 'screen' });
   const players = h(
@@ -194,12 +195,14 @@ export function buildCoopLobby(api: CoopScreenApi): HTMLElement {
       ]),
     ),
   );
-  const children: Array<HTMLElement | null> = [h('h2', { class: 'screen-heading', text: COOP_TEXT.lobby }), players];
+  // A la izquierda, quién está y cómo invitar; a la derecha, con qué se juega (el equipo de cada uno) y a qué.
+  const who: Array<HTMLElement | null> = [players];
+  const play: Array<HTMLElement | null> = [loadout];
   if (v.role === 'host') {
     const room = v.room;
     // El código de la sala: lo que se comparte para invitar.
     if (room.code)
-      children.push(
+      who.push(
         h('div', { class: 'coop-roomcode', ariaLabel: COOP_TEXT.roomCode }, [
           h('span', { class: 'coop-label', text: COOP_TEXT.roomCode }),
           h('strong', { class: 'coop-roomcode-value', text: room.code }),
@@ -215,8 +218,8 @@ export function buildCoopLobby(api: CoopScreenApi): HTMLElement {
         ]),
         h('p', { class: 'coop-note', text: COOP_TEXT.publicHint }),
       );
-    else children.push(h('p', { class: 'screen-hint', text: room.state === 'down' ? COOP_TEXT.roomDown : COOP_TEXT.roomConnecting }));
-    children.push(
+    else who.push(h('p', { class: 'screen-hint', text: room.state === 'down' ? COOP_TEXT.roomDown : COOP_TEXT.roomConnecting }));
+    play.push(
       h('div', { class: 'achv-title', text: COOP_TEXT.chooseMode }),
       h(
         'div',
@@ -226,16 +229,17 @@ export function buildCoopLobby(api: CoopScreenApi): HTMLElement {
     );
     // La invitación manual: a la vista si el servicio no responde; si no, plegada.
     if (room.state === 'down' || v.showManual) {
-      children.push(h('div', { class: 'achv-title', text: COOP_TEXT.inviteHeading }), ...manualInvite(api, v));
-      if (room.state !== 'down') children.push(h('div', { class: 'menu menu-row' }, [button(COOP_TEXT.manualHide, () => api.toggleManual(), 'btn btn-small')]));
-    } else children.push(h('div', { class: 'menu menu-row' }, [button(COOP_TEXT.manualShow, () => api.toggleManual(), 'btn btn-small')]));
-    children.push(h('p', { class: 'coop-note', text: COOP_TEXT.localHint }), h('p', { class: 'coop-note', text: COOP_TEXT.privacy }));
+      who.push(h('div', { class: 'achv-title', text: COOP_TEXT.inviteHeading }), ...manualInvite(api, v));
+      if (room.state !== 'down') who.push(h('div', { class: 'menu menu-row' }, [button(COOP_TEXT.manualHide, () => api.toggleManual(), 'btn btn-small')]));
+    } else who.push(h('div', { class: 'menu menu-row' }, [button(COOP_TEXT.manualShow, () => api.toggleManual(), 'btn btn-small')]));
+    who.push(h('p', { class: 'coop-note', text: COOP_TEXT.localHint }), h('p', { class: 'coop-note', text: COOP_TEXT.privacy }));
   } else {
-    children.push(h('p', { class: 'screen-hint', text: v.me === 0 ? COOP_TEXT.connecting : COOP_TEXT.waitingHost }));
+    who.push(h('p', { class: 'screen-hint', text: v.me === 0 ? COOP_TEXT.connecting : COOP_TEXT.waitingHost }));
   }
-  children.push(
+  return h('section', { class: 'screen screen-coop screen-lobby', role: 'dialog', ariaLabel: COOP_TEXT.lobby }, [
+    h('h2', { class: 'screen-heading', text: COOP_TEXT.lobby }),
+    h('div', { class: 'lobby-cols' }, [h('div', { class: 'lobby-col' }, who), h('div', { class: 'lobby-col' }, play)]),
     errorLine(v.error),
     h('div', { class: 'menu' }, [button(v.role === 'host' ? COOP_TEXT.leaveLobby : COOP_TEXT.leaveGame, () => api.leave(), 'btn btn-danger')]),
-  );
-  return h('section', { class: 'screen screen-coop screen-lobby', role: 'dialog', ariaLabel: COOP_TEXT.lobby }, children);
+  ]);
 }

@@ -22,6 +22,8 @@ export interface PlayerLook {
   slash: number;
   /** Tiempo del takedown en curso (s), o −1. */
   takedown: number;
+  /** Gesto de lanzar el equipo 0..1, o −1 si no lanza. */
+  throw: number;
   /** Disparo a ciegas desde la cobertura: 1 por encima, 2 por el borde, 0 no. */
   blind: BlindMode;
   dead: boolean;
@@ -30,7 +32,7 @@ export interface PlayerLook {
 }
 
 export function emptyPlayerLook(): PlayerLook {
-  return { weapon: 'pistol', aim: false, aimPitch: 0, reload: -1, recoil: 0, melee: 0, slash: -1, takedown: -1, blind: 0, dead: false, health: 1 };
+  return { weapon: 'pistol', aim: false, aimPitch: 0, reload: -1, recoil: 0, melee: 0, slash: -1, takedown: -1, throw: -1, blind: 0, dead: false, health: 1 };
 }
 
 /** Rellena lo que se ve de un jugador a partir de su simulación (sin asignaciones). */
@@ -45,6 +47,7 @@ export function fillPlayerLook(out: PlayerLook, p: PlayerController, c: PlayerCo
   out.melee = c.grab;
   out.slash = c.slashPhase;
   out.takedown = c.takedown ? c.takedown.t : -1;
+  out.throw = c.throwPhase;
   out.dead = c.dead;
   out.health = c.vitals.maxHealth > 0 ? c.vitals.health / c.vitals.maxHealth : 0;
 }

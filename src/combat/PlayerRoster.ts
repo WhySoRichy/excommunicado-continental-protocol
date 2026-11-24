@@ -59,6 +59,7 @@ export function remoteAudio(audio: CombatAudio, body: PlayerController): CombatA
   return {
     ...SILENT_AUDIO,
     shot: (kind) => audio.shot(kind, at.set(body.feet.x, body.feet.y + 1.4, body.feet.z)),
+    grenade: (kind) => audio.grenade(kind, at.set(body.feet.x, body.feet.y + 1.4, body.feet.z)),
   };
 }
 
@@ -80,7 +81,12 @@ export class PlayerRoster {
   private nextId = 0;
 
   /** `world`: lo que comparten todos los jugadores (física, enemigos, efectos, sonido...). */
-  constructor(private readonly world: Omit<CombatCtx, 'player' | 'camera'>) {}
+  constructor(private readonly world: Omit<CombatCtx, 'player' | 'camera' | 'playerId'>) {
+    // Lo que aturde una granada puntúa a quien la lanzó.
+    world.grenades.onBurst = (owner, stunned) => {
+      if (stunned > 0) this.byId(owner)?.combat.stunnedEnemies(stunned);
+    };
+  }
 
   /**
    * Añade un jugador. El local recibe la cámara (retroceso y sacudidas) y todo el sonido; el resto, sin cámara y solo
@@ -103,6 +109,7 @@ export class PlayerRoster {
         audio: local ? this.world.audio : remoteAudio(this.world.audio, controller),
         ...opts.ports,
         player: controller,
+        playerId: id,
         camera: opts.camera ?? STILL_CAMERA,
       },
       intent: emptyIntent(),

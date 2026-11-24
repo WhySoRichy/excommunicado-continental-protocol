@@ -21,6 +21,9 @@ La primera vez que se ejecuten las e2e: `npx playwright install chromium firefox
 | Animaciones | `src/entities/CharacterRig.ts` (huesos y poses) y `rigMath.ts` |
 | Aspecto de personajes y armas | `src/entities/rig/`: `body.ts` (torso, cabeza, pelo, prendas, miembros), `weapons.ts` (los modelos de las armas, su agarre y su acabado, `WeaponFinish`), `weaponParts.ts` (piezas de arma: perfiles extruidos con bisel, torneados, tubos), `geometry.ts` (primitivas), `skeleton.ts` (medidas) y `types.ts`; el material de las armas, `src/render/weaponMaterial.ts` |
 | Armas, daño, estilo, rango | `src/combat/` |
+| Añadir un arma | Sus datos y su hueco en `src/combat/weapons.ts` (y, si se compra, su mejora y su artículo en `src/hub/economy.ts`); su modelo en `src/entities/rig/weapons.ts`; qué modelo dibuja, `WEAPON_MODEL` en `src/entities/PlayerViews.ts`; sus textos en `src/text/loadout.ts` y su nombre corto del HUD en `src/game/hudModel.ts`. La armería, el guardado y la red la recogen solos (el compilador avisa de lo que falte) |
+| Inventario y equipo (qué se lleva, la armería, los selectores) | Las reglas, `src/combat/weapons.ts` (`Loadout`, `normalizeLoadout`) y `src/hub/armory.ts`; las pantallas, `src/ui/loadoutScreens.ts`; la vista previa, `src/ui/weaponPreview.ts` |
+| Granadas (vuelo, estallido, a quién aturde) | `src/combat/Grenades.ts`; el gesto de lanzar, en `src/combat/PlayerCombat.ts` (`tickThrow`) y su pose en `CharacterRig.ts`; el aturdimiento, en `EnemyBrain.ts` (`daze`); cómo se ven, `src/render/GrenadeViews.ts`, `ThrowArc.ts` y `vfx.ts` (`burst`) |
 | IA de los enemigos | `src/entities/ai/EnemyBrain.ts`, `src/entities/Enemy.ts` (simulación), `src/combat/EnemyManager.ts` |
 | Cómo se ven los enemigos (animación, icono de alerta, láser) | `src/entities/EnemyView.ts`: lee el estado de `Enemy` y nunca lo cambia |
 | Varios jugadores (plazas, objetivos de los enemigos, reaparición) | `src/combat/PlayerRoster.ts`; cómo se ven los que no son el local, `src/entities/PlayerViews.ts` |
@@ -28,7 +31,7 @@ La primera vez que se ejecuten las e2e: `npx playwright install chromium firefox
 | Transportes del cooperativo (servicio de salas, WebRTC, otra pestaña) | `src/net/transport/`; el protocolo del servicio, `src/net/lobbyProtocol.ts` |
 | Servicio de salas (Cloudflare) | `server/salas/`: `core.ts` (la lógica, sin Cloudflare) y `worker.ts` (Worker y Durable Object). Se despliega con `.github/workflows/salas.yml`; en local, `npx wrangler dev` en esa carpeta |
 | Pantallas del cooperativo y lo que hacen sus botones | `src/ui/coopScreens.ts` y `src/game/coopScreenApi.ts` |
-| Textos nuevos | `src/text/`: el catálogo (el primero, el del cooperativo) |
+| Textos nuevos | `src/text/`: el catálogo (cooperativo y equipo) |
 | Un nivel o uno nuevo | `src/levels/data/` (y registrarlo en `src/levels/registry.ts`) |
 | Objetivos de un contrato | bloque `mission` del nivel; las reglas en `src/missions/objectives.ts` y su aplicación en `MissionDirector.ts` |
 | HUD, aviso contextual e Intel (qué se muestra) | `src/game/hudModel.ts`; cómo se dibuja, en `src/ui/` |
@@ -96,6 +99,10 @@ La primera vez que se ejecuten las e2e: `npx playwright install chromium firefox
 - **Una foto más oscura que la textura a la que sustituye.** El hormigón fotoescaneado tiene un color medio de 87 sobre 255, y la textura procedural era mucho más clara: con el mismo tinte oscuro, las azoteas de Torre Meridian perdieron la mitad de luz y la prueba de claridad falló. Al cambiar la textura de un material hay que revisar su tinte (o su `gain`) y pasar la prueba de claridad; `checkpoint-shots.mjs` (herramientas de trabajo) compara la luminancia por checkpoint entre dos builds.
 - **La oclusión ambiental de three solo oculta puntos y líneas** en su pase de normales: los fogonazos, el humo y los cristales dejaban halos oscuros. `render/ambientOcclusion.ts` oculta también lo transparente.
 - **Una conexión nueva fuera del origen.** La política de seguridad de contenido (`vite.config.ts`) solo permite conectar con el propio origen y el servicio de salas: otra dirección necesita su entrada en `connect-src`, o el navegador la bloquea sin más.
+- **Contar pasos restando decimales.** La mecha de la granada (1,6 s) se gastaba restando 1/60 en cada paso: por el redondeo daba 97 pasos en vez de 96 y el arco acababa un paso antes de donde estallaba. Si dos sitios tienen que contar lo mismo, o cuentan enteros o comparten el margen (`FUSE_EPS`).
+- **Cancelar un gesto de golpe.** Guardar la granada ponía la fase del gesto a «sin gesto» en un fotograma y el brazo caía con un tirón tres veces mayor que el del tajo. Un gesto que se cancela tiene que recorrer su camino de vuelta, aunque ya no ocupe las manos.
+- **Un sonido sin posición no viaja.** El disparo de un invitado llegaba al registro de efectos del anfitrión sin posición (suena «donde está» por su puerto) y no se apuntaba: los demás invitados no lo oían. Los puertos de un jugador remoto necesitan su `voice` (`FxRecorder.tee`).
+- **Una acción nueva en ajustes ya guardados.** Los ajustes guardan todas las teclas: la de fábrica de una acción nueva puede estar ocupada por otra que el jugador cambió. `validateSettings` le busca una libre.
 - **Niveles:** escalones de más de 0,32 m o muebles sin `noWalk` rompen la navegación de los enemigos. Los tests de navegación lo detectan.
 
 ## Despliegue

@@ -38,6 +38,27 @@ describe('ajustes', () => {
     expect(validateSettings({ bindings: { pause: ['KeyP'] } }).bindings.pause).toEqual(DEFAULT_BINDINGS.pause);
   });
 
+  it('una acción nueva no pisa las teclas que el jugador ya había dado a otras', () => {
+    // Unos ajustes de antes de que existiera el equipo, sin tocar: la G y la cruceta izquierda, que cede «arma anterior».
+    const old: Record<string, string[]> = { ...defaultSettings().bindings, weaponPrev: ['WheelUp', 'Pad14'] };
+    delete old.gear;
+    const s = validateSettings({ bindings: old });
+    expect(s.bindings.gear).toEqual(['KeyG', 'Pad14']);
+    expect(s.bindings.weaponPrev).toEqual(['WheelUp']);
+    expect(bindingConflicts(s.bindings)).toEqual([]);
+
+    // Con la G ya dada a recargar y la cruceta izquierda a otra cosa: una tecla libre y sin botón de mando.
+    const busy = validateSettings({ bindings: { ...old, reload: ['KeyG', 'Pad2'], weaponPrev: ['KeyP', 'Pad14'] } });
+    expect(busy.bindings.reload).toEqual(['KeyG', 'Pad2']);
+    expect(busy.bindings.gear).toEqual(['KeyB']);
+    expect(bindingConflicts(busy.bindings)).toEqual([]);
+
+    // Los botones que dos acciones comparten de fábrica (A: saltar e interactuar) siguen compartidos.
+    const noInteract: Record<string, string[]> = { ...defaultSettings().bindings };
+    delete noInteract.interact;
+    expect(validateSettings({ bindings: noInteract }).bindings.interact).toEqual(DEFAULT_BINDINGS.interact);
+  });
+
   it('se guardan y se cargan; JSON corrupto → fábrica', () => {
     const kv = new MemoryStore();
     const s = defaultSettings();

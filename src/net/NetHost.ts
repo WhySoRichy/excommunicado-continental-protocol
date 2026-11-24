@@ -1,5 +1,6 @@
 import { Vector3 } from 'three';
 import type { EnemyManager } from '../combat/EnemyManager';
+import type { Grenades } from '../combat/Grenades';
 import type { CombatListener, PlayerCombat } from '../combat/PlayerCombat';
 import type { Pickups } from '../combat/Pickups';
 import { type PlayerRoster, type PlayerSlot, remoteAudio } from '../combat/PlayerRoster';
@@ -8,7 +9,7 @@ import { Rng } from '../core/rng';
 import { type CivilianManager, type CivilianNet, emptyCivilianNet } from '../entities/Civilian';
 import { emptyEnemyNet, type EnemyNet } from '../entities/Enemy';
 import { CROUCH_HALF, emptyMoveNet, MOVE, type MoveNet, PLAYER_RADIUS, type PlayerController, STAND_HALF } from '../entities/PlayerController';
-import type { UpgradeId } from '../combat/weapons';
+import { DEFAULT_LOADOUT, type Loadout, normalizeLoadout, type UpgradeId } from '../combat/weapons';
 import type { LevelId } from '../levels/types';
 import type { MissionId } from '../missions/types';
 import type { MissionHud } from '../missions/ports';
@@ -24,6 +25,7 @@ import {
   emptyMissionNet,
   encodeHostCtl,
   encodeSnapshotBody,
+  type GrenadeNet,
   type HostCtl,
   type InputFrame,
   MAX_PLAYERS,
@@ -49,10 +51,11 @@ export interface HostWorld {
   readonly enemies: EnemyManager;
   readonly civilians: CivilianManager | null;
   readonly pickups: Pickups;
+  readonly grenades: Grenades;
   /** Los puertos de verdad de este equipo (sin el registro de efectos): lo que ve y oye el anfitrión. */
   readonly ports: { vfx: CombatVfx; audio: CombatAudio };
-  /** El cuerpo y el combate de un invitado, con sus mejoras (aún fuera del registro). */
-  createPlayer(at: Vector3, yaw: number, upgrades: ReadonlySet<UpgradeId>): { controller: PlayerController; combat: PlayerCombat };
+  /** El cuerpo y el combate de un invitado, con sus mejoras y su equipo (aún fuera del registro). */
+  createPlayer(at: Vector3, yaw: number, upgrades: ReadonlySet<UpgradeId>, loadout: Loadout): { controller: PlayerController; combat: PlayerCombat };
   /** Un punto libre cerca de `base` para el jugador `index` (para que no aparezcan unos encima de otros). */
   spawnNear(base: Vector3, yaw: number, index: number, out: Vector3): Vector3;
 }
@@ -96,6 +99,8 @@ interface Peer {
   id: number;
   state: PeerState;
   upgrades: ReadonlySet<UpgradeId>;
+  /** Su equipo, saneado con sus mejoras: lo lleva desde la siguiente vez que aparece. */
+  loadout: Loadout;
   /** Contraseña para recuperar la plaza tras un corte. */
   token: string;
   /** El combate que tenía antes del corte (salud, munición, estilo): lo recupera al volver. */
@@ -167,6 +172,11 @@ export class NetHost {
   }
 
   /** Ids en la sala, el anfitrión (0) incluido. */
+  /** El equipo con el que aparecerá un invitado (para las pruebas y la sala). */
+  peerLoadout(id: number): Loadout | null {
+    return this.peers.find((p) => p.id === id)?.loadout ?? null;
+  }
+
   get lobbyIds(): number[] {
     return [0, ...this.guests.map((g) => g.id)];
   }
@@ -182,6 +192,7 @@ export class NetHost {
       id: 0,
       state: 'hello',
       upgrades: new Set(),
+      loadout: { ...DEFAULT_LOADOUT },
       token: '',
       restore: null,
       leaving: false,
@@ -339,6 +350,7 @@ export class NetHost {
         }
         p.id = id;
         p.upgrades = new Set(m.upgrades);
+        p.loadout = normalizeLoadout(m.loadout, p.upgrades);
         p.restore = back?.combat ?? null;
         p.token = this.newToken();
         p.state = 'lobby';
@@ -355,6 +367,10 @@ export class NetHost {
         return;
       case 'ping':
         this.send(p, { t: 'pong', n: m.n });
+        return;
+      case 'loadout':
+        // Vale para la siguiente vez que aparezca: a mitad de partida no se cambian las armas en la mano.
+        p.loadout = normalizeLoadout(m.loadout, p.upgrades);
         return;
       case 'interact': {
         const now = this.opts.now();
@@ -386,7 +402,7 @@ export class NetHost {
   private spawnPeer(p: Peer, w: HostWorld): void {
     const r = w.roster.respawn;
     const at = w.spawnNear(r.pos, r.yaw, p.id, _spawn);
-    const made = w.createPlayer(at, r.yaw, p.upgrades);
+    const made = w.createPlayer(at, r.yaw, p.upgrades, p.loadout);
     const controller = made.controller;
     // Si vuelve tras un corte, con el combate que tenía (salud, munición, estilo); si había caído, ya repuesto.
     const combat = p.restore ?? made.combat;
@@ -394,7 +410,10 @@ export class NetHost {
     if (combat.dead) combat.respawnReset();
     combat.allowFocus = false;
     combat.listener = this.listenerFor(p);
-    const ports = this.opts.recorder.tee(p.id, w.ports.vfx, remoteAudio(w.ports.audio, controller));
+    const head = new Vector3();
+    const ports = this.opts.recorder.tee(p.id, w.ports.vfx, remoteAudio(w.ports.audio, controller), () =>
+      head.set(controller.feet.x, controller.feet.y + 1.5, controller.feet.z),
+    );
     p.slot = w.roster.add(controller, combat, {
       id: p.id,
       drive: 'remote',
@@ -428,7 +447,7 @@ export class NetHost {
     const slot = p.slot!;
     const h = p.held;
     // Lo pulsado vale un paso; lo mantenido sigue mientras no llegue otro.
-    h.firePressed = h.reloadPressed = h.takedownPressed = h.focusPressed = false;
+    h.firePressed = h.reloadPressed = h.takedownPressed = h.focusPressed = h.gearPressed = false;
     h.select = null;
     h.cycle = 0;
     let moved = false;
@@ -464,6 +483,8 @@ export class NetHost {
     ci.reloadPressed = h.reloadPressed;
     ci.takedownPressed = h.takedownPressed;
     ci.focusPressed = false;
+    ci.gearPressed = h.gearPressed;
+    ci.gearHeld = h.gearHeld;
     ci.select = h.select;
     ci.cycle = h.cycle;
     ci.aimFrom.set(h.aimFrom.x, h.aimFrom.y, h.aimFrom.z);
@@ -531,7 +552,8 @@ export class NetHost {
     for (let i = 0; i < cs.length; i++) civilians.push(cs[i]!.writeNet((this.civPool[i] ??= emptyCivilianNet())));
     const pickups: PickupNet[] = [];
     for (const it of w.pickups.items) if (!it.taken) pickups.push({ id: it.id, kind: it.kind, x: it.pos.x, y: it.pos.y, z: it.pos.z });
-    const body = encodeSnapshotBody({ tick: this.simTick, players, enemies, civilians, pickups, fx, mission: this.missionNet });
+    const grenades: GrenadeNet[] = w.grenades.items.map((g) => ({ id: g.id, kind: g.kind, owner: g.owner, x: g.pos.x, y: g.pos.y, z: g.pos.z }));
+    const body = encodeSnapshotBody({ tick: this.simTick, players, enemies, civilians, pickups, grenades, fx, mission: this.missionNet });
     for (const p of playing) p.link.send('sim', withOwner(body, this.ownerOf(p)));
   }
 
@@ -549,6 +571,7 @@ export class NetHost {
       score: c.style.score,
       multiplier: c.style.multiplier,
       gauge: c.style.gauge,
+      gear: c.gearLeft,
       ammo: c.loadout.map((id) => {
         const ws = c.weapons.get(id)!;
         return { weapon: id, mag: ws.mag, reserve: ws.reserve };
@@ -624,6 +647,8 @@ function mergeFrame(h: InputFrame, f: InputFrame): void {
   h.reloadPressed ||= f.reloadPressed;
   h.takedownPressed ||= f.takedownPressed;
   h.focusPressed ||= f.focusPressed;
+  h.gearPressed ||= f.gearPressed;
+  h.gearHeld = f.gearHeld;
   h.select = f.select ?? h.select;
   h.cycle = f.cycle || h.cycle;
   h.aimFrom.x = f.aimFrom.x;

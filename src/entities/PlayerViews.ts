@@ -68,7 +68,7 @@ class PlayerView {
     }
     const root = this.rig.root;
     p.renderFeet(alpha, root.position);
-    const yaw = updateBodyYaw(this.visualYaw, p.renderYaw(alpha), p.aiming, dt);
+    const yaw = updateBodyYaw(this.visualYaw, p.renderYaw(alpha), p.aiming || look.throw >= 0, dt);
     root.rotation.y = yaw;
     const pose = this.pose;
     pose.speed = p.stepSpeed(FIXED_DT);
@@ -87,6 +87,7 @@ class PlayerView {
     pose.melee = look.melee;
     pose.slash = look.slash;
     pose.takedown = look.takedown;
+    pose.throw = look.throw;
     pose.vault = p.vaultProgress;
     pose.cover = p.state === 'cover' && p.cover ? p.cover.height : 'none';
     pose.peek = p.peekAmount;

@@ -21,7 +21,7 @@ import { forearmGeometry, footGeometry, headGeometry, shinGeometry, thighGeometr
 import { acquire, merge, release, type SharedGeometry } from './rig/geometry';
 import { ANKLE_Y, ELBOW_Y, HAND_Y, HIP_CROUCH, HIP_KNEEL, HIP_SLIDE, HIP_STAND, NECK_Y, SHOULDER_Y, SPIN_Y } from './rig/skeleton';
 import type { RigColors, RigOptions, RigPose, WeaponModel } from './rig/types';
-import { GRIP, STOCK, weaponGeometry } from './rig/weapons';
+import { GRIP, gearGeometry, STOCK, weaponGeometry } from './rig/weapons';
 
 export { idlePose } from './rig/types';
 export type { HairStyle, Outfit, RigColors, RigOptions, RigPose, WeaponModel } from './rig/types';
@@ -61,6 +61,8 @@ const _bounds = new Box3();
 /** Esfera de recorte generosa (cubre volteretas, caídas y brazos extendidos). */
 const CULL_CENTER = new Vector3(0, 0.9, 0);
 const CULL_RADIUS = 1.6;
+const GEAR_KEY = 'gear|stun';
+const GEAR_ACCENT = 0xd4af37;
 const bodyGeometries = new Map<string, SharedGeometry>();
 const weaponGeometries = new Map<string, SharedGeometry>();
 
@@ -79,6 +81,18 @@ const HALF_PI = Math.PI / 2;
 const SLASH_WIND = 0.24;
 const SLASH_CUT = 0.5;
 const SLASH_K = 30;
+/**
+ * Lanzar, en fracciones del gesto: brazo armado, suelta en alto (la granada sale de la mano entre estas dos), fin del
+ * acompañamiento y vuelta al arma; y la rigidez del brazo mientras dura.
+ */
+const THROW_WIND = 0.4;
+const THROW_OUT = 0.5;
+const THROW_LET = 0.55;
+const THROW_FOLLOW = 0.68;
+const THROW_DOWN = 0.76;
+const THROW_K = 28;
+/** Cuándo se ve la granada en la mano (desde que la coge hasta que sale). */
+const GEAR_IN_HAND: readonly [number, number] = [0.12, 0.535];
 /** Giro máximo de la cabeza sobre el torso al mirar algo (rad, unos 60°). */
 const LOOK_YAW_MAX = 1.05;
 /** Rigidez del muelle de la mirada (1/s): media vuelta de cabeza en algo menos de medio segundo. */
@@ -187,6 +201,10 @@ export class CharacterRig {
   /** Disparo a ciegas (el arma asoma sin el cuerpo) y apoyo contra la pared al llegar a una cobertura. */
   private readonly blindS: Spring = { x: 0, v: 0 };
   private readonly braceS: Spring = { x: 0, v: 0 };
+  /** Aturdido por un destello (entra de golpe, sale despacio). */
+  private readonly dazeS: Spring = { x: 0, v: 0 };
+  /** La granada en la mano izquierda (se crea la primera vez que lanza). */
+  private gearMesh: Mesh | null = null;
   /** Lado del último disparo a ciegas por el borde: se mantiene mientras la pose se apaga. */
   private blindSide = 1;
   private blindOver = 1;
@@ -368,6 +386,20 @@ export class CharacterRig {
     );
     this.weaponMesh.castShadow = true;
     this.weaponMount.add(this.weaponMesh);
+  }
+
+  /** La granada en la mano izquierda mientras dura el gesto. */
+  private showGear(on: boolean): void {
+    if (on && !this.gearMesh) {
+      const g = acquire(weaponGeometries, GEAR_KEY, () => gearGeometry('stun', GEAR_ACCENT));
+      const m = new Mesh(g, weaponMaterial());
+      m.castShadow = true;
+      m.position.set(0, HAND_Y - 0.05, -0.03);
+      m.rotation.x = HALF_PI;
+      this.foreL.add(m);
+      this.gearMesh = m;
+    }
+    if (this.gearMesh) this.gearMesh.visible = on;
   }
 
   /** Visibilidad (la cámara muy cerca transparenta al personaje en vez de meterse dentro). */
@@ -601,6 +633,21 @@ export class CharacterRig {
       rFootP = lerp(rFootP, -1.2, kk);
     }
 
+    // Aturdido por un destello: piernas flojas y abiertas, torso vencido que se balancea y la cabeza gacha.
+    const dz = this.blend(this.dazeS, p.daze, p.daze > 0.5 ? 18 : 7, dt);
+    const reel = this.time * 2.1;
+    if (dz > 0.001) {
+      hipLocal -= 0.09 * dz;
+      lF += (0.12 + 0.05 * Math.sin(reel)) * dz;
+      rF -= (0.1 + 0.05 * Math.sin(reel + 1.3)) * dz;
+      lDown -= 0.09 * dz;
+      rDown -= 0.09 * dz;
+      torsoX -= (0.42 + 0.06 * Math.sin(reel * 1.7)) * dz;
+      torsoZ += 0.13 * Math.sin(reel) * dz;
+      torsoY += (0.28 + 0.16 * Math.sin(reel * 0.8)) * dz;
+      headX -= (0.35 + 0.08 * Math.sin(reel * 1.3)) * dz;
+    }
+
     const legL = solveLeg(lF, lDown, this.legL);
     const legR = solveLeg(rF, rDown, this.legR);
     let thighR = legR.thigh;
@@ -742,6 +789,35 @@ export class CharacterRig {
       lsx = lerp(lsx, 0.2 - torsoX, cut * 0.6);
       lel = lerp(lel, 1.55, cut * 0.6);
     }
+    // Lanzar el equipo con la izquierda: el brazo se arma junto a la oreja con el hombro atrás (ahí espera mientras se
+    // mantenga la tecla), lanza girando el torso y baja siguiendo el movimiento; la derecha recoge el arma al pecho.
+    const throwing = p.throw >= 0 && armsFree < 1;
+    if (throwing) {
+      const u = p.throw;
+      const wind = smoother(0, THROW_WIND, u) * (1 - smoother(THROW_WIND, THROW_OUT, u));
+      const out = smoother(THROW_WIND, THROW_OUT, u) * (1 - smoother(THROW_LET, THROW_FOLLOW, u));
+      const follow = smoother(THROW_LET, THROW_FOLLOW, u) * (1 - smoother(THROW_DOWN, 1, u));
+      const busy = smoother(0, 0.22, u) * (1 - smoother(0.8, 1, u));
+      // Con un arma larga el cuerpo va de perfil: para lanzar vuelve al frente.
+      torsoY += BLADE_TORSO * 0.75 * bk * busy + 0.44 * wind - 0.2 * out - 0.5 * follow;
+      torsoX += 0.12 * wind - 0.06 * out - 0.22 * follow;
+      headX += 0.08 * wind;
+      // Armado: la mano atrás, junto a la oreja. Suelta: arriba y al frente, casi estirado. Acompaña: abajo y cruzado.
+      lsx = lerp(lsx, 1.85 - torsoX, wind);
+      lel = lerp(lel, 1.95, wind);
+      lsz = lerp(lsz, -0.7, wind);
+      lsx = lerp(lsx, 2.35 - torsoX, out);
+      lel = lerp(lel, 0.4, out);
+      lsz = lerp(lsz, -0.12, out);
+      lsx = lerp(lsx, 0.95 - torsoX, follow);
+      lel = lerp(lel, 0.18, follow);
+      lsz = lerp(lsz, 0.3, follow);
+      rsx = lerp(rsx, 0.3 - torsoX, busy * 0.85);
+      rel = lerp(rel, 1.5, busy * 0.85);
+      rsz = lerp(rsz, -0.12, busy * 0.85);
+      grip *= 1 - busy;
+    }
+    this.showGear(throwing && p.throw >= GEAR_IN_HAND[0] && p.throw < GEAR_IN_HAND[1]);
     // Takedown: la izquierda agarra, el torso se vuelca para proyectar y la derecha remata hacia el suelo.
     if (p.takedown >= 0) {
       const t = p.takedown;
@@ -840,6 +916,16 @@ export class CharacterRig {
       lel += 0.25 * p.flinch;
       rel += 0.15 * p.flinch;
     }
+    if (dz > 0.001) {
+      // El antebrazo izquierdo tapa los ojos; el arma cuelga.
+      lsx = lerp(lsx, 1.75 - torsoX + 0.08 * Math.sin(reel * 1.6), dz);
+      lel = lerp(lel, 2.15, dz);
+      lsz = lerp(lsz, 0.5, dz);
+      rsx = lerp(rsx, 0.2 - torsoX + 0.12 * Math.sin(reel), dz);
+      rel = lerp(rel, 0.35, dz);
+      rsz = lerp(rsz, 0.16, dz);
+      grip *= 1 - dz;
+    }
     if (kk > 0.001) {
       lsx = lerp(lsx, 0.35 - torsoX, kk);
       lel = lerp(lel, 0.2, kk);
@@ -871,7 +957,7 @@ export class CharacterRig {
     this.hips.rotation.y = s(this.hips.rotation.y, hipsYaw);
     this.torso.rotation.x = s(this.torso.rotation.x, torsoX + ak * p.aimPitch * 0.2);
     // El tajo dura 0,3 s: con el suavizado normal el brazo no llegaría a armarse antes de cortar.
-    const kArm = slashing ? SLASH_K : k;
+    const kArm = slashing ? SLASH_K : throwing ? THROW_K : k;
     this.torso.rotation.y = damp(this.torso.rotation.y, torsoY - hipsYaw, kArm, dt);
     this.torso.rotation.z = s(this.torso.rotation.z, torsoZ);
     // Mirada: la cabeza se vuelve hacia lo que mira (el enemigo que vigila, el NPC que te sigue, el jugador
@@ -884,12 +970,13 @@ export class CharacterRig {
     this.head.rotation.x = s(this.head.rotation.x, clamp(headX - torsoX * headLevel, -0.9, 0.9));
     // La cabeza compensa el giro del torso: sin mirada, sigue al frente.
     this.head.rotation.y = s(this.head.rotation.y, clamp(-torsoY * headLevel + lookY, -1.3, 1.3));
-    this.lsxS = s(this.lsxS, lsx);
-    this.lszS = s(this.lszS, lsz);
-    this.lelS = s(this.lelS, lel);
+    const kArmL = throwing ? THROW_K : k;
+    this.lsxS = damp(this.lsxS, lsx, kArmL, dt);
+    this.lszS = damp(this.lszS, lsz, kArmL, dt);
+    this.lelS = damp(this.lelS, lel, kArmL, dt);
     this.armL.rotation.set(this.lsxS, 0, this.lszS);
     this.foreL.rotation.x = this.lelS;
-    const free = st === 'roll' || st === 'dead' || p.takedown >= 0 ? 0 : (1 - p.swap) * (1 - p.melee) * (1 - plantL) * (1 - kk);
+    const free = st === 'roll' || st === 'dead' || p.takedown >= 0 ? 0 : (1 - p.swap) * (1 - p.melee) * (1 - plantL) * (1 - kk) * (1 - dz);
     this.rsxS = damp(this.rsxS, rsx, kArm, dt);
     this.rsyS = s(this.rsyS, rsy * free);
     this.rszS = damp(this.rszS, rsz, kArm, dt);
@@ -1053,6 +1140,10 @@ export class CharacterRig {
     // La geometría es compartida: se libera cuando la suelta el último personaje que la usa.
     release(bodyGeometries, this.bodyKey);
     this.bodyKey = '';
+    if (this.gearMesh) {
+      release(weaponGeometries, GEAR_KEY);
+      this.gearMesh = null;
+    }
     this.setWeapon('none');
     this.skeleton?.dispose();
     // Un material compartido sigue en la caché para los demás personajes y el próximo nivel: solo se libera el propio.

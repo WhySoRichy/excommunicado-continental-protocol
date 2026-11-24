@@ -87,6 +87,8 @@ export interface PlayerIntent {
   /** Rayo de la mirada (la cámara): elige la cobertura a la que correr. Dirección nula si no hay cámara. */
   lookFrom: Vec3Like;
   lookDir: Vec3Like;
+  /** Encarar hacia donde mira la cámara sin apuntar (al lanzar el equipo). */
+  faceCamera: boolean;
 }
 
 export function emptyIntent(): PlayerIntent {
@@ -102,6 +104,7 @@ export function emptyIntent(): PlayerIntent {
     dodgePressed: false,
     lookFrom: { x: 0, y: 0, z: 0 },
     lookDir: { x: 0, y: 0, z: 0 },
+    faceCamera: false,
   };
 }
 
@@ -1365,7 +1368,7 @@ export class PlayerController {
     if (this.state === 'dead' || this.state === 'locked') return;
     if (this.state === 'vault' && this.vault) {
       target = yawFromDir(this.vault.dir.x, this.vault.dir.z);
-    } else if (this.aiming) {
+    } else if (this.aiming || (it.faceCamera && (this.state === 'ground' || this.state === 'air'))) {
       target = it.camYaw;
       rate = MOVE.aimTurnRate;
     } else if (this.state === 'cover' && this.cover) {

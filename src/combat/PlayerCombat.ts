@@ -12,10 +12,11 @@ import { createRayHit, type PhysicsWorld, QueryGroups, type RayHit, type Vec3Lik
 
 import { applyDamage, falloff, heal, makeVitals, restoreVitals, tickVitals, type Vitals, zoneFromHeight } from './damage';
 import type { EnemyManager } from './EnemyManager';
+import { type Grenades, throwVelocity } from './Grenades';
 import type { Pickups } from './Pickups';
 import { STYLE_LABELS, type StyleAction, StyleMeter } from './StyleMeter';
 import { WeaponState } from './WeaponState';
-import { applyUpgrades, loadoutFor, SLOT_GROUPS, suitArmor, type UpgradeId, type WeaponId, WEAPONS } from './weapons';
+import { applyUpgrades, GEAR, type GearId, suitArmor, type UpgradeId, type WeaponId, type WeaponSlot, WEAPONS } from './weapons';
 import type { CombatAudio, CombatCamera, CombatVfx } from './ports';
 
 export interface CombatIntent {
@@ -25,7 +26,11 @@ export interface CombatIntent {
   reloadPressed: boolean;
   takedownPressed: boolean;
   focusPressed: boolean;
-  select: WeaponId | null;
+  /** Lanzar el equipo: al pulsar se prepara, al soltar se lanza. */
+  gearPressed: boolean;
+  gearHeld: boolean;
+  /** Hueco del equipo que se empuña (teclas 1, 2 y 3), o null. */
+  select: WeaponSlot | null;
   cycle: number;
   /**
    * Rayo de apuntado del jugador: desde dónde mira y hacia dónde (unitario). En local lo da su cámara; en red llegará
@@ -43,6 +48,8 @@ export function emptyCombatIntent(): CombatIntent {
     reloadPressed: false,
     takedownPressed: false,
     focusPressed: false,
+    gearPressed: false,
+    gearHeld: false,
     select: null,
     cycle: 0,
     aimFrom: new Vector3(),
@@ -60,6 +67,9 @@ export interface CombatCtx {
   audio: CombatAudio;
   rng: Rng;
   pickups: Pickups;
+  grenades: Grenades;
+  /** Plaza del jugador en la partida (de quién es lo que lanza). */
+  playerId: number;
   /**
    * Rayo de los disparos (personajes y escenario). Sin él, el de la física. El anfitrión de una partida en red lo
    * cambia para los invitados: rebobina a los enemigos al instante que veía cada uno (docs/ESCALABILIDAD.md, fase 3).
@@ -112,6 +122,15 @@ const GRAB_TIME = 0.45;
 // El tajo cabe en la cadencia del cuchillo táctico (0,4 s entre golpes).
 const SLASH_TIME = 0.4;
 export const SWITCH_TIME = 0.28;
+/**
+ * Lanzar el equipo (s): armar el brazo (ahí espera mientras se mantenga la tecla), lanzar y, dentro de ese tramo, cuándo
+ * sale de la mano. Con un toque, todo seguido.
+ */
+const THROW_WIND = 0.18;
+const THROW_CAST = 0.44;
+const THROW_RELEASE = 0.1;
+/** Fracción del gesto que es armar el brazo (la comparten la simulación y la animación). */
+export const THROW_HOLD = 0.4;
 const FOCUS_MIN = 30;
 const FOCUS_DRAIN = 22;
 const FOCUS_SCALE = 0.35;
@@ -133,6 +152,13 @@ const BLIND_OVER_CLEAR = 0.2;
 const BLIND_SIDE_REACH = 0.4;
 const BLIND_SIDE_FWD = 0.45;
 const BLIND_SIDE_Y = 1.3;
+/** Desde dónde sale lo que se lanza (m): altura de pie, agachado y tras un borde; lo que pasa por encima de la cobertura. */
+const THROW_STAND_Y = 1.88;
+const THROW_CROUCH_Y = 1.2;
+const THROW_SIDE_Y = 1.5;
+const THROW_CLEAR = 0.35;
+const THROW_FWD = 0.38;
+const THROW_LEFT = 0.22;
 
 /** Cómo dispararía ahora a ciegas (sin apuntar), o 0 si no puede. */
 export function blindMode(p: PlayerController): BlindMode {
@@ -175,6 +201,15 @@ export class PlayerCombat {
   /** Segundos que le quedan al forcejeo del takedown y al tajo del cuchillo. */
   private grabT = 0;
   private slashT = 0;
+  /** Equipo que lleva para lanzar (el cuarto hueco) y cuántos le quedan. */
+  gear: GearId | null;
+  gearLeft: number;
+  /** Tiempo del gesto de lanzar (s; −1 si no lanza), si ya soltó la tecla y si ya salió de la mano. */
+  private throwT = -1;
+  private throwCast = false;
+  private thrown = false;
+  /** Guardándola: el brazo baja por donde subió, sin ocupar las manos. */
+  private throwBack = false;
   dead = false;
   time = 0;
   readonly stats = {
@@ -191,6 +226,8 @@ export class PlayerCombat {
     switches: 0,
     focusUses: 0,
     knifeKills: 0,
+    gearThrown: 0,
+    stunned: 0,
   };
   sinceDamage = 99;
   sinceDodge = 99;
@@ -228,11 +265,14 @@ export class PlayerCombat {
   private readonly hit = createRayHit();
   private probeTimer = 0;
 
-  constructor(owned: ReadonlySet<UpgradeId>, loadout: WeaponId[] = ['carbine', 'pistol', 'knife']) {
+  constructor(owned: ReadonlySet<UpgradeId>, loadout: WeaponId[] = ['carbine', 'pistol', 'knife'], gear: GearId | null = null) {
     this.owned = owned;
     this.loadout = loadout;
+    this.gear = gear;
+    this.gearLeft = gear ? GEAR[gear].count : 0;
     for (const id of loadout) this.weapons.set(id, new WeaponState(applyUpgrades(WEAPONS[id], owned)));
-    this.current = loadout.includes('pistol') ? 'pistol' : (loadout[0] ?? 'pistol');
+    // Se empieza con el arma corta: discreta al entrar.
+    this.current = loadout.find((id) => WEAPONS[id].slot === 'secondary') ?? loadout[0] ?? 'pistol';
     this.vitals = makeVitals({ maxHealth: 100, maxArmor: suitArmor(owned), regenDelay: 4, regenRate: 20 });
   }
 
@@ -242,16 +282,28 @@ export class PlayerCombat {
     return w;
   }
 
-  /** Aplica en caliente las mejoras compradas (tienda del hub): armas, equipo y traje. */
-  applyOwned(owned: ReadonlySet<UpgradeId>): void {
+  /**
+   * Aplica en caliente las mejoras compradas y el equipo elegido (la armería del vestíbulo): las armas que salen del
+   * equipo se guardan, las que entran se sacan y, si se cambió la que se empuñaba, se pasa a la de su mismo hueco.
+   */
+  applyLoadout(owned: ReadonlySet<UpgradeId>, loadout: WeaponId[], gear: GearId | null = null): void {
     this.owned = owned;
-    this.loadout = loadoutFor(owned);
-    for (const id of this.loadout) {
+    if (gear !== this.gear) {
+      this.gear = gear;
+      this.gearLeft = gear ? GEAR[gear].count : 0;
+      this.resetThrow();
+    }
+    const slot = WEAPONS[this.current].slot;
+    this.loadout = loadout;
+    // Borrar de un Map mientras se recorre es seguro: el iterador sigue con las que quedan.
+    for (const id of this.weapons.keys()) if (!loadout.includes(id)) this.weapons.delete(id);
+    for (const id of loadout) {
       const def = applyUpgrades(WEAPONS[id], owned);
       const w = this.weapons.get(id);
       if (w) w.setDef(def);
       else this.weapons.set(id, new WeaponState(def));
     }
+    if (!this.weapons.has(this.current)) this.current = loadout.find((id) => WEAPONS[id].slot === slot) ?? loadout[0] ?? this.current;
     const maxArmor = suitArmor(owned);
     if (maxArmor !== this.vitals.maxArmor) {
       this.vitals.maxArmor = maxArmor;
@@ -267,6 +319,57 @@ export class PlayerCombat {
   /** Fase del tajo del cuchillo 0..1 (−1 = sin tajo). */
   get slashPhase(): number {
     return this.slashT > 0 ? 1 - this.slashT / SLASH_TIME : -1;
+  }
+
+  /** Lanzando el equipo (desde que arma el brazo hasta que lo baja). */
+  get throwing(): boolean {
+    return this.throwT >= 0 && !this.throwBack;
+  }
+
+  /** Con la granada aún en la mano: todavía se puede guardar. */
+  get throwAiming(): boolean {
+    return this.throwing && !this.thrown;
+  }
+
+  /** Con el brazo armado y la tecla mantenida: se enseña el arco (con un toque no llega a verse). */
+  get throwReady(): boolean {
+    return this.throwing && this.throwT >= THROW_WIND && !this.throwCast;
+  }
+
+  /** Guarda lo que iba a lanzar (recarga, cambio de arma, pausa, caída): el brazo baja por donde subió. */
+  cancelThrow(): void {
+    if (!this.throwAiming) return;
+    this.throwT = Math.min(this.throwT, THROW_WIND);
+    this.throwBack = true;
+  }
+
+  /** Deja de lanzar sin más (caída, reaparición, otro equipo). */
+  private resetThrow(): void {
+    this.throwT = -1;
+    this.throwBack = false;
+  }
+
+  /** Fase del gesto de lanzar 0..1 (−1 si no lanza): hasta `THROW_HOLD` arma el brazo. */
+  get throwPhase(): number {
+    const t = this.throwT;
+    if (t < 0) return -1;
+    return t <= THROW_WIND ? (t / THROW_WIND) * THROW_HOLD : THROW_HOLD + Math.min(1, (t - THROW_WIND) / THROW_CAST) * (1 - THROW_HOLD);
+  }
+
+  /** Cuántas se llevan al contrato. */
+  get gearMax(): number {
+    return this.gear ? GEAR[this.gear].count : 0;
+  }
+
+  /** Repone el equipo (sin pasar de lo que se lleva). */
+  addGear(n: number): void {
+    this.gearLeft = Math.min(this.gearMax, this.gearLeft + n);
+  }
+
+  /** Su granada aturdió a `n` enemigos. */
+  stunnedEnemies(n: number): void {
+    this.stats.stunned += n;
+    this.award('stunned');
   }
 
   /** Inclinación del apuntado (rad, + arriba): la usa la animación de quien lo ve desde fuera. */
@@ -289,6 +392,8 @@ export class PlayerCombat {
     this.switchT = 0;
     this.grabT = 0;
     this.slashT = 0;
+    this.resetThrow();
+    this.gearLeft = this.gearMax;
     this.focusActive = false;
     this.sinceDamage = 99;
     for (const w of this.weapons.values()) w.refill(false);
@@ -365,6 +470,10 @@ export class PlayerCombat {
     this.blindT = Math.max(0, this.blindT - dt);
     this.grabT = Math.max(0, this.grabT - dt);
     this.slashT = Math.max(0, this.slashT - dt);
+    if (this.throwBack) {
+      this.throwT -= dt;
+      if (this.throwT <= 0) this.resetThrow();
+    }
     if (this.dead) return;
     tickVitals(this.vitals, dt);
     this.style.update(dt);
@@ -392,6 +501,10 @@ export class PlayerCombat {
         this.stats.focusUses++;
         ctx.audio.focus(true);
       }
+    }
+    if (this.tickThrow(dt, it, ctx)) {
+      this.tickProbe(dt, it, ctx);
+      return;
     }
     this.handleSwitch(it);
     if (this.switchT > 0) {
@@ -441,23 +554,110 @@ export class PlayerCombat {
         this.melee(ctx);
       }
     }
-    // Sondas de la mira a 20 Hz (mira bloqueada / qué hay debajo).
+    this.tickProbe(dt, it, ctx);
+  }
+
+  /** Sondas de la mira a 20 Hz (mira bloqueada, qué hay debajo) y la apertura de la mira. */
+  private tickProbe(dt: number, it: CombatIntent, ctx: CombatCtx): void {
     this.probeTimer -= dt;
     if (this.probeTimer <= 0) {
       this.probeTimer = 0.05;
       this.probeAim(ctx);
     }
-    const move01 = p.stepSpeed(dt) / 4.6;
-    this.spreadDeg = w.isGun ? w.spread(it.aim, move01, p.posture === 'crouch') : 0;
+    const p = ctx.player;
+    const w = this.weapon;
+    this.spreadDeg = w.isGun ? w.spread(it.aim, p.stepSpeed(dt) / 4.6, p.posture === 'crouch') : 0;
+  }
+
+  // =============================================================== equipo
+  /** ¿Puede lanzar ahora? (de pie o a cubierto, en el aire o deslizándose; no rodando, saltando un muro o agarrado). */
+  private canThrow(p: PlayerController): boolean {
+    const st = p.state;
+    return !this.holstered && st !== 'roll' && st !== 'vault' && st !== 'locked' && st !== 'dead';
+  }
+
+  /**
+   * El gesto de lanzar: al pulsar arma el brazo, espera mientras se mantenga la tecla (con el arco a la vista) y al
+   * soltarla lanza. Antes de que salga de la mano se puede guardar: recargando, cambiando de arma, rodando o con un
+   * takedown. Devuelve si ocupa las manos en este paso.
+   */
+  private tickThrow(dt: number, it: CombatIntent, ctx: CombatCtx): boolean {
+    const p = ctx.player;
+    if (!this.throwing) {
+      if (!it.gearPressed || !this.gear || this.switchT > 0 || !this.canThrow(p)) return false;
+      if (this.gearLeft <= 0) {
+        ctx.audio.empty();
+        return false;
+      }
+      // Si aún la estaba guardando, el brazo vuelve a subir desde donde iba.
+      this.throwT = Math.max(0, this.throwT);
+      this.throwBack = false;
+      this.throwCast = false;
+      this.thrown = false;
+      this.weapon.cancelReload();
+      ctx.audio.grenade('pin');
+      return true;
+    }
+    if (!this.thrown) {
+      // Con la tecla de recargar se guarda y nada más; con las otras se guarda y pasa lo que piden.
+      const away = it.select !== null || it.cycle !== 0 || (it.takedownPressed && this.takedownCandidate(ctx) !== null);
+      if (it.reloadPressed || away || !this.canThrow(p)) {
+        this.cancelThrow();
+        return it.reloadPressed;
+      }
+    }
+    if (this.throwT < THROW_WIND) this.throwT = Math.min(THROW_WIND, this.throwT + dt);
+    else {
+      if (!it.gearHeld) this.throwCast = true;
+      if (this.throwCast) this.throwT += dt;
+    }
+    if (!this.thrown && this.throwT >= THROW_WIND + THROW_RELEASE) this.release(ctx);
+    if (this.throwT >= THROW_WIND + THROW_CAST) this.resetThrow();
+    return true;
+  }
+
+  /** La granada sale de la mano. */
+  private release(ctx: CombatCtx): void {
+    if (!this.gear) return;
+    this.thrown = true;
+    this.gearLeft--;
+    this.stats.gearThrown++;
+    this.throwPlan(ctx.player, ctx.physics, _origin, _dir);
+    ctx.grenades.throw(this.gear, ctx.playerId, _origin, _dir);
+    ctx.audio.grenade('throw');
+    ctx.camera.addTrauma(0.06);
+  }
+
+  /**
+   * De dónde sale y con qué velocidad lo que se lanzaría ahora mismo: la mano izquierda en alto, por encima de la
+   * cobertura baja o asomada tras el borde de la alta. Si algo tapa esa mano, desde el cuerpo.
+   */
+  throwPlan(p: PlayerController, physics: PhysicsWorld, from: Vector3, vel: Vector3): void {
+    const flat = Math.hypot(this.aimDir.x, this.aimDir.z) || 1;
+    const fx = this.aimDir.x / flat;
+    const fz = this.aimDir.z / flat;
+    const f = p.feet;
+    const crouch = p.posture === 'crouch';
+    const c = p.state === 'cover' ? p.cover : null;
+    if (c && c.height === 'high' && c.edgeNear !== 0) {
+      // Asomada tras el borde, como el disparo a ciegas.
+      const k = PLAYER_RADIUS + BLIND_SIDE_REACH;
+      from.set(f.x + c.normal.z * c.edgeNear * k, f.y + THROW_SIDE_Y, f.z - c.normal.x * c.edgeNear * k);
+    } else {
+      const y = c && c.height === 'low' ? Math.max(THROW_CROUCH_Y, c.top + THROW_CLEAR) : crouch ? THROW_CROUCH_Y : THROW_STAND_Y;
+      from.set(f.x + fx * THROW_FWD + fz * THROW_LEFT, f.y + y, f.z + fz * THROW_FWD - fx * THROW_LEFT);
+    }
+    _tmp.set(f.x, f.y + (crouch ? 0.85 : 1.4), f.z);
+    if (!physics.lineOfSight(_tmp, from, QueryGroups.STATIC)) from.copy(_tmp);
+    throwVelocity(from, this.aimFrom, this.aimDir, vel);
   }
 
   private handleSwitch(it: CombatIntent): void {
     let target: WeaponId | null = null;
     if (it.select) {
-      // Cada tecla recorre las armas de su grupo que tengas (1: carabina → escopeta → rifle de tirador).
-      const group = SLOT_GROUPS[WEAPONS[it.select].slot].filter((id) => this.weapons.has(id));
-      const i = group.indexOf(this.current);
-      target = group[i >= 0 ? (i + 1) % group.length : 0] ?? null;
+      // Cada tecla es un hueco del equipo: 1 la principal, 2 la secundaria y 3 la de cuerpo a cuerpo.
+      const slot = it.select;
+      target = this.loadout.find((id) => WEAPONS[id].slot === slot) ?? null;
     } else if (it.cycle !== 0) {
       const i = this.loadout.indexOf(this.current);
       target = this.loadout[(i + it.cycle + this.loadout.length) % this.loadout.length] ?? null;
@@ -629,6 +829,7 @@ export class PlayerCombat {
     else if (method === 'knife') primary = 'knifeKill';
     else if (this.sinceDodge < 1.0) primary = 'dodgeKill';
     else if (zone === 'head') primary = 'headshot';
+    else if (enemy.diedDazed) primary = 'stunKill';
     else if (this.sinceCover < 0.6) primary = 'coverKill';
     else if (this.focusActive) primary = 'focusKill';
     else if (dist > 30) primary = 'longShot';
@@ -797,6 +998,7 @@ export class PlayerCombat {
     this.stats.deaths++;
     this.lastPlayerPos.copy(ctx.player.feet);
     this.focusActive = false;
+    this.resetThrow();
     this.weapon.cancelReload();
     if (this.takedown) {
       this.takedown.enemy.brain.unstun();

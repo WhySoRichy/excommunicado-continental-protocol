@@ -39,6 +39,23 @@ describe('guardado', () => {
     expect(r.profile.updatedAt).toBe(2000);
   });
 
+  it('el equipo se guarda; una partida de antes del inventario y uno manipulado vuelven a lo que se tiene', () => {
+    const kv = new MemoryStore();
+    const p = newProfile(1000);
+    p.upgrades.push('dmr', 'stunGrenade');
+    p.loadout = { primary: 'dmr', secondary: 'pistol', melee: 'knife', gear: 'stun' };
+    saveProfile(kv, p, 2000);
+    expect(loadProfile(kv).profile.loadout).toEqual({ primary: 'dmr', secondary: 'pistol', melee: 'knife', gear: 'stun' });
+
+    // Antes del inventario: sin el campo, el de serie (aunque tuviera armas compradas).
+    const old = JSON.parse(kv.get(PROFILE_KEY)!) as Record<string, unknown>;
+    delete old.loadout;
+    expect(validateProfile(old)!.loadout).toEqual({ primary: 'carbine', secondary: 'pistol', melee: 'knife', gear: null });
+    // Manipulado: armas sin comprar, en otro hueco o que no existen.
+    old.loadout = { primary: 'shotgun', secondary: 'dmr', melee: 'espada', gear: 'stun' };
+    expect(validateProfile(old)!.loadout).toEqual({ primary: 'carbine', secondary: 'pistol', melee: 'knife', gear: 'stun' });
+  });
+
   it('JSON corrupto: se respalda y se reinicia sin lanzar', () => {
     const kv = new MemoryStore();
     kv.set(PROFILE_KEY, '{"coins": 5, ');

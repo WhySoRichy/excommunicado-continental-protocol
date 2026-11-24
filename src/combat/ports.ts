@@ -10,6 +10,9 @@ import type { Vec3Like } from '../physics/Physics';
 /** Sonido de cada arma (jugador y enemigos). */
 export type ShotSound = 'carbine' | 'pistol' | 'pistolSilenced' | 'revolver' | 'dmr' | 'shotgun' | 'enemyPistol' | 'enemySmg' | 'enemyRifle' | 'enemyShotgun';
 
+/** Sonido de una granada: quitar la anilla, lanzarla, rebotar y estallar. */
+export type GrenadeSound = 'pin' | 'throw' | 'bounce' | 'burst';
+
 /** Tipo de impacto de una bala: chispa en superficies, sangre en personajes, polvo en el suelo. */
 export type ImpactKind = 'spark' | 'blood' | 'dust';
 
@@ -28,6 +31,7 @@ export interface CombatAudio {
   ui(kind: 'click' | 'coin' | 'error' | 'confirm'): void;
   alert(pos?: Vec3Like): void;
   laserBeep(progress: number, pos?: Vec3Like): void;
+  grenade(kind: GrenadeSound, pos?: Vec3Like): void;
 }
 
 export interface CombatVfx {
@@ -36,6 +40,8 @@ export interface CombatVfx {
   muzzle(pos: Vec3Like, dir: Vec3Like, player: boolean): void;
   decal(point: Vec3Like, normal: Vec3Like): void;
   casing(pos: Vec3Like, dir: Vec3Like, floorY?: number): void;
+  /** Estallido de una aturdidora: destello, chispas y humo. */
+  burst(pos: Vec3Like): void;
 }
 
 /**
@@ -66,6 +72,7 @@ export const SILENT_AUDIO: CombatAudio = {
   ui() {},
   alert() {},
   laserBeep() {},
+  grenade() {},
 };
 
 export const NO_VFX: CombatVfx = {
@@ -74,4 +81,5 @@ export const NO_VFX: CombatVfx = {
   muzzle() {},
   decal() {},
   casing() {},
+  burst() {},
 };

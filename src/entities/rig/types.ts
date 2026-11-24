@@ -95,6 +95,10 @@ export interface RigPose {
   death: 0 | 1 | 2;
   /** Tiempo dentro del takedown (s) de quien lo ejecuta; −1 si no hay. */
   takedown: number;
+  /** Gesto de lanzar 0..1 (−1 = no lanza): hasta 0,4 arma el brazo izquierdo; después lanza y lo baja. */
+  throw: number;
+  /** 0..1 aturdido por un destello: se tambalea con la mano en la cara. */
+  daze: number;
   /** Progreso del vault 0..1 (−1 = sin dato: pose intermedia). */
   vault: number;
   /** Cobertura en la que está ('none' fuera de ella). */
@@ -134,6 +138,8 @@ export function idlePose(): RigPose {
     flinchSide: 0,
     death: 0,
     takedown: -1,
+    throw: -1,
+    daze: 0,
     vault: -1,
     cover: 'none',
     peek: 0,

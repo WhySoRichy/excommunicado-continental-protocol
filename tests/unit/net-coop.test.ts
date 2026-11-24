@@ -1,11 +1,12 @@
 import { Vector3 } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { EnemyManager } from '../../src/combat/EnemyManager';
+import { Grenades } from '../../src/combat/Grenades';
 import { Pickups } from '../../src/combat/Pickups';
 import { PlayerCombat } from '../../src/combat/PlayerCombat';
 import { PlayerRoster, type PlayerSlot, REMOTE_RESPAWN } from '../../src/combat/PlayerRoster';
 import { type CombatVfx, NO_VFX, SILENT_AUDIO, STILL_CAMERA } from '../../src/combat/ports';
-import { loadoutFor, type UpgradeId } from '../../src/combat/weapons';
+import { DEFAULT_LOADOUT, gearFor, type Loadout, loadoutFor, type UpgradeId } from '../../src/combat/weapons';
 import { FIXED_DT } from '../../src/core/Loop';
 import { Rng } from '../../src/core/rng';
 import type { Enemy } from '../../src/entities/Enemy';
@@ -38,8 +39,12 @@ interface Tracer {
   to: Vector3;
 }
 
-function recordingVfx(tracers: Tracer[]): CombatVfx {
-  return { ...NO_VFX, tracer: (from, to) => tracers.push({ from: new Vector3(from.x, from.y, from.z), to: new Vector3(to.x, to.y, to.z) }) };
+function recordingVfx(tracers: Tracer[], onBurst: () => void): CombatVfx {
+  return {
+    ...NO_VFX,
+    tracer: (from, to) => tracers.push({ from: new Vector3(from.x, from.y, from.z), to: new Vector3(to.x, to.y, to.z) }),
+    burst: onBurst,
+  };
 }
 
 /** El mundo del anfitrión: la partida de verdad, con su jugador local en la plaza 0. */
@@ -63,7 +68,8 @@ function hostSide(level: LevelData, net: TestNetwork) {
     onShotAtPlayer: (enemy, target, hit, dmg) => roster?.shotAt(enemy, target, hit, dmg),
   });
   const pickups = new Pickups();
-  const r = new PlayerRoster({ physics, enemies, civilians: null, vfx: world.vfx, audio: world.audio, rng, pickups });
+  const grenades = new Grenades({ physics, enemies, civilians: null, vfx: world.vfx, audio: world.audio });
+  const r = new PlayerRoster({ physics, enemies, civilians: null, vfx: world.vfx, audio: world.audio, rng, pickups, grenades });
   roster = r;
   const s = level.spawn.pos;
   const local = r.add(new PlayerController(physics, new Vector3(s[0], s[1] + 0.02, s[2]), level.spawn.yaw), new PlayerCombat(new Set()), {
@@ -78,10 +84,11 @@ function hostSide(level: LevelData, net: TestNetwork) {
     enemies,
     civilians: null,
     pickups,
+    grenades,
     ports: { vfx: NO_VFX, audio: SILENT_AUDIO },
-    createPlayer: (at, yaw, upgrades) => ({
+    createPlayer: (at, yaw, upgrades, loadout) => ({
       controller: new PlayerController(physics, new Vector3(at.x, at.y + 0.02, at.z), yaw),
-      combat: new PlayerCombat(upgrades, loadoutFor(upgrades)),
+      combat: new PlayerCombat(upgrades, loadoutFor(upgrades, loadout), gearFor(upgrades, loadout)),
     }),
     spawnNear: (base, _yaw, index, out) => out.set(base.x + index * 1.5, base.y, base.z),
   };
@@ -99,12 +106,13 @@ function hostSide(level: LevelData, net: TestNetwork) {
   const step = (): void => {
     r.step(FIXED_DT, true);
     host.step(FIXED_DT);
+    grenades.fixedUpdate(FIXED_DT);
     r.updateLooks();
     enemies.fixedUpdate(FIXED_DT, r.updateTargets(FIXED_DT));
     physics.step();
     host.endStep();
   };
-  return { physics, enemies, roster: r, local, host, recorder, step, deaths, left, interactions };
+  return { physics, enemies, roster: r, local, host, recorder, step, deaths, left, interactions, grenades };
 }
 
 /** El mundo del invitado: su jugador (lo mueve él) y réplicas de todo lo demás. */
@@ -114,12 +122,14 @@ function guestSide(
   net: TestNetwork,
   upgrades: ReadonlySet<UpgradeId> = new Set(),
   rejoin?: RejoinTicket,
+  loadout: Loadout = DEFAULT_LOADOUT,
 ) {
   const physics = new PhysicsWorld(R);
   buildLevelPhysics(level, physics);
   physics.step();
   const tracers: Tracer[] = [];
-  const vfx = recordingVfx(tracers);
+  let bursts = 0;
+  const vfx = recordingVfx(tracers, () => bursts++);
   const enemies = new EnemyManager({
     level,
     physics,
@@ -133,11 +143,13 @@ function guestSide(
   });
   const pickups = new Pickups();
   const shotRng = new Rng();
-  const roster = new PlayerRoster({ physics, enemies, civilians: null, vfx, audio: SILENT_AUDIO, rng: new Rng(5), pickups });
+  const grenades = new Grenades({ physics, enemies, civilians: null, vfx, audio: SILENT_AUDIO });
+  const roster = new PlayerRoster({ physics, enemies, civilians: null, vfx, audio: SILENT_AUDIO, rng: new Rng(5), pickups, grenades });
   const events = { spawned: 0, died: 0, closed: 0, byHost: false };
   const guest = new NetGuest(link, {
     now: () => net.now,
     upgrades,
+    loadout,
     ...(rejoin ? { rejoin } : {}),
     camera: STILL_CAMERA,
     events: {
@@ -153,11 +165,15 @@ function guestSide(
   /** Crea su jugador con el id que le dio el anfitrión y avisa de que está listo. */
   const enter = (): PlayerSlot => {
     const s = level.spawn.pos;
-    local = roster.add(new PlayerController(physics, new Vector3(s[0], s[1] + 0.02, s[2]), level.spawn.yaw), new PlayerCombat(upgrades, loadoutFor(upgrades)), {
-      local: true,
-      id: guest.id,
-      ports: { rng: shotRng },
-    });
+    local = roster.add(
+      new PlayerController(physics, new Vector3(s[0], s[1] + 0.02, s[2]), level.spawn.yaw),
+      new PlayerCombat(upgrades, loadoutFor(upgrades, loadout), gearFor(upgrades, loadout)),
+      {
+        local: true,
+        id: guest.id,
+        ports: { rng: shotRng },
+      },
+    );
     guest.attach(
       {
         roster,
@@ -165,6 +181,7 @@ function guestSide(
         enemies,
         civilians: null,
         pickups,
+        grenades,
         ports: { vfx, audio: SILENT_AUDIO },
         createReplica: (id, at) =>
           roster.add(new PlayerController(physics, new Vector3(at.x, at.y, at.z), at.yaw), new PlayerCombat(new Set()), { drive: 'replica', id }),
@@ -176,6 +193,7 @@ function guestSide(
   const step = (): void => {
     shotRng.reseed(guest.preStep());
     roster.step(FIXED_DT, true);
+    grenades.fixedUpdate(FIXED_DT);
     if (local) guest.postStep(local.combatIntent);
     physics.step();
   };
@@ -187,19 +205,23 @@ function guestSide(
     enter,
     step,
     tracers,
+    grenades,
     events,
+    get bursts() {
+      return bursts;
+    },
     get local() {
       return local!;
     },
   };
 }
 
-function coop(opts: TestNetworkOptions = { latency: 40, jitter: 8, loss: 0.03 }, upgrades?: ReadonlySet<UpgradeId>) {
+function coop(opts: TestNetworkOptions = { latency: 40, jitter: 8, loss: 0.03 }, upgrades?: ReadonlySet<UpgradeId>, loadout?: Loadout) {
   const net = new TestNetwork(new Rng(99), opts);
   const [hostEnd, guestEnd] = net.pair();
   const h = hostSide(arena, net);
   h.host.accept(hostEnd);
-  const g = guestSide(arena, guestEnd, net, upgrades);
+  const g = guestSide(arena, guestEnd, net, upgrades, undefined, loadout);
   // Saludo: hasta que el anfitrión le da plaza.
   for (let i = 0; i < 30 && g.guest.id === 0; i++) net.advance(MS);
   expect(g.guest.id, 'el anfitrión le da plaza').toBe(1);
@@ -469,6 +491,104 @@ describe('cooperativo en red sin pantalla', () => {
     expect(again.combat.style.score).toBe(1234);
     expect(again.combat.vitals.health).toBe(37);
     expect(back.guest.ticket!.token, 'y una contraseña nueva').not.toBe(ticket.token);
+  });
+
+  it('el invitado juega con el equipo que eligió, saneado por el anfitrión con sus mejoras', () => {
+    const mine: Loadout = { primary: 'dmr', secondary: 'revolver', melee: 'knife', gear: null };
+    // Con las armas compradas, el anfitrión le da las que eligió.
+    const a = coop(undefined, new Set<UpgradeId>(['dmr', 'revolver']), mine);
+    expect(a.h.roster.byId(1)!.combat.loadout).toEqual(['dmr', 'revolver', 'knife']);
+    // Sin comprarlas, las de serie: un invitado no puede traer armas que no tiene.
+    const b = coop(undefined, new Set<UpgradeId>(), mine);
+    expect(b.h.roster.byId(1)!.combat.loadout).toEqual(['carbine', 'pistol', 'knife']);
+  });
+
+  it('un cambio de equipo en la sala llega al anfitrión y vale para la siguiente vez que aparece', () => {
+    const { h, g, tick } = coop(undefined, new Set<UpgradeId>(['shotgun']));
+    expect(h.roster.byId(1)!.combat.loadout[0]).toBe('carbine');
+    g.guest.setLoadout({ ...DEFAULT_LOADOUT, primary: 'shotgun' });
+    tick(10);
+    // A mitad de partida no cambia lo que lleva en la mano.
+    expect(h.roster.byId(1)!.combat.loadout[0]).toBe('carbine');
+    expect(h.host.peerLoadout(1)?.primary).toBe('shotgun');
+  });
+
+  it('el invitado lanza una aturdidora: vuela en su pantalla, el anfitrión la estalla y aturde, y las cuentas cuadran', () => {
+    const { h, g, tick } = coop(undefined, new Set<UpgradeId>(['stunGrenade']), { ...DEFAULT_LOADOUT, gear: 'stun' });
+    const remote = h.roster.byId(1)!;
+    expect(remote.combat.gear).toBe('stun');
+    expect(g.local.combat.gearLeft).toBe(2);
+    const f = g.local.controller.feet;
+    h.local.controller.teleport(new Vector3(0, 0, -20), 0);
+    const enemy = h.enemies.spawnAt('thug', new Vector3(f.x, 0, f.z - 10), Math.PI);
+    h.physics.step();
+    tick(20);
+    aimAt(g.local, f.x, 1.2, f.z - 10);
+    // Un toque de la tecla.
+    g.local.combatIntent.gearPressed = true;
+    tick();
+    g.local.combatIntent.gearPressed = false;
+    let own = 0;
+    let replicas = 0;
+    let dazedSeen = false;
+    for (let i = 0; i < 170; i++) {
+      tick();
+      own = Math.max(own, g.grenades.items.filter((x) => !x.replica).length);
+      replicas = Math.max(replicas, g.grenades.items.filter((x) => x.replica).length);
+      dazedSeen ||= g.enemies.enemies.some((e) => e.dazed);
+    }
+    expect(own, 'la suya vuela en su pantalla sin esperar al anfitrión').toBe(1);
+    expect(replicas, 'y no se dibuja dos veces').toBe(0);
+    expect(g.bursts, 've el estallido una sola vez').toBe(1);
+    expect(enemy.alive).toBe(true);
+    expect(dazedSeen, 've al enemigo aturdido').toBe(true);
+    expect(remote.combat.gearLeft).toBe(1);
+    expect(g.local.combat.gearLeft).toBe(1);
+    expect(remote.combat.stats.stunned).toBe(1);
+    expect(g.local.combat.feed.length + remote.combat.style.counts.stunned, 'puntúa').toBeGreaterThan(0);
+    // Al rato el enemigo se recupera también en su pantalla.
+    tick(330);
+    expect(enemy.dazed).toBe(false);
+    expect(g.enemies.enemies.some((e) => e.dazed)).toBe(false);
+  });
+
+  it('la aturdidora del anfitrión se ve volar en el invitado', () => {
+    const { h, g, tick } = coop();
+    h.local.combat.gear = 'stun';
+    h.local.combat.gearLeft = 2;
+    h.local.combatIntent.aimFrom.set(0, 1.7, 9);
+    h.local.combatIntent.aimDir.set(0, 0.1, -1).normalize();
+    h.local.combatIntent.gearPressed = true;
+    tick();
+    h.local.combatIntent.gearPressed = false;
+    const path: number[] = [];
+    for (let i = 0; i < 150; i++) {
+      tick();
+      const r = g.grenades.items.find((x) => x.replica);
+      if (r) path.push(r.pos.z);
+    }
+    expect(path.length, 'se dibuja mientras vuela').toBeGreaterThan(50);
+    expect(path[path.length - 1]!, 'y avanza').toBeLessThan(path[0]! - 4);
+    expect(g.grenades.items, 'al estallar desaparece').toHaveLength(0);
+    expect(g.bursts).toBe(1);
+  });
+
+  it('los disparos de un invitado los oyen los demás invitados', () => {
+    const { h, g, tick } = coop();
+    aimAt(g.local, g.local.controller.feet.x, 1.4, -20);
+    g.local.combatIntent.firePressed = true;
+    tick();
+    g.local.combatIntent.firePressed = false;
+    // Lo que el anfitrión apunta para los demás: el disparo del jugador 1, con su posición.
+    let heard = false;
+    const take = h.recorder.take.bind(h.recorder);
+    h.recorder.take = () => {
+      const list = take();
+      heard ||= list.some((f) => f[0] === FX.shot && f[1] === 1);
+      return list;
+    };
+    tick(30);
+    expect(heard).toBe(true);
   });
 
   it('una instantánea por cada tres pasos y entradas que caben en un canal modesto', () => {

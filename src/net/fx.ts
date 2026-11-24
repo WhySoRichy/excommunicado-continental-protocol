@@ -42,6 +42,10 @@ export class FxRecorder {
           vfx.casing(p, d, floorY);
           push([FX.casing, owner, q(p.x), q(p.y), q(p.z), q(d.x), q(d.y), q(d.z), q(floorY ?? p.y - 1.4)]);
         },
+        burst: (p) => {
+          vfx.burst(p);
+          push([FX.burst, owner, q(p.x), q(p.y), q(p.z)]);
+        },
       },
       audio: {
         ...audio,
@@ -57,6 +61,11 @@ export class FxRecorder {
         laserBeep: (progress, pos) => {
           audio.laserBeep(progress, pos);
           if (pos) push([FX.beep, owner, Math.round(progress * 100) / 100, q(pos.x), q(pos.y), q(pos.z)]);
+        },
+        grenade: (kind, pos) => {
+          audio.grenade(kind, pos);
+          const at = pos ?? voice?.();
+          if (at) push([FX.grenade, owner, fxTables.grenade.indexOf(kind), q(at.x), q(at.y), q(at.z)]);
         },
       },
     };
@@ -105,6 +114,12 @@ export function playFx(f: FxTuple, vfx: CombatVfx, audio: CombatAudio): void {
       break;
     case FX.beep:
       audio.laserBeep(f[2]!, set(_a, 3));
+      break;
+    case FX.grenade:
+      audio.grenade(fxTables.grenade[f[2]!]!, set(_a, 3));
+      break;
+    case FX.burst:
+      vfx.burst(set(_a, 2));
       break;
     default:
       // El protocolo ya descartó los códigos desconocidos.

@@ -46,6 +46,14 @@ const TRACER_LEN = 1.6;
 /** Casquillos de latón: cuántos a la vez y cuánto duran (caen, rebotan y se quedan un momento en el suelo). */
 const MAX_CASINGS = 24;
 const CASING_LIFE = 1.6;
+/** Estallido de la aturdidora: duración del destello (s), tamaño máximo (m) y su luz. */
+const BURST_LIFE = 0.28;
+const BURST_SIZE = 5.5;
+const BURST_LIGHT = 90;
+const BURST_RANGE = 20;
+const MAX_BURSTS = 2;
+/** Alcance normal de la luz compartida (la del fogonazo). */
+const FLASH_RANGE = 9;
 
 const _m = new Matrix4();
 const _q = new Quaternion();
@@ -55,6 +63,7 @@ const _d = new Vector3();
 const _z = new Vector3(0, 0, 1);
 const _c = new Color();
 const _e = new Euler();
+const _burstN = new Vector3();
 const _span: TracerSpan = { head: 0, tail: 0, done: false };
 const HIDE = new Matrix4().makeScale(0, 0, 0);
 
@@ -96,8 +105,19 @@ export class Vfx implements CombatVfx {
   readonly playerLight: PointLight;
   private playerLightLife = 0;
 
+  private readonly bursts: Sprite[] = [];
+  private readonly burstLife = new Float32Array(MAX_BURSTS);
+  private burstNext = 0;
+  private burstLightLife = 0;
+  private readonly burstTex: CanvasTexture;
+  /** Estalló una aturdidora (el juego decide si deslumbra a este jugador). */
+  onBurst: ((pos: Vec3Like) => void) | null = null;
+
   private readonly smoke: Sprite[] = [];
   private readonly smokeLife = new Float32Array(MAX_SMOKE);
+  /** Cuánto dura y cuánto crece cada voluta (la del disparo, poco; las del estallido, más). */
+  private readonly smokeSpan = new Float32Array(MAX_SMOKE).fill(SMOKE_LIFE);
+  private readonly smokeSize = new Float32Array(MAX_SMOKE).fill(0.5);
   private readonly smokeVel: Vector3[] = [];
   private readonly smokeTex: CanvasTexture;
   private smokeNext = 0;
@@ -179,8 +199,28 @@ export class Vfx implements CombatVfx {
       this.flashes.push(f);
       scene.add(f);
     }
-    this.playerLight = new PointLight(0xffc477, 0, 9, 2);
+    this.playerLight = new PointLight(0xffc477, 0, FLASH_RANGE, 2);
     scene.add(this.playerLight);
+
+    // Destello del estallido: un resplandor que se abre y se apaga.
+    this.burstTex = glowTexture();
+    for (let i = 0; i < MAX_BURSTS; i++) {
+      const sp = new Sprite(
+        new SpriteMaterial({
+          map: this.burstTex,
+          color: new Color(0xfff6e0).multiplyScalar(3.2),
+          blending: AdditiveBlending,
+          transparent: true,
+          opacity: 0,
+          depthWrite: false,
+          toneMapped: false,
+        }),
+      );
+      sp.visible = false;
+      sp.renderOrder = 11;
+      this.bursts.push(sp);
+      scene.add(sp);
+    }
 
     // Casquillos de latón (instanciados): giran, rebotan en el suelo y desaparecen encogiéndose.
     this.casings = new InstancedMesh(
@@ -325,22 +365,62 @@ export class Vfx implements CombatVfx {
     f.quaternion.setFromUnitVectors(_z, _d.normalize());
     f.rotation.z = Math.random() * Math.PI;
     f.visible = true;
-    if (player) {
+    // La luz es una sola: mientras dura la de un estallido, el fogonazo no se la lleva.
+    if (player && this.burstLightLife <= 0) {
       this.playerLight.position.set(pos.x, pos.y, pos.z);
       this.playerLight.intensity = 6;
       this.playerLightLife = 0.05;
     }
     // Voluta de humo que sale hacia delante y se frena.
+    this.puff(pos.x + dir.x * 0.08, pos.y + dir.y * 0.08, pos.z + dir.z * 0.08, dir.x * 2.2, dir.y * 2.2, dir.z * 2.2, SMOKE_LIFE, 0.5);
+  }
+
+  /** Voluta de humo: sale con esa velocidad, se frena, sube, crece hasta `size` y se apaga en `life`. */
+  private puff(x: number, y: number, z: number, vx: number, vy: number, vz: number, life: number, size: number): void {
     const n = this.smokeNext;
     this.smokeNext = (n + 1) % MAX_SMOKE;
     const sp = this.smoke[n]!;
-    sp.position.set(pos.x + dir.x * 0.08, pos.y + dir.y * 0.08, pos.z + dir.z * 0.08);
+    sp.position.set(x, y, z);
     sp.scale.setScalar(0.12);
     sp.material.opacity = 0.5;
     sp.material.rotation = n * 1.7;
     sp.visible = true;
-    this.smokeVel[n]!.set(dir.x, dir.y, dir.z).multiplyScalar(2.2);
-    this.smokeLife[n] = SMOKE_LIFE;
+    this.smokeVel[n]!.set(vx, vy, vz);
+    this.smokeLife[n] = life;
+    this.smokeSpan[n] = life;
+    this.smokeSize[n] = size;
+  }
+
+  /** Estallido de una aturdidora: resplandor, luz breve, chispas en todas direcciones y humo a ras de suelo. */
+  burst(pos: Vec3Like): void {
+    const i = this.burstNext;
+    this.burstNext = (i + 1) % MAX_BURSTS;
+    const sp = this.bursts[i]!;
+    sp.position.set(pos.x, pos.y, pos.z);
+    sp.material.rotation = Math.random() * Math.PI;
+    sp.visible = true;
+    this.burstLife[i] = BURST_LIFE;
+    this.playerLight.position.set(pos.x, pos.y + 0.4, pos.z);
+    this.playerLight.distance = BURST_RANGE;
+    this.burstLightLife = BURST_LIFE;
+    for (let k = 0; k < 4; k++) {
+      const a = (k / 4) * Math.PI * 2 + 0.4;
+      this.impact(pos, _burstN.set(Math.cos(a) * 0.8, 0.7, Math.sin(a) * 0.8), 'spark', 7);
+    }
+    for (let k = 0; k < 5; k++) {
+      const a = (k / 5) * Math.PI * 2;
+      this.puff(pos.x, pos.y, pos.z, Math.cos(a) * 2.4, 0.3, Math.sin(a) * 2.4, 1.5, 1.7);
+    }
+    this.placeBurst(i);
+    this.onBurst?.(pos);
+  }
+
+  private placeBurst(i: number): void {
+    const k = 1 - this.burstLife[i]! / BURST_LIFE;
+    const sp = this.bursts[i]!;
+    // Se abre de golpe y se apaga más despacio.
+    sp.scale.setScalar(BURST_SIZE * (0.25 + 0.75 * (1 - (1 - k) * (1 - k) * (1 - k))));
+    sp.material.opacity = (1 - k) * (1 - k);
   }
 
   update(dt: number): void {
@@ -429,13 +509,25 @@ export class Vfx implements CombatVfx {
         sp.visible = false;
         continue;
       }
-      const k = 1 - this.smokeLife[i]! / SMOKE_LIFE;
+      const k = 1 - this.smokeLife[i]! / this.smokeSpan[i]!;
       const v = this.smokeVel[i]!;
       v.multiplyScalar(Math.exp(-5 * dt));
       sp.position.addScaledVector(v, dt);
       sp.position.y += 0.45 * dt;
-      sp.scale.setScalar(0.12 + 0.5 * Math.sqrt(k));
+      sp.scale.setScalar(0.12 + this.smokeSize[i]! * Math.sqrt(k));
       sp.material.opacity = 0.5 * (1 - k);
+    }
+    for (let i = 0; i < MAX_BURSTS; i++) {
+      if (this.burstLife[i]! <= 0) continue;
+      this.burstLife[i]! -= dt;
+      if (this.burstLife[i]! <= 0) this.bursts[i]!.visible = false;
+      else this.placeBurst(i);
+    }
+    if (this.burstLightLife > 0) {
+      this.burstLightLife -= dt;
+      const k = Math.max(0, this.burstLightLife) / BURST_LIFE;
+      this.playerLight.intensity = BURST_LIGHT * k * k;
+      if (this.burstLightLife <= 0) this.playerLight.distance = FLASH_RANGE;
     }
     if (this.playerLightLife > 0) {
       this.playerLightLife -= dt;
@@ -458,6 +550,11 @@ export class Vfx implements CombatVfx {
       sp.material.dispose();
     }
     this.smokeTex.dispose();
+    for (const sp of this.bursts) {
+      this.scene.remove(sp);
+      sp.material.dispose();
+    }
+    this.burstTex.dispose();
     this.scene.remove(this.tracers, this.points, this.decals, this.playerLight, ...this.flashes);
     this.tracers.geometry.dispose();
     this.points.geometry.dispose();
@@ -483,6 +580,40 @@ function smokeTexture(): CanvasTexture {
   g.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, 64, 64);
+  return new CanvasTexture(c);
+}
+
+/** Resplandor del estallido: núcleo blanco, halo y unos pocos rayos. */
+function glowTexture(): CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 128;
+  c.height = 128;
+  const ctx = c.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D no disponible');
+  const g = ctx.createRadialGradient(64, 64, 0, 64, 64, 63);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.18, 'rgba(255,255,255,0.75)');
+  g.addColorStop(0.5, 'rgba(255,255,255,0.16)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 128, 128);
+  ctx.translate(64, 64);
+  for (let k = 0; k < 9; k++) {
+    const a = (k / 9) * Math.PI * 2 + (k % 3) * 0.12;
+    const len = 34 + ((k * 13) % 24);
+    ctx.save();
+    ctx.rotate(a);
+    const r = ctx.createLinearGradient(0, 0, len, 0);
+    r.addColorStop(0, 'rgba(255,255,255,0.7)');
+    r.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = r;
+    ctx.beginPath();
+    ctx.moveTo(0, -3.5);
+    ctx.lineTo(len, 0);
+    ctx.lineTo(0, 3.5);
+    ctx.fill();
+    ctx.restore();
+  }
   return new CanvasTexture(c);
 }
 
@@ -521,9 +652,21 @@ function flashTexture(kind: 'star' | 'flame'): CanvasTexture {
   return new CanvasTexture(c);
 }
 
+function star(ctx: CanvasRenderingContext2D, x: number, y: number, r: number): void {
+  ctx.beginPath();
+  for (let k = 0; k < 10; k++) {
+    const rr = k % 2 === 0 ? r : r * 0.42;
+    const a = (k / 10) * Math.PI * 2 - Math.PI / 2;
+    ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+
 const iconMats = new Map<string, SpriteMaterial>();
 
-export function alertIconMaterial(kind: 'suspicious' | 'alert'): SpriteMaterial {
+/** Icono sobre la cabeza de un enemigo: sospecha (?), alerta (!) o aturdido (estrellas). */
+export function alertIconMaterial(kind: 'suspicious' | 'alert' | 'stunned'): SpriteMaterial {
   const hit = iconMats.get(kind);
   if (hit) return hit;
   const c = document.createElement('canvas');
@@ -531,7 +674,7 @@ export function alertIconMaterial(kind: 'suspicious' | 'alert'): SpriteMaterial 
   c.height = 64;
   const ctx = c.getContext('2d');
   if (!ctx) throw new Error('Canvas 2D no disponible');
-  const color = kind === 'alert' ? '#ff3344' : '#ffd23f';
+  const color = kind === 'alert' ? '#ff3344' : kind === 'stunned' ? '#cfe6ff' : '#ffd23f';
   ctx.fillStyle = 'rgba(10,10,12,0.75)';
   ctx.beginPath();
   ctx.arc(32, 32, 28, 0, Math.PI * 2);
@@ -543,7 +686,14 @@ export function alertIconMaterial(kind: 'suspicious' | 'alert'): SpriteMaterial 
   ctx.font = 'bold 40px system-ui, Arial, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(kind === 'alert' ? '!' : '?', 32, 35);
+  if (kind === 'stunned') {
+    for (const [x, y, r] of [
+      [20, 36, 9],
+      [33, 24, 11],
+      [45, 38, 8],
+    ] as const)
+      star(ctx, x, y, r);
+  } else ctx.fillText(kind === 'alert' ? '!' : '?', 32, 35);
   const t = new CanvasTexture(c);
   t.colorSpace = SRGBColorSpace;
   const m = new SpriteMaterial({ map: t, depthTest: false, depthWrite: false, transparent: true, toneMapped: false });
