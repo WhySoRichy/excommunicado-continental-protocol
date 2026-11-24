@@ -216,6 +216,8 @@ export class CharacterRig {
   /** Descolocado por un impacto y cojeando (con signo: − izquierda, + derecha). */
   private readonly staggerS: Spring = { x: 0, v: 0 };
   private readonly limpS: Spring = { x: 0, v: 0 };
+  /** Escudo por delante. */
+  private readonly shieldS: Spring = { x: 0, v: 0 };
   /** La granada en la mano izquierda (se crea la primera vez que lanza). */
   private gearMesh: Mesh | null = null;
   /** Lado del último disparo a ciegas por el borde: se mantiene mientras la pose se apaga. */
@@ -1064,6 +1066,15 @@ export class CharacterRig {
       rel = lerp(rel, 0.35, dz);
       rsz = lerp(rsz, 0.16, dz);
       grip *= 1 - dz;
+    }
+    // Escudo: el brazo izquierdo lo sujeta por delante, con el codo pegado, y la derecha dispara a su lado.
+    const sh = this.blend(this.shieldS, st === 'dead' ? 0 : p.shield, 11, dt);
+    if (sh > 0.001) {
+      lsx = lerp(lsx, -0.06 - torsoX, sh);
+      lel = lerp(lel, 1.42, sh);
+      lsz = lerp(lsz, 0.16, sh);
+      rsz = lerp(rsz, 0.02, sh * ak);
+      grip *= 1 - sh;
     }
     if (kk > 0.001) {
       lsx = lerp(lsx, 0.35 - torsoX, kk);

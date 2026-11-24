@@ -78,6 +78,9 @@ export interface BrainCommand {
   suppress: boolean;
   /** Recarga 0..1 (−1: no recarga). */
   reload: number;
+  /** Embestida 0..1 (−1: no embiste); `pounce` es el paso en que salta. */
+  lunge: number;
+  pounce: boolean;
   /** Progreso del telégrafo 0..1 (láser del tirador, alzar escopeta). */
   telegraph: number;
   /** Medidor de detección 0..1 (icono ? → !). */
@@ -99,6 +102,8 @@ export function emptyCommand(): BrainCommand {
     fire: false,
     suppress: false,
     reload: -1,
+    lunge: -1,
+    pounce: false,
     telegraph: 0,
     detection: 0,
     icon: 'none',
@@ -166,6 +171,10 @@ export class EnemyBrain {
   private disarmT = 0;
   private evadeT = 0;
   private searchLeft = 0;
+  private lungeT = -1;
+  private recoverT = 0;
+  private backOff = false;
+  private strafeIn = 0;
   /** Distancia máxima de combate cuando el enemigo asalta. */
   static readonly ASSAULT_RANGE = 8;
 
@@ -243,6 +252,7 @@ export class EnemyBrain {
     if (seconds <= 0 || this.state === 'dead') return;
     this.staggerT = Math.max(this.staggerT, seconds);
     this.telegraphT = 0;
+    this.lungeT = -1;
     this.reactionLeft = Math.max(this.reactionLeft, seconds + 0.15);
   }
 
@@ -312,6 +322,7 @@ export class EnemyBrain {
     this.stateTime = 0;
     this.stunLeft = seconds;
     this.telegraphT = 0;
+    this.lungeT = -1;
   }
 
   /** Un destello que no lo aturde (el jefe): pierde el disparo que preparaba y tarda en volver a apuntar. */
@@ -359,6 +370,8 @@ export class EnemyBrain {
     this.evadeT = 0;
     this.suppression = 0;
     this.telegraphT = 0;
+    this.lungeT = -1;
+    this.recoverT = 0;
     this.flankOrder = 0;
     this.covering = false;
     this.mayFire = true;
@@ -393,6 +406,8 @@ export class EnemyBrain {
     cmd.fire = false;
     cmd.suppress = false;
     cmd.reload = -1;
+    cmd.lunge = -1;
+    cmd.pounce = false;
     cmd.shout = false;
     cmd.hasMove = false;
     cmd.hasLook = false;
@@ -489,7 +504,8 @@ export class EnemyBrain {
         if (this.stateTime > SUSPICIOUS_TIMEOUT && this.detection < 0.3) this.go('patrol');
         break;
       case 'combat':
-        this.tickCombat(dt, p, t, cmd);
+        if (this.def.lunge) this.tickMelee(dt, p, t, cmd);
+        else this.tickCombat(dt, p, t, cmd);
         break;
       case 'cover':
         this.tickCover(dt, p, t, cmd);
@@ -590,7 +606,7 @@ export class EnemyBrain {
       cmd.telegraph = 0;
       return;
     }
-    if (w.telegraph > 0) {
+    if (w.telegraph > 0 && !(w.burstTelegraph && this.burstLeft < w.burst)) {
       if (this.shotCooldown > 0) {
         cmd.telegraph = 0;
         return;
@@ -685,9 +701,82 @@ export class EnemyBrain {
         cmd.moveTo.copy(this.goal);
         cmd.run = true;
       }
+    } else if (this.def.fly) {
+      // El dron no se queda quieto: cambia de sitio a su alrededor.
+      this.strafeIn -= dt;
+      if (this.strafeIn <= 0) {
+        this.strafeIn = this.rng.range(1.6, 3);
+        this.hasGoal = t.randomNear(p.selfPos, 5, this.goal);
+      }
+      if (this.hasGoal) {
+        cmd.hasMove = true;
+        cmd.moveTo.copy(this.goal);
+      }
     } else {
       this.hasGoal = false;
     }
+  }
+
+  /** Cuerpo a cuerpo: corre hacia su presa, se agazapa, salta y tarda en recolocarse. */
+  private tickMelee(dt: number, p: Perception, t: Tactics, cmd: BrainCommand): void {
+    const L = this.def.lunge!;
+    const wind = this.def.weapon.telegraph;
+    cmd.hasLook = true;
+    cmd.lookAt.copy(p.canSee ? p.playerPos : this.lastKnown);
+    cmd.telegraph = 0;
+    if (this.lungeT >= 0) {
+      this.lungeT += dt / L.time;
+      if (this.lungeT < 1) cmd.lunge = this.lungeT;
+      else {
+        this.lungeT = -1;
+        this.recoverT = L.recover;
+        this.backOff = true;
+        this.hasGoal = false;
+      }
+      return;
+    }
+    this.recoverT = Math.max(0, this.recoverT - dt);
+    this.reactionLeft = Math.max(0, this.reactionLeft - dt);
+    const ready = this.recoverT <= 0 && this.reactionLeft <= 0 && p.canSee && p.distance < L.range;
+    if (this.telegraphT > 0 || ready) {
+      // Si la presa se aparta a tiempo, deja de agazaparse y la persigue.
+      if (!p.canSee || p.distance > L.range * 1.7) this.telegraphT = 0;
+      else {
+        this.telegraphT += dt;
+        cmd.telegraph = Math.min(1, this.telegraphT / wind);
+        if (this.telegraphT >= wind) {
+          this.telegraphT = 0;
+          this.lungeT = 0;
+          cmd.telegraph = 0;
+          cmd.lunge = 0;
+          cmd.pounce = true;
+        }
+        return;
+      }
+    }
+    if (this.unseen > LOSE_SIGHT_TO_SEARCH * 2) {
+      this.go('search');
+      return;
+    }
+    if (this.recoverT > 0) {
+      // Tras saltar, si se queda pegado a su presa, se aparta unos pasos sin perderla de vista.
+      if (this.backOff && p.distance < L.range * 0.6) {
+        if (!this.hasGoal) {
+          const l = Math.hypot(p.selfPos.x - p.playerPos.x, p.selfPos.z - p.playerPos.z) || 1;
+          const k = (L.range * 0.65) / l;
+          _away.set(p.selfPos.x + (p.selfPos.x - p.playerPos.x) * k, p.selfPos.y, p.selfPos.z + (p.selfPos.z - p.playerPos.z) * k);
+          this.hasGoal = t.randomNear(_away, 1.2, this.goal);
+          if (!this.hasGoal) this.backOff = false;
+        }
+        if (this.hasGoal) {
+          cmd.hasMove = true;
+          cmd.moveTo.copy(this.goal);
+        }
+      }
+      return;
+    }
+    if (p.canSee && p.distance < L.reach) return;
+    this.moveTo(p.canSee ? p.playerPos : this.lastKnown, true, cmd, p, t);
   }
 
   private tickCover(dt: number, p: Perception, t: Tactics, cmd: BrainCommand): void {

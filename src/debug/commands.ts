@@ -36,7 +36,9 @@ export function registerDebugCommands(game: Game): void {
     },
     { hotkey: 'KeyM', isOn: () => !!game.session?.infiniteAmmo },
   );
-  d.addCommand('spawn', 'Spawn enemigo', () => spawnEnemyAhead(game, game.rng.pick(['thug', 'escort', 'heavy'] as const)), { hotkey: 'KeyJ' });
+  d.addCommand('spawn', 'Spawn enemigo', () => spawnEnemyAhead(game, game.rng.pick(['thug', 'escort', 'heavy', 'shield', 'hound', 'drone'] as const)), {
+    hotkey: 'KeyJ',
+  });
   d.addCommand(
     'killAll',
     'Matar enemigos',

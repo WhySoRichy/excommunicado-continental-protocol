@@ -157,7 +157,7 @@ export function coverMarkerSpot(s: LevelSession, combat: boolean): CoverSpot | n
 export function buildIntelView(s: LevelSession | null, m: MissionDirector | null, hostile: boolean, level: LevelId): IntelView {
   const data = s?.data;
   const types = new Set<EnemyType>();
-  if (m?.id === 'gauntlet') for (const t of ['thug', 'escort', 'marksman', 'heavy'] as const) types.add(t);
+  if (m?.id === 'gauntlet') for (const t of ['thug', 'escort', 'marksman', 'heavy', 'shield', 'hound', 'drone'] as const) types.add(t);
   else if (m) for (const e of data?.enemies ?? []) types.add(e.type);
   else if (hostile) for (const e of data?.enemies ?? []) if (e.spawnOn?.startsWith('excom-')) types.add(e.type);
   const notes: string[] = [];

@@ -59,6 +59,8 @@ export interface Outfit {
   glasses?: boolean;
   /** Auricular con su cable. */
   earpiece?: boolean;
+  /** Color del casco (por defecto, el de acento). */
+  helmet?: number;
   /** Pantalla blindada delante de la cara (con casco). */
   visor?: boolean;
 }
@@ -124,6 +126,8 @@ export interface RigPose {
   hitPart: HitPart;
   /** 0..1 descolocado por un impacto: retrocede doblado, con el arma baja. */
   stagger: number;
+  /** 0..1 lleva el escudo por delante con el brazo izquierdo. */
+  shield: number;
   /** Cojea: −1 de la pierna izquierda, +1 de la derecha, 0 no. */
   limp: number;
   /** Forma de caer al morir: 0 de bruces, 1 de espaldas, 2 de lado, 3 en seco, 4 despedido y 5 de rodillas. */
@@ -174,6 +178,7 @@ export function idlePose(): RigPose {
     flinchFront: true,
     hitPart: 'torso',
     stagger: 0,
+    shield: 0,
     limp: 0,
     death: 0,
     takedown: -1,

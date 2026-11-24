@@ -272,7 +272,7 @@ test.describe('Fase 4 · contratos 2 y 3', () => {
       boat: window.__EXCOM__!.enemies().filter((e) => e.id.startsWith('b-') && e.alive).length,
     }));
     expect(o3.m.objective).toContain('bote');
-    expect(o3.boat).toBe(3);
+    expect(o3.boat).toBe(4);
     await page.evaluate(() => {
       const q = window.__EXCOM__!;
       q.teleport(20, 0, -36, 0);
@@ -477,7 +477,7 @@ test.describe('Fase 4 · contratos 2 y 3', () => {
       });
     const first = await fight();
     expect(first.kneels).toBe(2);
-    expect(first.adds).toBe(3);
+    expect(first.adds).toBe(4);
     // Sin modo dios el jugador cae, gasta un marcador y reaparece en el helipuerto.
     const back = await page.evaluate(() => {
       const q = window.__EXCOM__!;
@@ -506,7 +506,7 @@ test.describe('Fase 4 · contratos 2 y 3', () => {
     // El combate empieza de nuevo: vuelve a arrodillarse en cada umbral y los refuerzos regresan.
     const second = await fight();
     expect(second.kneels).toBe(2);
-    expect(second.adds).toBe(3);
+    expect(second.adds).toBe(4);
   });
 });
 

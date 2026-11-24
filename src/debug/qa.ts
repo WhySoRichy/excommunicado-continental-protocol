@@ -1,6 +1,7 @@
 import { DirectionalLight, type Material, Vector3 } from 'three';
 import type { MeterBus } from '../audio/AudioEngine';
 import { zoneFromHeight } from '../combat/damage';
+import type { EnemyType } from '../levels/types';
 import type { GearId, Loadout, LoadoutSlot, UpgradeId, WeaponId } from '../combat/weapons';
 import type { Action } from '../core/actions';
 import { FIXED_DT } from '../core/Loop';
@@ -98,6 +99,10 @@ export interface EnemySnapshot {
   disarmed: boolean;
   reload: number;
   deathStyle: number;
+  telegraph: number;
+  lunge: number;
+  shieldUp: boolean;
+  shieldHealth: number;
 }
 
 export interface HubSnapshot {
@@ -172,7 +177,7 @@ export interface QaApi {
   aiStats(): { alive: number; total: number; maxNoProgress: number; stuckEvents: number; states: Record<string, number> } | null;
   /** Orienta la cámara para apuntar a un punto del mundo. */
   aimAt(x: number, y: number, z: number): void;
-  spawnEnemy(type: 'thug' | 'escort' | 'marksman' | 'heavy' | 'boss', x: number, y: number, z: number, alert: boolean): string | null;
+  spawnEnemy(type: EnemyType, x: number, y: number, z: number, alert: boolean): string | null;
   /** Añade un jugador que no es el local, quieto (devuelve su id, o −1 sin partida). */
   addPlayer(x: number, y: number, z: number, yaw: number): number;
   /** Cooperativo (fase 3): abre una sala en este equipo, como anfitrión. */
@@ -508,6 +513,10 @@ export function installQa(game: Game): void {
         disarmed: e.brain.disarmed,
         reload: e.cmd.reload,
         deathStyle: e.deathStyle,
+        telegraph: e.cmd.telegraph,
+        lunge: e.cmd.lunge,
+        shieldUp: e.shieldUp,
+        shieldHealth: e.shieldHealth,
       })),
     addPlayer: (x, y, z, yaw) => game.session?.addPlayer(x, y, z, yaw).id ?? -1,
     coopHost: () => coopUi.create(),

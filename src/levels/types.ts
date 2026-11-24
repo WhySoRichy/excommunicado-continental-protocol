@@ -169,7 +169,7 @@ export interface CheckpointDef {
   label: string;
 }
 
-export type EnemyType = 'thug' | 'escort' | 'marksman' | 'heavy' | 'boss';
+export type EnemyType = 'thug' | 'escort' | 'marksman' | 'heavy' | 'boss' | 'shield' | 'hound' | 'drone';
 
 export interface EnemySpawnDef {
   id: string;

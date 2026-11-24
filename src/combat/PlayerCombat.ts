@@ -771,7 +771,15 @@ export class PlayerCombat {
         if (enemy && enemy.alive) {
           anyEnemyHit = true;
           struck = enemy;
-          ctx.vfx.impact(_end, this.hit.normal, 'blood', 5);
+          if (enemy.blocks(_end, this.hit.normal, _dir, _tmp)) {
+            // En el escudo: chispa y no pasa.
+            _end.copy(_tmp);
+            ctx.vfx.impact(_end, _fwd.copy(_dir).negate(), 'spark', 7);
+            if (this.authority) this.onShield(enemy, d.damage * falloff(this.hit.distance, d.falloffStart, d.falloffEnd), ctx);
+            ctx.vfx.tracer(_muzzle, _end, 0xffe2a0);
+            continue;
+          }
+          ctx.vfx.impact(_end, this.hit.normal, enemy.def.body ? 'spark' : 'blood', 5);
           if (this.authority) {
             const zone = zoneFromHeight(_end.y, enemy.feet.y, enemy.height);
             const dmg = d.damage * falloff(this.hit.distance, d.falloffStart, d.falloffEnd);
@@ -817,6 +825,13 @@ export class PlayerCombat {
     ctx.enemies.nearShot(_muzzle, base, Math.min(d.range, _muzzle.distanceTo(_aim) + 6), struck);
     ctx.enemies.noise(p.feet, d.noise);
     ctx.civilians?.noise(p.feet, Math.max(d.noise, 12));
+  }
+
+  /** Un impacto en un escudo: marca de blindaje y, si se rompe, chispas. */
+  private onShield(enemy: Enemy, amount: number, ctx: CombatCtx): void {
+    if (enemy.shieldHit(amount, ctx.player.feet)) ctx.vfx.impact(_tmp.set(enemy.feet.x, enemy.feet.y + 1, enemy.feet.z), _fwd, 'spark', 18);
+    this.showMarker('armor', ctx.audio, ctx.camera, 'gun');
+    this.listener?.marker('armor');
   }
 
   private onHit(enemy: Enemy, zone: string, killed: boolean, armored: boolean, dist: number, method: 'gun' | 'knife' | 'takedown', ctx: CombatCtx): void {
@@ -877,8 +892,13 @@ export class PlayerCombat {
     if (!best) return;
     if (!this.authority) {
       // Sin autoridad solo se ve el golpe: el daño lo decide el anfitrión.
-      _tmp.set(best.feet.x, best.feet.y + 1.2, best.feet.z);
-      ctx.vfx.impact(_tmp, _fwd.set(-(best.feet.x - p.feet.x), 0, -(best.feet.z - p.feet.z)).normalize(), 'blood', 8);
+      _tmp.set(best.feet.x, best.feet.y + best.height * 0.6, best.feet.z);
+      ctx.vfx.impact(
+        _tmp,
+        _fwd.set(-(best.feet.x - p.feet.x), 0, -(best.feet.z - p.feet.z)).normalize(),
+        best.def.body || best.shieldUp ? 'spark' : 'blood',
+        8,
+      );
       return;
     }
     // Por la espalda o sin alertar: letal siempre.
@@ -888,11 +908,17 @@ export class PlayerCombat {
     const dz = best.feet.z - p.feet.z;
     const behind = (dx * efx + dz * efz) / Math.max(1e-4, Math.hypot(dx, dz)) > 0.3;
     const unaware = best.state === 'patrol' || best.state === 'suspicious';
-    const res = best.applyHit(behind || unaware ? 999 : w.def.damage, 'body', p.feet, 1, behind || unaware);
-    _tmp.set(best.feet.x, best.feet.y + 1.2, best.feet.z);
-    ctx.vfx.impact(_tmp, _fwd.set(-dx, 0, -dz).normalize(), 'blood', 8);
+    _tmp.set(best.feet.x, best.feet.y + best.height * 0.6, best.feet.z);
     this.stats.shotsFired++;
     this.stats.shotsHit++;
+    if (best.shieldUp && !behind) {
+      // El escudo para el tajo.
+      ctx.vfx.impact(_tmp, _fwd.set(-dx, 0, -dz).normalize(), 'spark', 8);
+      this.onShield(best, w.def.damage, ctx);
+      return;
+    }
+    const res = best.applyHit(behind || unaware ? 999 : w.def.damage, 'body', p.feet, 1, behind || unaware);
+    ctx.vfx.impact(_tmp, _fwd.set(-dx, 0, -dz).normalize(), best.def.body ? 'spark' : 'blood', 8);
     this.onHit(best, 'body', res.killed, false, bestD, 'knife', ctx);
   }
 
@@ -908,11 +934,13 @@ export class PlayerCombat {
     let bestD = TD_RANGE;
     for (const e of ctx.enemies.enemies) {
       if (!e.alive) continue;
-      // El jefe solo cae de un takedown arrodillado; el resto, siempre (también aturdidos).
-      if (e.def.takedownWhenStunned && e.state !== 'stunned') continue;
+      // El jefe solo cae de un takedown arrodillado y las máquinas, nunca; el resto, siempre (también aturdidos).
+      if (e.def.takedown === 'never' || (e.def.takedown === 'stunned' && e.state !== 'stunned')) continue;
       const dx = e.feet.x - p.feet.x;
       const dz = e.feet.z - p.feet.z;
       const d = Math.hypot(dx, dz);
+      // Con el escudo por delante, solo por la espalda.
+      if (e.shieldUp && (dx * -Math.sin(e.mover.yaw) + dz * -Math.cos(e.mover.yaw)) / Math.max(1e-4, d) < 0.3) continue;
       if (d > bestD || Math.abs(e.feet.y - p.feet.y) > 0.8) continue;
       if ((dx * fx + dz * fz) / Math.max(1e-4, d) < TD_ARC) continue;
       best = e;

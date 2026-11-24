@@ -17,7 +17,7 @@ export interface IntelView {
   alive: number | null;
 }
 
-const ORDER: readonly EnemyType[] = ['thug', 'escort', 'marksman', 'heavy', 'boss'];
+const ORDER: readonly EnemyType[] = ['thug', 'escort', 'marksman', 'heavy', 'shield', 'hound', 'drone', 'boss'];
 const hex = (c: number): string => `#${c.toString(16).padStart(6, '0')}`;
 
 /** Fila de la leyenda: glifo con su color (nunca solo color) + nombre + cómo enfrentarlo. */

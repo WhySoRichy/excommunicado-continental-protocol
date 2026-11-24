@@ -133,7 +133,7 @@ export const nightclub: LevelData = {
     { id: 'alarm-b', type: 'escort', pos: [2, 0, 17], yaw: 0, spawnOn: 'alarm' },
     { id: 'alarm-c', type: 'thug', pos: [0, 0, 19], yaw: 0, spawnOn: 'alarm' },
     { id: 'r-a', type: 'thug', pos: [10, 0, -13], yaw: Math.PI, spawnOn: 'reinforce' },
-    { id: 'r-b', type: 'thug', pos: [10, 0, -15.5], yaw: Math.PI, spawnOn: 'reinforce' },
+    { id: 'r-b', type: 'shield', pos: [10, 0, -15.5], yaw: Math.PI, spawnOn: 'reinforce' },
     { id: 'r-c', type: 'escort', pos: [0, 0, 10], yaw: 0, spawnOn: 'reinforce' },
   ],
   civilians: [

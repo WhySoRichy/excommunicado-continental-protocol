@@ -2,9 +2,13 @@ import { AdditiveBlending, BoxGeometry, Color, Mesh, MeshBasicMaterial, type Sce
 import { FIXED_DT } from '../core/Loop';
 import { clamp, damp } from '../core/math';
 import { alertIconMaterial } from '../render/vfx';
+import { weaponMaterial } from '../render/weaponMaterial';
 import { CharacterRig, type DetailView, idlePose, type RigPose } from './CharacterRig';
 import { CORPSE_SETTLE, type Enemy, THROW_DELAY } from './Enemy';
-import { type BodyYaw, bodyYaw, type LookAngles, lookAngles, updateBodyYaw } from './rigMath';
+import { acquire, release, type SharedGeometry } from './rig/geometry';
+import { shieldGeometry } from './rig/weapons';
+import { type BodyYaw, bodyYaw, type LookAngles, lookAngles, smooth, updateBodyYaw } from './rigMath';
+import { DroneRig, type EnemyBody, HoundRig } from './RobotRigs';
 
 /** Grosor del rim en reposo: por debajo del umbral del bloom, para que solo brillen el impacto y el telégrafo. */
 const RIM_BASE = 0.5;
@@ -21,13 +25,20 @@ const laserGeo = new BoxGeometry(1, 1, 1);
 const TURN_OMEGA = 22;
 const RED = new Color(0xff2233);
 const _muzzle = new Vector3();
+/** Altura del icono sobre los pies según el cuerpo (m); de pie y agachado, en una persona. */
+const ICON_Y = { hound: 1.35, drone: 1.05, stand: 2.2, crouch: 1.55 } as const;
+/** El escudo: dónde va levantado (m), bajado y, en el suelo, caído. */
+const SHIELD_UP = { x: -0.12, y: 0.92, z: -0.45, rx: 0, ry: 0 } as const;
+const SHIELD_DOWN = { x: -0.36, y: 0.66, z: -0.18, rx: 0.12, ry: 0.9 } as const;
+const SHIELD_FLOOR = { x: -0.55, y: 0.04, z: -0.75, rx: -Math.PI / 2, ry: 0.35 } as const;
+const shieldGeometries = new Map<string, SharedGeometry>();
 
 /**
  * Vista de un enemigo: su personaje animado, el icono de alerta y el láser del tirador. Lee el estado de `Enemy` y
  * nunca lo cambia (la simulación corre igual sin ella; ver docs/ESCALABILIDAD.md).
  */
 export class EnemyView {
-  readonly rig: CharacterRig;
+  readonly rig: EnemyBody;
   /** Marca de la última sincronización (para soltar las vistas de los enemigos retirados). */
   seen = 0;
   private readonly pose: RigPose = idlePose();
@@ -35,6 +46,10 @@ export class EnemyView {
   private readonly laser: Mesh | null;
   private readonly laserMat: MeshBasicMaterial | null;
   private readonly baseRim: Color;
+  private shield: Mesh | null = null;
+  /** 1 levantado, 0 bajado (con su suavizado), y caída al suelo. */
+  private shieldK = 0;
+  private shieldFall = 0;
   /** Segundos de juego desde la muerte (animación de caída); −1 mientras vive. */
   private deadFor = -1;
   /** Reloj de la vigilancia de guardia (mirar a un lado y a otro), desfasado entre enemigos. */
@@ -52,22 +67,37 @@ export class EnemyView {
     const def = enemy.def;
     this.glance = enemy.index * 2.3;
     // Material propio por enemigo (mismo programa): el destello de impacto es individual.
-    this.rig = new CharacterRig(`enemy:${enemy.id}`, {
-      colors: def.colors,
-      rimColor: def.color,
-      rimStrength: RIM_BASE,
-      hair: def.hair,
-      beard: def.beard,
-      bulk: def.bulk,
-      outfit: def.outfit,
-      weapon: def.weapon.model,
-      uniqueMaterial: true,
-      lod: true,
-    });
+    const key = `enemy:${enemy.id}`;
+    if (def.body && def.robot) {
+      const look = { colors: def.robot, rimColor: def.color, rimStrength: RIM_BASE };
+      this.rig = def.body === 'hound' ? new HoundRig(key, look) : new DroneRig(key, look);
+    } else
+      this.rig = new CharacterRig(key, {
+        colors: def.colors,
+        rimColor: def.color,
+        rimStrength: RIM_BASE,
+        hair: def.hair,
+        beard: def.beard,
+        bulk: def.bulk,
+        outfit: def.outfit,
+        weapon: def.weapon.model,
+        uniqueMaterial: true,
+        lod: true,
+      });
+    if (def.shield) {
+      const accent = def.color;
+      this.shield = new Mesh(
+        acquire(shieldGeometries, String(accent), () => shieldGeometry(accent)),
+        weaponMaterial(),
+      );
+      this.shield.castShadow = true;
+      this.shield.receiveShadow = true;
+      this.rig.root.add(this.shield);
+    }
     this.baseRim = new Color(def.color);
     scene.add(this.rig.root);
-    // El material (textura dibujada en canvas) se le pone al mostrarlo.
-    this.icon = new Sprite();
+    // Con un icono ya puesto, su programa se compila al cargar el nivel; el que toca se elige al mostrarlo.
+    this.icon = new Sprite(alertIconMaterial('suspicious'));
     this.icon.scale.set(0.45, 0.45, 0.45);
     this.icon.visible = false;
     this.icon.renderOrder = 20;
@@ -123,7 +153,10 @@ export class EnemyView {
     if (!e.alive) this.deadFor += dt;
     pose.stateTime = thrown ? Math.max(0, e.thrownT - THROW_DELAY) : e.alive ? m.stateTime : this.deadFor;
     pose.recoil = e.recoilVis;
-    pose.melee = 0;
+    // El sabueso se agazapa mientras avisa y salta; a una persona no le toca.
+    pose.melee = e.def.lunge && e.alive ? e.cmd.telegraph : 0;
+    pose.slash = e.alive ? e.cmd.lunge : -1;
+    pose.shield = this.updateShield(dt);
     pose.flinch = e.flinch * e.flinch;
     pose.flinchSide = e.flinchSide;
     pose.flinchFront = e.flinchFront;
@@ -151,12 +184,35 @@ export class EnemyView {
       this.icon.visible = true;
       const kind = e.cmd.icon;
       this.icon.material = alertIconMaterial(dazed ? 'stunned' : kind === 'alert' || kind === 'flank' ? kind : 'suspicious');
-      this.icon.position.set(root.position.x, root.position.y + (m.posture === 'crouch' ? 1.55 : 2.2), root.position.z);
+      this.icon.position.set(root.position.x, root.position.y + ICON_Y[e.def.body ?? (m.posture === 'crouch' ? 'crouch' : 'stand')], root.position.z);
       const s = dazed ? 0.42 : kind === 'alert' || kind === 'flank' ? 0.5 : 0.32 + e.cmd.detection * 0.16;
       this.icon.scale.set(s, s, s);
     } else {
       this.icon.visible = false;
     }
+  }
+
+  /**
+   * El escudo va por delante; si se lo bajan (o va de guardia), cae a un lado; si se rompe o muere, al suelo. Devuelve
+   * cuánto lo sostiene el brazo.
+   */
+  private updateShield(dt: number): number {
+    const s = this.shield;
+    if (!s) return 0;
+    const e = this.enemy;
+    const lost = !e.alive || e.shieldBroken;
+    this.shieldK = damp(this.shieldK, !lost && e.shieldUp ? 1 : 0, 12, dt);
+    this.shieldFall = lost ? Math.min(1, this.shieldFall + dt * 2.4) : 0;
+    const k = smooth(0, 1, this.shieldK);
+    const f = this.shieldFall * this.shieldFall;
+    const duck = e.mover.posture === 'crouch' ? 0.42 : 0;
+    const mix = (key: 'x' | 'y' | 'z' | 'rx' | 'ry'): number => {
+      const held = SHIELD_DOWN[key] + (SHIELD_UP[key] - SHIELD_DOWN[key]) * k;
+      return held + (SHIELD_FLOOR[key] - held) * f;
+    };
+    s.position.set(mix('x'), mix('y') - duck * (1 - f), mix('z'));
+    s.rotation.set(mix('rx') + (e.flinch * 0.12 + e.stagger * 0.2) * (1 - f), mix('ry'), 0);
+    return lost ? 0 : 0.45 + 0.55 * k;
   }
 
   /** Láser del tirador mientras telegrafía el disparo: de la boca del arma al pecho del objetivo. */
@@ -190,7 +246,7 @@ export class EnemyView {
       const c = e.cmd;
       const r = this.rig.root;
       if (c.hasLook) {
-        const eye = r.position.y + (e.mover.posture === 'crouch' ? 0.95 : 1.45);
+        const eye = r.position.y + (e.def.body ? e.eyeHeight : e.mover.posture === 'crouch' ? 0.95 : 1.45);
         const l = lookAngles(r.position.x, eye, r.position.z, r.rotation.y, c.lookAt.x, c.lookAt.y + e.targetRise, c.lookAt.z, this.look);
         pose.lookYaw = l.yaw;
         pose.look = 1;
@@ -209,6 +265,10 @@ export class EnemyView {
   }
 
   dispose(): void {
+    if (this.shield) {
+      release(shieldGeometries, String(this.enemy.def.color));
+      this.shield = null;
+    }
     this.rig.dispose();
     this.scene.remove(this.rig.root, this.icon);
     if (this.laser) this.scene.remove(this.laser);
@@ -244,7 +304,7 @@ export class EnemyViews {
   }
 
   /** El personaje de un enemigo (para medir su animación en las pruebas). */
-  rigOf(e: Enemy): CharacterRig | null {
+  rigOf(e: Enemy): EnemyBody | null {
     return this.views.get(e)?.rig ?? null;
   }
 

@@ -68,7 +68,7 @@ export const MOVE = {
 } as const;
 
 /** `toCover`: corriendo hasta una cobertura para pegarse a ella. */
-export type MoveState = 'ground' | 'air' | 'roll' | 'slide' | 'vault' | 'toCover' | 'cover' | 'locked' | 'dead';
+export type MoveState = 'ground' | 'air' | 'roll' | 'slide' | 'vault' | 'toCover' | 'cover' | 'locked' | 'dead' | 'fly';
 export type Posture = 'stand' | 'crouch';
 export type CoverHeight = 'low' | 'high';
 
@@ -266,6 +266,15 @@ export function yawFromDir(x: number, z: number): number {
   return Math.atan2(-x, -z);
 }
 
+/** Lo que cambia en quien no es una persona: su cápsula (media altura, m) y si vuela. */
+export interface MoverBody {
+  half?: number;
+  flies?: boolean;
+}
+
+/** Vuelo: aceleración (m/s²), velocidad vertical máxima (m/s) y lo deprisa que corrige la altura (1/s). */
+const FLY = { accel: 9, climb: 2.6, gain: 2.4 } as const;
+
 /** Contactos cuya normal apunta hacia abajo más que esto son techo. */
 const CEILING_NORMAL_Y = 0.5;
 
@@ -369,12 +378,25 @@ export class PlayerController {
   /** Grupos de colisión del personaje (jugador o enemigo: el mismo motor robusto para ambos). */
   readonly groups: number;
 
-  constructor(physics: PhysicsWorld, spawn: Vector3, yaw: number, groups: number = Groups.PLAYER) {
+  private readonly standHalf: number;
+  private readonly crouchHalf: number;
+  private readonly flies: boolean;
+  /** Altura a la que vuela (pies, en el mundo). */
+  flyY = 0;
+
+  constructor(physics: PhysicsWorld, spawn: Vector3, yaw: number, groups: number = Groups.PLAYER, body: MoverBody = {}) {
     this.physics = physics;
     this.groups = groups;
-    this.center.set(spawn.x, spawn.y + STAND_HALF + PLAYER_RADIUS, spawn.z);
-    this.char = physics.createCharacter(this.center, PLAYER_RADIUS, STAND_HALF, groups);
+    this.standHalf = body.half ?? STAND_HALF;
+    this.crouchHalf = body.half ?? CROUCH_HALF;
+    this.flies = body.flies ?? false;
+    this.center.set(spawn.x, spawn.y + this.standHalf + PLAYER_RADIUS, spawn.z);
+    this.char = physics.createCharacter(this.center, PLAYER_RADIUS, this.standHalf, groups);
     this.sensor = new CoverSensor(physics, this.char.collider, PLAYER_RADIUS, CROUCH_HALF);
+    if (this.flies) {
+      this.state = 'fly';
+      this.flyY = spawn.y;
+    }
     this.colOut = new physics.R.CharacterCollision();
     this.feet.copy(spawn);
     this.prevFeet.copy(spawn);
@@ -388,7 +410,7 @@ export class PlayerController {
   }
 
   get halfHeight(): number {
-    return this.posture === 'stand' ? STAND_HALF : CROUCH_HALF;
+    return this.posture === 'stand' ? this.standHalf : this.crouchHalf;
   }
 
   /** Altura total actual de la cápsula. */
@@ -419,7 +441,7 @@ export class PlayerController {
     this.prevFeet.copy(feet);
     this.velocity.set(0, 0, 0);
     this.yaw = this.prevYaw = yaw;
-    this.state = 'ground';
+    this.state = this.flies ? 'fly' : 'ground';
     this.stateTime = 0;
     this.vault = null;
     this.cover = null;
@@ -446,7 +468,7 @@ export class PlayerController {
       this.state = 'locked';
       this.velocity.set(0, this.velocity.y, 0);
     } else if (this.state === 'locked') {
-      this.state = this.grounded ? 'ground' : 'air';
+      this.state = this.flies ? 'fly' : this.grounded ? 'ground' : 'air';
     }
     this.stateTime = 0;
   }
@@ -486,8 +508,8 @@ export class PlayerController {
   }
 
   hasStandRoom(at: Vector3 = this.feet): boolean {
-    _tmp.set(at.x, at.y + STAND_HALF + PLAYER_RADIUS + 0.03, at.z);
-    return this.physics.overlapsCapsule(_tmp, PLAYER_RADIUS - 0.02, STAND_HALF, QueryGroups.STATIC_AND_ENEMIES, this.char.collider) === null;
+    _tmp.set(at.x, at.y + this.standHalf + PLAYER_RADIUS + 0.03, at.z);
+    return this.physics.overlapsCapsule(_tmp, PLAYER_RADIUS - 0.02, this.standHalf, QueryGroups.STATIC_AND_ENEMIES, this.char.collider) === null;
   }
 
   private setSnap(on: boolean): void {
@@ -547,6 +569,9 @@ export class PlayerController {
         break;
       case 'cover':
         this.stepCover(dt, it, wishLen);
+        break;
+      case 'fly':
+        this.stepFly(dt, wishLen);
         break;
       case 'locked':
         this.velocity.x = 0;
@@ -670,6 +695,14 @@ export class PlayerController {
       this.velocity.y = 0;
       this.setState('ground');
     }
+  }
+
+  /** Vuela: se mueve con inercia y corrige la altura poco a poco. */
+  private stepFly(dt: number, wishLen: number): void {
+    this.accelerate(dt, MOVE.run * wishLen * this.speedMultiplier, FLY.accel, FLY.accel);
+    this.velocity.y = clamp((this.flyY - this.feet.y) * FLY.gain, -FLY.climb, FLY.climb);
+    this.move(dt, false);
+    this.grounded = false;
   }
 
   private applyGravity(dt: number): void {

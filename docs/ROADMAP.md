@@ -73,7 +73,7 @@ Ya hay pausa de impacto y sacudida en cada baja, casquillos, humo en la boca del
 - Los tests de `tests/unit/levels.test.ts` y `hubNav.test.ts` validan solos la luz mínima y la conectividad del nivel nuevo.
 
 ### 5. Más variedad de enemigos y jefes
-- Enemigo con escudo (obliga a flanquear o usar takedown), perros o drones.
+- Hecho: antidisturbios con escudo, sabueso y dron. Quedan por aprovechar en mapas más grandes, con sitio para rodear y alturas.
 - Patrones propios para Vance y el Juez (hoy comparten la IA general con fases).
 
 ### 6. Historia mínima

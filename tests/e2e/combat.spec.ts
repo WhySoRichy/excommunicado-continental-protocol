@@ -166,22 +166,20 @@ test.describe('Fase 2 · combate', () => {
     await page.screenshot({ path: shotPath('fase2-headshot-feed') });
 
     // Daño al jugador: indicador direccional y bajada de integridad.
-    await page.evaluate(() => {
+    // El arco se desvanece en tiempo real: se lee en el mismo paso en que llega el daño, con el HUD recién pintado.
+    const hurt = await page.evaluate(() => {
       const q = window.__EXCOM__!;
+      const life = () => q.combat()!.health + q.combat()!.armor;
       q.teleport(0, 0, 4, 0);
       q.spawnEnemy('escort', 6, 0, 0, true);
-      q.step(240, {});
+      const full = life();
+      for (let i = 0; i < 900 && life() >= full; i++) q.step(1, {});
+      q.hud();
+      const arcs = [...document.querySelectorAll<HTMLElement>('#hud .dmg-arc')].map((e) => Number(e.style.opacity || '0'));
+      return { full, now: life(), arc: Math.max(...arcs) };
     });
-    const hurt = await page.evaluate(() => window.__EXCOM__!.combat()!);
-    expect(hurt.armor + hurt.health).toBeLessThan(160);
-    // El arco se desvanece en tiempo real: se sigue simulando hasta leerlo recién pintado.
-    await expect
-      .poll(async () => {
-        await page.evaluate(() => window.__EXCOM__!.step(20, {}));
-        const arcs = await page.locator('#hud .dmg-arc').evaluateAll((els) => els.map((e) => Number((e as HTMLElement).style.opacity || '0')));
-        return Math.max(...arcs);
-      })
-      .toBeGreaterThan(0);
+    expect(hurt.now).toBeLessThan(hurt.full);
+    expect(hurt.arc).toBeGreaterThan(0);
     await page.screenshot({ path: shotPath('fase2-dano-direccional') });
 
     // Muerte → pantalla con causa explicada y cómo reaparecer.
@@ -313,6 +311,89 @@ test.describe('Fase 2 · combate', () => {
     expect(r.c.stats.switches).toBeGreaterThan(10);
     expect(r.c.stats.shotsFired).toBeGreaterThan(30);
     expect(r.c.stats.reloads).toBeGreaterThan(3);
+  });
+
+  test('antidisturbios, sabueso y dron: el escudo para las balas de frente, el sabueso muerde tras avisar y el dron vuela y cae', async ({ page }) => {
+    const errors = collectErrors(page);
+    await openGame(page);
+    await page.evaluate(() => window.__EXCOM__!.playLevel('arena'));
+    await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('playing');
+    const r = await page.evaluate(() => {
+      const q = window.__EXCOM__!;
+      q.setManual(true);
+      const get = (id: string) => q.enemies().find((e) => e.id === id)!;
+      // --- Escudo ---
+      q.setGod(true);
+      q.teleport(9, 0, 20, 0);
+      q.setLook(0, -0.1);
+      q.press('weapon2');
+      q.step(40, {});
+      const programs = q.info().programs;
+      const sh = q.spawnEnemy('shield', 9, 0, 11, true)!;
+      let up = false;
+      for (let i = 0; i < 120 && !up; i++) {
+        q.step(1, {});
+        up = get(sh).shieldUp;
+      }
+      const before = get(sh);
+      for (let i = 0; i < 40; i++) {
+        const e = get(sh);
+        q.aimAt(e.x, e.y + 1, e.z);
+        if (i % 13 === 12) q.press('fire');
+        q.step(1, { aim: true });
+      }
+      const after = get(sh);
+      const marker = q.combat()!.stats.shotsHit;
+      q.runDebug('killAll');
+      q.step(20, {});
+      // --- Dron ---
+      const dr = q.spawnEnemy('drone', 9, 0, 11, true)!;
+      let high = 0;
+      let warned = false;
+      for (let i = 0; i < 300; i++) {
+        q.step(1, {});
+        const e = get(dr);
+        high = Math.max(high, e.y);
+        warned ||= e.telegraph > 0.5;
+      }
+      const flying = get(dr).y;
+      q.hitEnemy(dr, { damage: 999 });
+      q.step(90, {});
+      const fallen = get(dr);
+      // --- Sabueso ---
+      q.setGod(false);
+      const life = () => q.combat()!.health + q.combat()!.armor;
+      const full = life();
+      const ho = q.spawnEnemy('hound', 9, 0, 11, true)!;
+      let crouched = 0;
+      let lunged = false;
+      let bite = 0;
+      for (let i = 0; i < 480 && bite === 0; i++) {
+        q.step(1, {});
+        const e = get(ho);
+        if (e.telegraph > 0) crouched++;
+        lunged ||= e.lunge >= 0;
+        bite = full - life();
+      }
+      const inv = q.invariants();
+      const shot = { programs, now: q.info().programs };
+      return { up, before, after, marker, high, warned, flying, fallen, crouched, lunged, bite, inv, shot };
+    });
+    expect(r.up).toBe(true);
+    expect(r.marker, 'los disparos le dan').toBeGreaterThan(0);
+    expect(r.after.health, 'pero no pasan del escudo').toBe(r.before.health);
+    expect(r.after.shieldHealth).toBeLessThan(r.before.shieldHealth);
+    expect(r.high).toBeGreaterThan(2.2);
+    expect(r.flying).toBeGreaterThan(2);
+    expect(r.warned).toBe(true);
+    expect(r.fallen.alive).toBe(false);
+    expect(r.fallen.y).toBeLessThan(0.3);
+    expect(r.crouched, 'avisa antes de saltar').toBeGreaterThan(20);
+    expect(r.lunged).toBe(true);
+    expect(r.bite).toBeGreaterThan(10);
+    expect(r.inv.nanResets).toBe(0);
+    expect(r.shot.now, 'sin programas de sombreado nuevos').toBeLessThanOrEqual(r.shot.programs + 1);
+    expect(errors).toEqual([]);
   });
 
   test('el campo de práctica se ve bien (luminancia) con enemigos y HUD de combate', async ({ page }) => {

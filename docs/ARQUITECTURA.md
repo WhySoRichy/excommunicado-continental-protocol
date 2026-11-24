@@ -74,6 +74,7 @@ La lógica que no necesita three.js ni el DOM vive en archivos propios y tiene t
 | `hub/economy.ts` | Tienda, recompensas, multa del Excomunicado |
 | `hub/ExcommunicadoRules.ts` | Zona neutral → aviso → Excomunicado → oleadas → readmisión |
 | `entities/ai/EnemyBrain.ts` | Patrulla, sospecha, combate, cobertura, flanqueo, búsqueda |
+| `entities/RobotRigs.ts` y `entities/rig/robots.ts` | Cuerpo y animación de las máquinas (sabueso y dron), con el mismo material que los personajes |
 | `entities/ai/squad.ts` | Quién dispara, quién rodea y quién lo cubre en cada grupo (sin física ni vista) |
 | `combat/hitReaction.ts` | Qué parte alcanzó un impacto, cómo le afecta y cómo cae si lo mata |
 | `entities/coverSensor.ts` | Dónde puede cubrirse el jugador: la pared hacia donde anda o mira, que cubra, con sitio y alcanzable; sus bordes, sus rincones y cómo rodear una esquina |

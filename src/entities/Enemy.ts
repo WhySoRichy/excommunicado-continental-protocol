@@ -9,12 +9,12 @@ import { clamp, wrapAngle } from '../core/math';
 import type { Rng } from '../core/rng';
 import type { NavGrid } from '../levels/nav/NavGrid';
 import type { EnemySpawnDef, EnemyType } from '../levels/types';
-import { createRayHit, Groups, type PhysicsWorld, QueryGroups } from '../physics/Physics';
+import { createRayHit, Groups, type PhysicsWorld, QueryGroups, type Vec3Like } from '../physics/Physics';
 
 import { type AiState, EnemyBrain, emptyCommand, emptyPerception, type Tactics } from './ai/EnemyBrain';
 import { ENEMY_TYPES, type EnemyTypeDef } from './ai/enemyTypes';
 
-import { emptyIntent, emptyMoveNet, type MoveNet, PlayerController, yawFromDir } from './PlayerController';
+import { emptyIntent, emptyMoveNet, MOVE, type MoveNet, PLAYER_RADIUS, PlayerController, yawFromDir } from './PlayerController';
 
 /**
  * Un enemigo como objeto plano (fase 3 de docs/ESCALABILIDAD.md): lo que el anfitrión envía de cada uno y lo que basta
@@ -43,6 +43,11 @@ export interface EnemyNet {
   reload: number;
   /** Escondido tras una cobertura. */
   hidden: boolean;
+  /** Embestida 0..1 (−1: no embiste). */
+  lunge: number;
+  /** Escudo: levantado y roto. */
+  shieldUp: boolean;
+  shieldBroken: boolean;
   deathStyle: DeathStyle;
   deathFallStart: number;
   thrownT: number;
@@ -80,6 +85,9 @@ export function emptyEnemyNet(): EnemyNet {
     limp: 0,
     reload: -1,
     hidden: false,
+    lunge: -1,
+    shieldUp: false,
+    shieldBroken: false,
     deathStyle: 0,
     deathFallStart: 0,
     thrownT: -1,
@@ -168,6 +176,7 @@ const _muzzle = new Vector3();
 const _dir = new Vector3();
 const _hitPt = new Vector3();
 const _ray = createRayHit();
+const UP = new Vector3(0, 1, 0);
 /** Lo que tarda el agarre del takedown en tumbar al enemigo (s). */
 export const THROW_DELAY = 0.1;
 /** Lo que un destello le corta el disparo a quien no se aturde (s). */
@@ -177,6 +186,15 @@ const STAGGER_STEP = 0.42;
 const LIMP_SPEED = 0.55;
 /** Velocidad con la que sale despedido quien muere de un escopetazo (m/s). */
 const BLAST_SPEED = 5.5;
+/** El escudo: a qué distancia lo lleva (m), su ancho a cada lado (algo a su izquierda) y entre qué alturas tapa. */
+const SHIELD = { fwd: 0.42, half: 0.33, side: -0.1, low: 0.3, high: 1.5, duck: 0.42 } as const;
+/** Al tumbarle la guardia o romperle el escudo, se queda descolocado (s). */
+const GUARD_BREAK = 1;
+/** Altura de los ojos de cada cuerpo (m) y del arma del dron. */
+const EYES = { hound: 0.62, drone: 0.37 } as const;
+/** El dron: cada cuánto mira si hay techo, cuánto se aparta de él y cada cuánto suelta chispas al caer. */
+const CEILING_PERIOD = 0.2;
+const CEILING_GAP = 1.1;
 const _react: Reaction = { stagger: 0, disarm: 0, limp: 0 };
 /** Tiempo tras la muerte en el que el cuerpo termina de caer; después ni se simula ni se anima (s). */
 export const CORPSE_SETTLE = 3;
@@ -247,6 +265,17 @@ export class Enemy {
   /** Lo que la escuadra lleva en cuenta de él. */
   squadTurnT = 0;
   squadWaitT = 0;
+  /** Escudo: lo que le queda, los golpes que lleva encajados y, en una réplica, si lo tiene levantado. */
+  shieldHealth: number;
+  private guardHit = 0;
+  private netShieldUp: boolean | null = null;
+  /** Suelo bajo el que vuela (la altura de los nodos por los que va). */
+  private floorY: number;
+  private ceilingT = 0;
+  private flyHeight: number;
+  /** Embestida en curso: hacia dónde y si ya mordió. */
+  private readonly lungeDir = new Vector3();
+  private bitten = false;
   /** Forma de caer al morir (ver `hitReaction.ts`). */
   deathStyle: DeathStyle = 0;
   /** Al morir proyectado en un takedown, lo que ya llevaba de caída (s). */
@@ -276,7 +305,14 @@ export class Enemy {
     this.home.set(def.pos[0], def.pos[1], def.pos[2]);
     const patrol = (def.patrol ?? []).map((p) => new Vector3(p[0], p[1], p[2]));
     this.brain = new EnemyBrain(this.def, patrol, this.home, !!def.stationary, w.rng);
-    this.mover = new PlayerController(w.physics, new Vector3(def.pos[0], def.pos[1] + 0.02, def.pos[2]), def.yaw, Groups.ENEMY);
+    const d = this.def;
+    this.floorY = def.pos[1];
+    this.flyHeight = d.fly ?? 0;
+    this.shieldHealth = d.shield?.health ?? 0;
+    this.mover = new PlayerController(w.physics, new Vector3(def.pos[0], def.pos[1] + 0.02 + this.flyHeight, def.pos[2]), def.yaw, Groups.ENEMY, {
+      ...(d.half !== undefined ? { half: d.half } : {}),
+      flies: d.fly !== undefined,
+    });
     this.vitals = makeVitals({ maxHealth: this.def.health, maxHeavyArmor: this.def.heavyArmor });
     this.perceiveTimer = (index % 6) * FIXED_DT;
   }
@@ -340,6 +376,75 @@ export class Enemy {
     return this.mover.feet;
   }
 
+  /** Altura de los ojos sobre los pies (m). */
+  get eyeHeight(): number {
+    const b = this.def.body;
+    return b ? EYES[b] : this.mover.posture === 'crouch' ? 1.0 : 1.6;
+  }
+
+  /** Con el escudo por delante (de guardia lo lleva bajo; aturdido o descolocado no lo sostiene). */
+  get shieldUp(): boolean {
+    if (!this.def.shield || !this.alive || this.shieldHealth <= 0) return false;
+    if (this.netShieldUp !== null) return this.netShieldUp;
+    const s = this.brain.state;
+    return s !== 'patrol' && s !== 'stunned' && this.thrownT < 0 && !this.brain.staggered && !this.brain.disarmed;
+  }
+
+  get shieldBroken(): boolean {
+    return !!this.def.shield && this.shieldHealth <= 0;
+  }
+
+  /**
+   * ¿Para su escudo este disparo? `point` y `normal`: dónde da en su cápsula; `dir`: hacia dónde va. Deja en `out` el
+   * punto del escudo. Se mide desde el eje de la cápsula alcanzada, así vale también para un disparo rebobinado.
+   */
+  blocks(point: Vec3Like, normal: Vec3Like, dir: Vec3Like, out: Vector3): boolean {
+    if (!this.shieldUp) return false;
+    const yaw = this.mover.yaw;
+    const fx = -Math.sin(yaw);
+    const fz = -Math.cos(yaw);
+    const into = dir.x * fx + dir.z * fz;
+    // Lo que viene por la espalda o de lado no cruza su plano.
+    if (into > -1e-3) return false;
+    const nl = Math.hypot(normal.x, normal.z) || 1;
+    const px = (normal.x / nl) * PLAYER_RADIUS;
+    const pz = (normal.z / nl) * PLAYER_RADIUS;
+    const s = (SHIELD.fwd - (px * fx + pz * fz)) / -into;
+    if (s < 0) return false;
+    const lateral = (px - dir.x * s) * Math.cos(yaw) - (pz - dir.z * s) * Math.sin(yaw);
+    const y = point.y - dir.y * s - this.mover.feet.y + (this.mover.posture === 'crouch' ? SHIELD.duck : 0);
+    if (Math.abs(lateral - SHIELD.side) > SHIELD.half || y < SHIELD.low || y > SHIELD.high) return false;
+    out.set(point.x - dir.x * s, point.y - dir.y * s, point.z - dir.z * s);
+    return true;
+  }
+
+  /** Un impacto en el escudo: lo desgasta y, si son muchos seguidos, se lo bajan. Devuelve si se rompió. */
+  shieldHit(amount: number, from: Vector3): boolean {
+    const d = this.def.shield;
+    if (!d || this.shieldHealth <= 0 || !this.alive) return false;
+    this.shieldHealth = Math.max(0, this.shieldHealth - amount);
+    this.guardHit += amount;
+    this.hitFlash = 0.08;
+    this.perception.damaged = true;
+    this.perception.damageFrom.copy(from);
+    this.provoked = true;
+    const dx = this.mover.feet.x - from.x;
+    const dz = this.mover.feet.z - from.z;
+    const l = Math.hypot(dx, dz) || 1;
+    this.push.set(dx / l, 0, dz / l);
+    const broke = this.shieldHealth <= 0;
+    if (broke || this.guardHit >= d.guard) {
+      this.guardHit = 0;
+      this.flinch = 1;
+      this.flinchFront = true;
+      this.hitPart = 'torso';
+      this.brain.stagger(GUARD_BREAK);
+      this.stagger = 1;
+      this.aimIn = 0;
+    }
+    return broke;
+  }
+
   /** Altura actual del cuerpo (para zonas de impacto). */
   get height(): number {
     return this.mover.height;
@@ -353,6 +458,7 @@ export class Enemy {
     this.stagger = Math.max(0, this.stagger - dt * 1.9);
     this.limpT = Math.max(0, this.limpT - dt);
     this.poiseHit = Math.max(0, this.poiseHit - dt * POISE_RECOVERY);
+    this.guardHit = Math.max(0, this.guardHit - dt * POISE_RECOVERY);
     if (this.alive && this.thrownT >= 0) this.thrownT += dt;
     if (!this.alive) {
       // El cuerpo cae y se asienta; después ya no hace falta moverlo.
@@ -373,6 +479,7 @@ export class Enemy {
     p.path = this.pathEvent ?? (this.hasPath ? 'moving' : 'idle');
     this.pathEvent = null;
     p.selfPos.copy(this.mover.feet);
+    if (this.flyHeight > 0) p.selfPos.y = this.floorY;
     this.brain.update(dt, p, this.w.tactics, this.cmd);
     // Se le pasó el aturdimiento: vuelve a moverse.
     if (this.mover.state === 'locked' && this.brain.state !== 'stunned' && this.thrownT < 0) this.mover.setLocked(false);
@@ -381,12 +488,52 @@ export class Enemy {
     p.damaged = false;
     p.allyAlert = false;
 
+    if (this.cmd.pounce) this.pounce(target);
     this.drive(dt);
+    if (this.flyHeight > 0) this.hover(dt);
+    this.mover.speedMultiplier = this.cmd.lunge >= 0 && this.def.lunge ? this.def.lunge.speed / MOVE.run : (this.def.speed ?? 1);
     this.mover.fixedUpdate(dt, this.intent);
+    if (this.cmd.lunge >= 0) this.bite(target);
     this.trackProgress(dt);
     if (this.cmd.fire && target.alive) this.shoot(target);
     else if (this.cmd.suppress) this.suppressFire();
     this.updateTelegraph(dt, target);
+  }
+
+  /** Salta: fija hacia dónde (adelantándose un poco a su presa) y sale ya a toda velocidad. */
+  private pounce(t: PlayerTarget): void {
+    const f = this.mover.feet;
+    this.lungeDir.set(t.feet.x - f.x, 0, t.feet.z - f.z);
+    if (this.lungeDir.lengthSq() < 1e-4) this.lungeDir.set(-Math.sin(this.mover.yaw), 0, -Math.cos(this.mover.yaw));
+    this.lungeDir.normalize();
+    this.bitten = false;
+    this.mover.shove(this.lungeDir.x * this.def.lunge!.speed, this.lungeDir.z * this.def.lunge!.speed);
+    this.w.audio.alert(f);
+  }
+
+  /** Muerde si alcanza a su presa (una vez por salto; una voltereta la esquiva). */
+  private bite(t: PlayerTarget): void {
+    const L = this.def.lunge;
+    if (!L || this.bitten || !t.alive) return;
+    const f = this.mover.feet;
+    if (Math.hypot(t.feet.x - f.x, t.feet.z - f.z) > L.reach || Math.abs(t.feet.y - f.y) > 1) return;
+    this.bitten = true;
+    this.recoilVis = 1;
+    this.w.onShotAtPlayer(this, t, !t.invulnerable, this.def.weapon.damage * this.w.damageMult);
+  }
+
+  /** Altura de vuelo: sobre el suelo por el que va, sin chocar con el techo. */
+  private hover(dt: number): void {
+    const f = this.mover.feet;
+    this.ceilingT -= dt;
+    if (this.ceilingT <= 0) {
+      this.ceilingT = CEILING_PERIOD;
+      _eye.set(f.x, this.floorY + 0.6, f.z);
+      const want = this.def.fly ?? 0;
+      const hit = this.w.physics.raycast(_eye, UP, want + CEILING_GAP, QueryGroups.STATIC, _ray);
+      this.flyHeight = hit ? Math.max(0.8, Math.min(want, _ray.distance + 0.6 - CEILING_GAP)) : want;
+    }
+    this.mover.flyY = this.floorY + this.flyHeight;
   }
 
   /**
@@ -438,7 +585,7 @@ export class Enemy {
           const off = Math.abs(wrapAngle(toYaw - this.mover.yaw));
           const inFov = p.distance < 4 || off <= ((this.def.fovDeg / 2) * Math.PI) / 180 || this.brain.state !== 'patrol';
           if (inFov) {
-            _eye.set(f.x, f.y + (this.mover.posture === 'crouch' ? 1.0 : 1.6), f.z);
+            _eye.set(f.x, f.y + this.eyeHeight, f.z);
             const ph = this.w.physics;
             this.lastSee = ph.lineOfSight(_eye, t.head, QueryGroups.STATIC) || ph.lineOfSight(_eye, t.chest, QueryGroups.STATIC);
             if (this.lastSee) {
@@ -473,6 +620,8 @@ export class Enemy {
     const y = this.mover.yaw;
     const fx = -Math.sin(y);
     const fz = -Math.cos(y);
+    const b = this.def.body;
+    if (b) return out.set(f.x + fx * 0.36, f.y + (b === 'drone' ? 0.28 : 0.68), f.z + fz * 0.36);
     const crouch = this.mover.posture === 'crouch';
     return out.set(f.x + fx * 0.45 + Math.cos(y) * 0.2, f.y + (crouch ? 0.95 : 1.4), f.z + fz * 0.45 - Math.sin(y) * 0.2);
   }
@@ -500,6 +649,14 @@ export class Enemy {
     it.aim = c.hasLook && engaged && (!c.hasMove || !c.run || this.faceTargetT > 0);
     it.camYaw = lookYaw;
     this.mover.setPosture(c.crouch ? 'crouch' : 'stand');
+    // Embiste: recto hacia donde saltó.
+    if (c.lunge >= 0) {
+      this.hasPath = false;
+      it.aim = false;
+      it.camYaw = yawFromDir(this.lungeDir.x, this.lungeDir.z);
+      it.moveY = 1;
+      return;
+    }
     // Descolocado: da unos pasos hacia donde lo empuja el impacto, sin perderlo de vista.
     if (this.brain.staggered && this.push.lengthSq() > 0.5) {
       this.hasPath = false;
@@ -524,6 +681,7 @@ export class Enemy {
     let wp = this.path[this.pathIdx];
     while (wp !== undefined) {
       nav.pos(wp, _v);
+      if (this.flyHeight > 0) this.floorY = _v.y;
       if (Math.hypot(_v.x - f.x, _v.z - f.z) > 0.45) break;
       this.pathIdx++;
       wp = this.path[this.pathIdx];
@@ -556,7 +714,7 @@ export class Enemy {
     const nav = this.w.nav;
     const f = this.mover.feet;
     this.replanCooldown = 0.35;
-    const a = nav.nearestNode(f.x, f.y, f.z, 2);
+    const a = nav.nearestNode(f.x, this.flyHeight > 0 ? this.floorY : f.y, f.z, 2);
     // La meta se busca en la MISMA componente que el enemigo: nunca apunta a una isla inalcanzable.
     const comp = nav.comp[a];
     const b = comp !== undefined ? nav.nearestNode(goal.x, goal.y, goal.z, 3, comp) : -1;
@@ -660,7 +818,7 @@ export class Enemy {
 
   /** Telégrafo del tirador: fija dónde apunta el láser y pita cada vez más deprisa. */
   private updateTelegraph(dt: number, t: PlayerTarget): void {
-    if (!this.hasLaser) return;
+    if (!this.hasLaser && !this.def.body) return;
     const k = this.cmd.telegraph;
     if (k > 0.01 && this.alive) {
       this.telegraphAt.copy(t.chest);
@@ -677,6 +835,8 @@ export class Enemy {
   // ======================================================== daño
   /** Aplica un impacto. `pierce` = takedown/ejecución. `hit`: dónde dio (decide cómo reacciona). */
   applyHit(amount: number, zone: HitZone, from: Vector3, headMult: number, pierce = false, hit: HitInfo | null = null): DamageResult {
+    // Las máquinas no tienen cabeza ni piernas a las que apuntar: todo es carcasa.
+    if (this.def.body) zone = 'body';
     const r = applyDamage(this.vitals, amount, { zone, headMult, pierce });
     if (r.dealt <= 0) return r;
     this.hitFlash = 0.12;
@@ -695,7 +855,7 @@ export class Enemy {
     this.flinchFront = front >= 0;
     const point = hit?.point;
     const lateral = point ? Math.cos(yaw) * (point.x - this.mover.feet.x) - Math.sin(yaw) * (point.z - this.mover.feet.z) : 0;
-    const part = hitPart(zone, lateral, point ? (point.y - this.mover.feet.y) / this.mover.height : 0.6);
+    const part = this.def.body ? 'torso' : hitPart(zone, lateral, point ? (point.y - this.mover.feet.y) / this.mover.height : 0.6);
     this.hitPart = part;
     const l = Math.hypot(dx, dz);
     if (l > 1e-3) this.push.set(-dx / l, 0, -dz / l);
@@ -738,6 +898,11 @@ export class Enemy {
     // Si lo estaban proyectando, la caída sigue donde iba en vez de empezar de pie.
     this.deathFallStart = this.thrownT >= 0 ? Math.max(0, this.thrownT - THROW_DELAY) : 0;
     this.thrownT = -1;
+    if (this.def.body) {
+      _eye.set(this.mover.feet.x, this.mover.feet.y + this.eyeHeight, this.mover.feet.z);
+      this.w.vfx.impact(_eye, UP, 'spark', 16);
+      this.w.vfx.impact(_eye, UP, 'dust', 8);
+    }
     // El cuerpo deja de bloquear y de recibir disparos.
     this.mover.collider.setEnabled(false);
   }
@@ -786,6 +951,9 @@ export class Enemy {
     this.stagger = 0;
     this.limpT = 0;
     this.poiseHit = 0;
+    this.guardHit = 0;
+    this.shieldHealth = this.def.shield?.health ?? 0;
+    this.floorY = this.home.y;
     this.mover.setLocked(false);
     this.mover.revive(this.home, this.spawnDef.yaw);
     this.hasPath = false;
@@ -812,6 +980,9 @@ export class Enemy {
     out.limp = this.limping;
     out.reload = this.cmd.reload;
     out.hidden = this.cmd.hidden;
+    out.lunge = this.cmd.lunge;
+    out.shieldUp = this.shieldUp;
+    out.shieldBroken = this.shieldBroken;
     out.deathStyle = this.deathStyle;
     out.deathFallStart = this.deathFallStart;
     out.thrownT = this.thrownT;
@@ -858,9 +1029,12 @@ export class Enemy {
     this.deathFallStart = s.deathFallStart;
     this.thrownT = s.thrownT;
     this.targetRise = s.targetRise;
+    this.netShieldUp = s.shieldUp;
+    if (this.def.shield) this.shieldHealth = s.shieldBroken ? 0 : this.def.shield.health;
     const c = this.cmd;
     c.reload = s.reload;
     c.hidden = s.hidden;
+    c.lunge = s.lunge;
     c.icon = s.icon;
     c.detection = s.detection;
     c.telegraph = s.telegraph;

@@ -241,7 +241,7 @@ export class EnemyManager implements Tactics {
       if (!e.alive || e.feet.distanceToSquared(at) > GRENADE_FEAR * GRENADE_FEAR) continue;
       const t = seen?.get(e.uid) ?? 0;
       if (t < 0) continue;
-      _a.set(e.feet.x, e.feet.y + EYE, e.feet.z);
+      _a.set(e.feet.x, e.feet.y + e.eyeHeight, e.feet.z);
       _b.set(at.x, at.y + 0.12, at.z);
       if (!this.deps.physics.lineOfSight(_a, _b, QueryGroups.STATIC)) continue;
       if (!seen) this.grenadeSeen.set(id, (seen = new Map()));
@@ -341,10 +341,10 @@ export class EnemyManager implements Tactics {
         const dx = body.feet.x - e.feet.x;
         const dz = body.feet.z - e.feet.z;
         const d = Math.hypot(dx, dz);
-        if (d > BODY_SIGHT || Math.abs(body.feet.y - e.feet.y) > 2.5) continue;
+        if (d > BODY_SIGHT || Math.abs(body.feet.y - e.feet.y) > 3.5) continue;
         const yaw = e.mover.yaw;
         if (d > 2 && (-Math.sin(yaw) * dx - Math.cos(yaw) * dz) / d < 0.35) continue;
-        _a.set(e.feet.x, e.feet.y + EYE, e.feet.z);
+        _a.set(e.feet.x, e.feet.y + e.eyeHeight, e.feet.z);
         _b.set(body.feet.x, body.feet.y + 0.35, body.feet.z);
         if (!this.deps.physics.lineOfSight(_a, _b, QueryGroups.STATIC)) continue;
         this.foundBodies.add(body);

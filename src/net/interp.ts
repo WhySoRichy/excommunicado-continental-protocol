@@ -94,6 +94,9 @@ export function lerpEnemy(a: EnemyNet, b: EnemyNet, t: number, out: EnemyNet): E
   out.limp = a.limp;
   out.reload = a.reload >= 0 && b.reload >= 0 ? lerp(a.reload, b.reload, t) : a.reload;
   out.hidden = a.hidden;
+  out.lunge = a.lunge >= 0 && b.lunge >= 0 ? lerp(a.lunge, b.lunge, t) : a.lunge;
+  out.shieldUp = a.shieldUp;
+  out.shieldBroken = a.shieldBroken;
   out.deathStyle = a.deathStyle;
   out.deathFallStart = a.deathFallStart;
   out.thrownT = a.thrownT >= 0 && b.thrownT >= 0 ? lerp(a.thrownT, b.thrownT, t) : a.thrownT;

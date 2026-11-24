@@ -11,7 +11,9 @@ import { BONE } from '../../src/entities/rig/skin';
 
 const base = { rimColor: 0, rimStrength: 0, weapon: 'none' } as const;
 const ENEMIES: Record<string, RigOptions> = Object.fromEntries(
-  Object.values(ENEMY_TYPES).map((d) => [d.type, { ...base, colors: d.colors, hair: d.hair, beard: d.beard, bulk: d.bulk, outfit: d.outfit }]),
+  Object.values(ENEMY_TYPES)
+    .filter((d) => !d.body)
+    .map((d) => [d.type, { ...base, colors: d.colors, hair: d.hair, beard: d.beard, bulk: d.bulk, outfit: d.outfit }]),
 );
 const LOOKS: Record<string, RigOptions> = {
   huesped: PLAYER_LOOK,
@@ -160,7 +162,10 @@ describe('malla de los personajes', () => {
 
   it('cada tipo de enemigo se reconoce por su silueta, de cerca y de lejos', () => {
     for (const detail of ['near', 'far'] as const) {
-      const shapes = Object.entries(ENEMIES).map(([id, o]) => ({ id, s: silhouette(characterGeometry(o, detail)) }));
+      // Al antidisturbios lo distingue el escudo, que no forma parte de su malla.
+      const shapes = Object.entries(ENEMIES)
+        .filter(([id]) => id !== 'shield')
+        .map(([id, o]) => ({ id, s: silhouette(characterGeometry(o, detail)) }));
       for (let i = 0; i < shapes.length; i++) {
         for (let j = i + 1; j < shapes.length; j++) {
           const p = shapes[i]!;

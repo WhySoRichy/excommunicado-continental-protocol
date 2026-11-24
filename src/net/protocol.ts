@@ -20,7 +20,7 @@ import type { MissionId } from '../missions/types';
  */
 
 /** Versión del protocolo: cambia con cualquier mensaje. Con versiones distintas no se juega juntos. */
-export const PROTOCOL = 5;
+export const PROTOCOL = 6;
 /** Jugadores por partida (anfitrión incluido). */
 export const MAX_PLAYERS = 4;
 /** Pasos de simulación entre instantáneas: 3 a 60 Hz son 20 por segundo. */
@@ -49,7 +49,7 @@ function table<T extends string>() {
   return <const A extends readonly T[]>(a: A & ([Exclude<T, A[number]>] extends [never] ? unknown : 'falta un valor en la tabla')): A => a;
 }
 
-const MOVE_STATES = table<MoveState>()(['ground', 'air', 'roll', 'slide', 'vault', 'toCover', 'cover', 'locked', 'dead']);
+const MOVE_STATES = table<MoveState>()(['ground', 'air', 'roll', 'slide', 'vault', 'toCover', 'cover', 'locked', 'dead', 'fly']);
 const POSTURES = table<Posture>()(['stand', 'crouch']);
 const COVER_HEIGHTS = table<CoverHeight>()(['low', 'high']);
 const AI_STATES = table<AiState>()(['patrol', 'suspicious', 'combat', 'cover', 'flank', 'search', 'stunned', 'dead']);
@@ -58,7 +58,7 @@ const HIT_PARTS = table<HitPart>()(['torso', 'head', 'armL', 'armR', 'legL', 'le
 const CIV_STATES = table<CivState>()(['calm', 'flee', 'hide', 'dead']);
 const PICKUP_KINDS = table<PickupKind>()(['ammo', 'medkit', 'armor']);
 const WEAPON_IDS = table<WeaponId>()(['carbine', 'shotgun', 'dmr', 'pistol', 'revolver', 'knife']);
-const ENEMY_TYPES = table<EnemyType>()(['thug', 'escort', 'marksman', 'heavy', 'boss']);
+const ENEMY_TYPES = table<EnemyType>()(['thug', 'escort', 'marksman', 'heavy', 'boss', 'shield', 'hound', 'drone']);
 const SHOT_SOUNDS = table<ShotSound>()([
   'carbine',
   'pistol',
@@ -516,14 +516,21 @@ function readPlayer(v: unknown): PlayerNet {
   return { id, move, look };
 }
 
-const ENEMY_LEN = 2 + MOVE_LEN + 24;
+const ENEMY_LEN = 2 + MOVE_LEN + 25;
 
 function writeEnemy(e: EnemyNet): number[] {
   const out = [e.uid, ix(ENEMY_TYPES, e.type)];
   writeMove(e.move, out);
   out.push(
     ix(AI_STATES, e.ai),
-    (e.aim ? 1 : 0) | (e.alive ? 2 : 0) | (e.hasLook ? 4 : 0) | (e.dazed ? 8 : 0) | (e.flinchFront ? 16 : 0) | (e.hidden ? 32 : 0),
+    (e.aim ? 1 : 0) |
+      (e.alive ? 2 : 0) |
+      (e.hasLook ? 4 : 0) |
+      (e.dazed ? 8 : 0) |
+      (e.flinchFront ? 16 : 0) |
+      (e.hidden ? 32 : 0) |
+      (e.shieldUp ? 64 : 0) |
+      (e.shieldBroken ? 128 : 0),
     q(e.health, 10),
     q(e.hitFlash),
     q(e.recoilVis, 100),
@@ -533,6 +540,7 @@ function writeEnemy(e: EnemyNet): number[] {
     q(e.stagger, 100),
     e.limp,
     q(e.reload, 100),
+    q(e.lunge, 100),
     e.deathStyle,
     q(e.deathFallStart),
     q(e.thrownT),
@@ -557,13 +565,15 @@ function readEnemy(v: unknown): EnemyNet {
   e.type = r.pick(ENEMY_TYPES);
   readMove(r, e.move);
   e.ai = r.pick(AI_STATES);
-  const f = r.int(0, 63);
+  const f = r.int(0, 255);
   e.aim = (f & 1) !== 0;
   e.alive = (f & 2) !== 0;
   e.hasLook = (f & 4) !== 0;
   e.dazed = (f & 8) !== 0;
   e.flinchFront = (f & 16) !== 0;
   e.hidden = (f & 32) !== 0;
+  e.shieldUp = (f & 64) !== 0;
+  e.shieldBroken = (f & 128) !== 0;
   e.health = r.num(-1e4, 1e5);
   e.hitFlash = r.num(0, 10);
   e.recoilVis = r.num(0, 1);
@@ -573,6 +583,7 @@ function readEnemy(v: unknown): EnemyNet {
   e.stagger = r.num(0, 1);
   e.limp = r.int(-1, 1);
   e.reload = r.num(-1, 1);
+  e.lunge = r.num(-1, 1);
   e.deathStyle = r.int(0, 5) as DeathStyle;
   e.deathFallStart = r.num(0, 100);
   e.thrownT = r.num(-1, 100);

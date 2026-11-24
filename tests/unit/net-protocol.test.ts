@@ -77,6 +77,9 @@ describe('protocolo de red', () => {
       limp: 1,
       reload: 0.35,
       hidden: true,
+      lunge: 0.55,
+      shieldUp: true,
+      shieldBroken: true,
       deathStyle: 5,
     });
     Object.assign(enemy.move, { x: 4, y: 0, z: -2, yaw: 1, state: 'ground' });
@@ -121,7 +124,18 @@ describe('protocolo de red', () => {
     expect(s.tick).toBe(300);
     expect(s.players[0]!.look.weapon).toBe('carbine');
     expect(s.enemies[0]).toMatchObject({ uid: 7, type: 'marksman', ai: 'combat', aim: true, icon: 'alert', hasLook: true, dazed: true });
-    expect(s.enemies[0]).toMatchObject({ flinchFront: false, hitPart: 'legR', stagger: 0.6, limp: 1, reload: 0.35, hidden: true, deathStyle: 5 });
+    expect(s.enemies[0]).toMatchObject({
+      flinchFront: false,
+      hitPart: 'legR',
+      stagger: 0.6,
+      limp: 1,
+      reload: 0.35,
+      hidden: true,
+      lunge: 0.55,
+      shieldUp: true,
+      shieldBroken: true,
+      deathStyle: 5,
+    });
     expect(s.players[0]!.look.throw).toBeCloseTo(0.4, 3);
     expect(s.grenades).toEqual([{ id: 5, kind: 'stun', owner: 1, x: 2, y: 0.5, z: -3 }]);
     expect(s.enemies[0]!.health).toBeCloseTo(55.5, 1);

@@ -589,7 +589,7 @@ function headwear(o: RigOptions): BufferGeometry[] {
     );
   }
   if (o.hair === 'helmet') {
-    const shell = plastic(c.accent, 0.4);
+    const shell = plastic(fit.helmet ?? c.accent, 0.4);
     out.push(
       drape(
         (a) => (fromFront(a) < 1.05 ? 0.126 : fromFront(a) < 1.9 ? 0.03 : 0.0),

@@ -966,6 +966,46 @@ function stun(k: Kit): BufferGeometry[] {
   ];
 }
 
+/**
+ * Escudo balístico: cinco paneles en curva (mira a −Z, centrado en el asa), con su visor, sus nervios, los cantos
+ * reforzados y una franja del color de su portador.
+ */
+export function shieldGeometry(accent: number): BufferGeometry {
+  const k = kit(DEFAULT_FINISH, accent);
+  const plate: Surf = { c: 0x30363a, r: 0.55, m: 0.35 };
+  const dark: Surf = { c: 0x191c1f, r: 0.6, m: 0.3 };
+  const H = 1.14;
+  const parts: BufferGeometry[] = [];
+  const panel = (w: number, h: number, d: number, s: Surf, x: number, y: number, z: number, ry: number): void => {
+    const g = block(w, h, d, s, 0, 0, 0, 0.006);
+    g.rotateY(ry);
+    g.translate(x, y, z);
+    parts.push(g);
+  };
+  for (let i = -2; i <= 2; i++) {
+    const a = i * 0.16;
+    const x = Math.sin(a) * 0.8;
+    const z = 0.8 - Math.cos(a) * 0.8;
+    if (Math.abs(i) < 2) {
+      // Los paneles del centro dejan el hueco del visor.
+      panel(0.136, 0.2, 0.022, plate, x, 0.455, z, -a);
+      panel(0.136, 0.1, 0.014, k.lens, x, 0.31, z, -a);
+      panel(0.136, 0.82, 0.022, plate, x, -0.15, z, -a);
+    } else panel(0.136, H, 0.022, plate, x, 0, z, -a);
+    panel(0.136, 0.03, 0.034, dark, x, 0.55, z, -a);
+    panel(0.136, 0.03, 0.034, dark, x, -0.555, z, -a);
+    panel(0.136, 0.05, 0.026, k.accent, x, -0.36, z, -a);
+  }
+  for (const s of [-1, 1]) {
+    const a = s * 0.4;
+    panel(0.022, H, 0.036, dark, Math.sin(a) * 0.8, 0, 0.8 - Math.cos(a) * 0.8, -a);
+    panel(0.02, 0.12, 0.03, dark, s * 0.2, 0.31, 0.032, 0);
+  }
+  panel(0.16, 0.05, 0.04, dark, 0, 0.0, 0.05, 0);
+  panel(0.025, 0.2, 0.05, k.grip, 0.02, 0.0, 0.085, 0);
+  return assemble(parts);
+}
+
 /** Geometría del equipo que se lanza (por ahora, la aturdidora). */
 export function gearGeometry(_id: GearId, accent: number): BufferGeometry {
   return assemble(stun(kit(DEFAULT_FINISH, accent)));

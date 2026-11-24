@@ -52,7 +52,7 @@ Título ─► Continental (hub) ─► Charon: contratos ─► Briefing ─►
 - Una sola vida (sin marcadores). El hub deja de ser zona neutral: no hay diálogos ni tienda mientras dura.
 - Respiro de 5 s antes de cada oleada. Al superar una se recuperan 30 de salud.
 - Oleada 1: 3 matones. Cada oleada suma 1,5 enemigos (redondeado hacia abajo), con tope de 10.
-- Escoltas desde la oleada 2 (hasta un 70 % de los ligeros), pesados desde la 3 (máx. 3) y tiradores desde la 5 (máx. 2).
+- Escoltas desde la oleada 2 (hasta un 70 % de los ligeros), pesados desde la 3 (máx. 3), sabuesos desde la 4 (máx. 2), tiradores desde la 5 (máx. 2), antidisturbios desde la 5 (máx. 2) y drones desde la 6 (máx. 2), siempre con al menos dos ligeros.
 - Aparecen de uno en uno cada 0,5 s por las entradas de las oleadas del Excomunicado, nunca a menos de 4 m del jugador ni encima de otro enemigo.
 - Al morir se guarda el resultado en el top 10 local (oleadas y, a igualdad, puntos de estilo).
 
@@ -136,6 +136,12 @@ Cada contrato sigue el flujo **briefing** (3 líneas: objetivo, regla especial, 
 | Tirador | Rojo | Rifle de tirador con mira, 35 de daño | 70 | Fijo en altura, cubre zonas | **Láser rojo visible 1,2 s** con pitido creciente antes del disparo |
 | Blindado | Azul acero | Escopeta táctica, 4×6 de daño | 120 + 150 de armadura | Avanza lento; el cuerpo recibe solo el 20 % del daño | Levanta el arma y parpadea en rojo 0,6 s |
 | Jefe | Magenta | Revólver en ráfagas | 420 + 120 de armadura | Fases: al 50 % y al 20 % se arrodilla e invoca escoltas | El rim se enciende antes de cada ráfaga |
+| Antidisturbios | Lima | Pistola, 9 de daño | 100 + escudo de 520 | Avanza despacio detrás de un **escudo balístico** | Su silueta: el escudo con la franja lima |
+| Sabueso | Violeta | Mordisco, 22 de daño | 75 | Máquina cuadrúpeda: corre, **salta** y retrocede | Se agazapa 0,5 s, brilla en rojo y pita antes de saltar |
+| Dron | Blanco | Ráfagas de 6, 4 de daño | 55 | **Vuela** a 2,7 m y cambia de sitio | Brilla en rojo y pita 0,8 s antes de cada ráfaga |
+
+- **El escudo** para de frente todo lo que va del cuello a las espinillas, también el cuchillo y el takedown. Quedan al aire la cabeza (asoma por arriba), los pies, los lados y la espalda. Con 170 de daño seguidos se le baja un segundo, y con 520 se rompe; aturdido, descolocado o de guardia no lo sostiene.
+- **Las máquinas** no tienen cabeza ni piernas a las que apuntar, sueltan chispas y no admiten takedown. El salto del sabueso va recto hacia donde estabas: rodar lo esquiva y, al caer, tarda casi un segundo en volver a atacar. El dron baja bajo techo, y una aturdidora lo tira al suelo. El perro es un robot a propósito: en este universo no se dispara a un perro.
 
 Un headshot mata de un tiro a matón, escolta y tirador. Esa regla es simple y premia la precisión.
 

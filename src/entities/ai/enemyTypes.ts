@@ -1,4 +1,5 @@
 import type { EnemyType } from '../../levels/types';
+import type { RobotColors } from '../rig/robots';
 import type { HairStyle, Outfit, RigColors, WeaponModel } from '../rig/types';
 
 /** Tipos de enemigo (DISENO §4.2): color + icono propios para que se distingan siempre. */
@@ -20,6 +21,25 @@ export interface EnemyWeaponDef {
   mag: number;
   reload: number;
   model: WeaponModel;
+  /** Avisa una vez por ráfaga (si no, antes de cada disparo). */
+  burstTelegraph?: boolean;
+}
+
+/** Embestida: salta sobre su presa tras agazaparse. */
+export interface LungeDef {
+  /** A qué distancia se agazapa y a cuál muerde (m). */
+  range: number;
+  reach: number;
+  /** Duración (s), velocidad (m/s) y lo que tarda en poder volver a atacar (s). */
+  time: number;
+  speed: number;
+  recover: number;
+}
+
+/** Escudo balístico: cuánto daño aguanta y cuánto, seguido, hasta que se lo bajan a tiros. */
+export interface ShieldDef {
+  health: number;
+  guard: number;
 }
 
 export interface EnemyTypeDef {
@@ -41,8 +61,19 @@ export interface EnemyTypeDef {
   fovDeg: number;
   /** Escala de velocidad al correr (1 = trote del jugador). */
   runScale: number;
-  /** Solo admite takedown cuando está aturdido (el jefe, al arrodillarse por fase). */
-  takedownWhenStunned?: boolean;
+  /** Cuándo admite un takedown (por defecto, siempre): nunca (las máquinas) o solo aturdido (el jefe, por fase). */
+  takedown?: 'never' | 'stunned';
+  /** Cuerpo (por defecto, una persona) y sus colores si es una máquina. */
+  body?: 'hound' | 'drone';
+  robot?: RobotColors;
+  /** Media altura de su cápsula (m): las máquinas son más bajas. */
+  half?: number;
+  /** Velocidad máxima respecto al trote del jugador. */
+  speed?: number;
+  /** Vuela a esta altura sobre el suelo (m). */
+  fly?: number;
+  lunge?: LungeDef;
+  shield?: ShieldDef;
   /** Aguante: daño seguido que encaja antes de descolocarse. */
   poise: number;
   /** Cuánto le dura un aturdimiento (por defecto 1). Con 0 no se aturde: el destello solo le corta el disparo. */
@@ -201,7 +232,7 @@ export const ENEMY_TYPES: Record<EnemyType, EnemyTypeDef> = {
     sightRange: 45,
     fovDeg: 140,
     runScale: 0.85,
-    takedownWhenStunned: true,
+    takedown: 'stunned',
     stun: 0,
     walkScale: 0.4,
     prefersCover: 0.5,
@@ -215,5 +246,110 @@ export const ENEMY_TYPES: Record<EnemyType, EnemyTypeDef> = {
     beard: true,
     bulk: 1.12,
     score: 600,
+  },
+  shield: {
+    type: 'shield',
+    label: 'Antidisturbios',
+    color: 0xa6ff3d,
+    glyph: '◧',
+    description: 'Escudo balístico. De frente no entra nada: rodéalo, dispara a los pies, túmbale la guardia o atúrdelo.',
+    health: 100,
+    heavyArmor: 0,
+    weapon: { damage: 9, pellets: 1, rpm: 170, burst: 2, burstPause: 1.3, range: 24, accuracy: 0.5, telegraph: 0, mag: 12, reload: 2.2, model: 'pistol' },
+    reaction: 0.8,
+    poise: 70,
+    detectTime: 1.6,
+    sightRange: 24,
+    fovDeg: 100,
+    runScale: 0.62,
+    walkScale: 0.4,
+    prefersCover: 0,
+    flanker: false,
+    canFlank: false,
+    engage: [3, 8],
+    shield: { health: 520, guard: 170 },
+    colors: { jacket: 0x2f3d31, shirt: 0x1c2420, tie: 0x1c2420, pants: 0x28322c, shoes: 0x101310, skin: 0xb98d72, hair: 0x2b352d, accent: 0xa6ff3d },
+    hair: 'helmet',
+    outfit: { top: 'fatigues', vest: 'carrier', gloves: 0x14171a, boots: true, kneepads: true, mask: 'balaclava', helmet: 0x29332b },
+    bulk: 1.08,
+    score: 150,
+  },
+  hound: {
+    type: 'hound',
+    label: 'Sabueso',
+    color: 0x9b6bff,
+    glyph: '◆',
+    description: 'Máquina rápida. Se agazapa antes de saltar: esquiva y dispárale mientras se recoloca.',
+    health: 75,
+    heavyArmor: 0,
+    weapon: { damage: 22, pellets: 1, rpm: 60, burst: 1, burstPause: 1, range: 4, accuracy: 1, telegraph: 0.5, mag: 1, reload: 0, model: 'none' },
+    reaction: 0.35,
+    poise: 42,
+    takedown: 'never',
+    detectTime: 0.9,
+    sightRange: 24,
+    fovDeg: 150,
+    runScale: 1,
+    walkScale: 0.4,
+    prefersCover: 0,
+    flanker: false,
+    canFlank: false,
+    engage: [0, 2],
+    body: 'hound',
+    robot: { shell: 0x3b3549, dark: 0x1a1b21, accent: 0x9b6bff },
+    half: 0.1,
+    speed: 1.4,
+    lunge: { range: 4.2, reach: 1.2, time: 0.36, speed: 11.5, recover: 0.95 },
+    colors: { jacket: 0x3b3549, shirt: 0x1a1b21, tie: 0x1a1b21, pants: 0x1a1b21, shoes: 0x0d0e10, skin: 0x1a1b21, hair: 0x1a1b21, accent: 0x9b6bff },
+    hair: 'bald',
+    outfit: {},
+    bulk: 1,
+    score: 130,
+  },
+  drone: {
+    type: 'drone',
+    label: 'Dron',
+    color: 0xdff1ff,
+    glyph: '✛',
+    description: 'Vuela y dispara ráfagas tras avisar con un pitido. Frágil: una aturdidora lo tira al suelo.',
+    health: 55,
+    heavyArmor: 0,
+    weapon: {
+      damage: 4,
+      pellets: 1,
+      rpm: 540,
+      burst: 6,
+      burstPause: 2,
+      range: 24,
+      accuracy: 0.44,
+      telegraph: 0.8,
+      mag: 36,
+      reload: 2.6,
+      model: 'none',
+      burstTelegraph: true,
+    },
+    reaction: 0.6,
+    poise: 30,
+    stun: 1.2,
+    takedown: 'never',
+    detectTime: 1.1,
+    sightRange: 30,
+    fovDeg: 140,
+    runScale: 1,
+    walkScale: 0.45,
+    prefersCover: 0,
+    flanker: false,
+    canFlank: false,
+    engage: [5, 12],
+    body: 'drone',
+    robot: { shell: 0x454b55, dark: 0x1b1e24, accent: 0xdff1ff },
+    half: 0.06,
+    speed: 1.1,
+    fly: 2.7,
+    colors: { jacket: 0x454b55, shirt: 0x1b1e24, tie: 0x1b1e24, pants: 0x1b1e24, shoes: 0x0d0e10, skin: 0x1b1e24, hair: 0x1b1e24, accent: 0xdff1ff },
+    hair: 'bald',
+    outfit: {},
+    bulk: 1,
+    score: 140,
   },
 };

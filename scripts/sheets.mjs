@@ -41,6 +41,62 @@ const SHEETS = {
       ...HIT('descolocado', { part: 'torso', stagger: true }, HIT_T),
     ],
   },
+  maquinas: {
+    tile: [300, 300],
+    cols: 4,
+    views: [
+      { label: 'sabueso: 3/4', show: ['hound'], target: [0, 0.45, -0.1], cam: [1.5, 0.5, -1.7], fov: 34 },
+      { label: 'perfil', show: ['hound'], target: [0, 0.45, 0], cam: [2.4, 0.2, 0], fov: 34 },
+      { label: 'de frente', show: ['hound'], target: [0, 0.5, 0], cam: [0, 0.2, -2.3], fov: 34 },
+      { label: 'por detrás', show: ['hound'], target: [0, 0.45, 0], cam: [-1.2, 0.8, 1.9], fov: 34 },
+      ...[0.15, 0.4, 0.65, 0.9].map((t) => ({
+        label: `trote ${t}`,
+        show: ['hound'],
+        pose: { speed: 2.4 },
+        t,
+        target: [0, 0.4, 0],
+        cam: [2.4, 0.2, -0.4],
+        fov: 34,
+      })),
+      ...[0.15, 0.3, 0.45, 0.6].map((t) => ({
+        label: `galope ${t}`,
+        show: ['hound'],
+        pose: { speed: 6.4 },
+        t,
+        target: [0, 0.4, 0],
+        cam: [2.4, 0.2, -0.4],
+        fov: 34,
+      })),
+      { label: 'agazapado', show: ['hound'], pose: { melee: 1, aim: 1 }, t: 0.6, target: [0, 0.4, 0], cam: [2.1, 0.4, -1], fov: 34 },
+      ...[0.15, 0.5, 0.85].map((t) => ({
+        label: `salto ${t}`,
+        show: ['hound'],
+        pose: { slash: t, speed: 10, aim: 1 },
+        t: 0.25,
+        target: [0, 0.45, 0],
+        cam: [2.2, 0.3, -0.8],
+        fov: 34,
+      })),
+      { label: 'apagado', show: ['hound'], pose: { daze: 1, state: 'locked' }, t: 0.8, target: [0, 0.4, 0], cam: [2, 0.4, -1], fov: 34 },
+      { label: 'caído', show: ['hound'], pose: { state: 'dead', death: 0, stateTime: 1 }, t: 1, target: [0, 0.3, 0], cam: [2, 0.6, -1], fov: 34 },
+      { label: 'caído de lado', show: ['hound'], pose: { state: 'dead', death: 2, stateTime: 1 }, t: 1, target: [0, 0.3, 0], cam: [2, 0.6, -1], fov: 34 },
+      { label: 'impacto', show: ['hound'], pose: { flinch: 1, flinchSide: 1 }, t: 0.1, target: [0, 0.4, 0], cam: [2, 0.4, -1], fov: 34 },
+      { label: 'dron: 3/4', show: ['drone'], target: [0, 0.4, 0], cam: [1.1, 0.4, -1.4], fov: 34 },
+      { label: 'de frente', show: ['drone'], target: [0, 0.4, 0], cam: [0, 0.1, -1.7], fov: 34 },
+      { label: 'desde abajo', show: ['drone'], pose: { aim: 1, aimPitch: -0.5 }, t: 1, target: [0, 0.4, 0], cam: [0.7, -0.3, -1.4], fov: 34 },
+      { label: 'avanza', show: ['drone'], pose: { speed: 4 }, t: 1, target: [0, 0.4, 0], cam: [1.8, 0.1, 0], fov: 34 },
+    ],
+  },
+  escudo: {
+    tile: [300, 400],
+    cols: 4,
+    views: [
+      { label: 'de frente', show: ['shield'], shield: 'up', aim: 1, target: 'body', cam: [0.6, 0.3, -4.2], fov: 30 },
+      { label: 'perfil', show: ['shield'], shield: 'up', aim: 1, target: 'body', cam: [4.2, 0.3, -0.3], fov: 30 },
+      { label: 'por detrás', show: ['shield'], shield: 'up', aim: 1, target: 'body', cam: [-1.2, 0.5, 4], fov: 30 },
+      { label: 'bajado', show: ['shield'], shield: 'down', target: 'body', cam: [1.2, 0.3, -4], fov: 30 },
+    ],
+  },
   cojo: {
     tile: [260, 330],
     cols: 6,
@@ -270,6 +326,32 @@ try {
           }),
         );
       }
+      const Robots = await load('/src/entities/RobotRigs.ts');
+      const { shieldGeometry } = await load('/src/entities/rig/weapons.ts');
+      const { weaponMaterial } = await load('/src/render/weaponMaterial.ts');
+      for (const [t, C] of [
+        ['hound', Robots.HoundRig],
+        ['drone', Robots.DroneRig],
+      ]) {
+        const d = ENEMY_TYPES[t];
+        add(t, new C(`enemy:${t}`, { colors: d.robot, rimColor: d.color, rimStrength: 0.5 }));
+      }
+      {
+        const d = ENEMY_TYPES.shield;
+        const opts = {
+          colors: d.colors,
+          rimColor: d.color,
+          rimStrength: 0.5,
+          hair: d.hair,
+          bulk: d.bulk,
+          outfit: d.outfit,
+          weapon: d.weapon.model,
+          uniqueMaterial: true,
+        };
+        add('shield', new Rig.CharacterRig('enemy:shield', opts));
+        actors.shield.plate = new THREE.Mesh(shieldGeometry(d.color), weaponMaterial());
+        actors.shield.rig.root.add(actors.shield.plate);
+      }
       for (const model of ['pistol', 'revolver', 'knife', 'smg', 'rifle', 'dmr', 'shotgun', 'shotgunTactical']) {
         const tmp = new Rig.CharacterRig('w', { ...playerLook, weapon: model });
         const src = tmp.weaponMount.children[0];
@@ -292,9 +374,18 @@ try {
           if (v.weapon !== undefined) a.rig.setWeapon(v.weapon);
           const p = Rig.idlePose();
           p.aim = v.aim ?? 0;
+          if (v.shield) {
+            p.shield = v.shield === 'up' ? 1 : 0.45;
+            a.plate.position.set(...(v.shield === 'up' ? [-0.12, 0.92, -0.45] : [-0.36, 0.66, -0.18]));
+            a.plate.rotation.set(v.shield === 'up' ? 0 : 0.12, v.shield === 'up' ? 0 : 0.9, 0);
+          }
           if (v.hit?.walk) p.speed = v.hit.walk;
           for (let k = 0; k < 120; k++) a.rig.update(p, 1 / 60);
           a.rig.root.position.set(0, 0, 0);
+          if (v.pose) {
+            Object.assign(p, v.pose);
+            for (let k = 0, n = Math.round((v.t ?? 1) * 60); k < n; k++) a.rig.update(p, 1 / 60);
+          }
           if (v.hit) {
             // El golpe, paso a paso, como lo hace la simulación (decaimientos de `Enemy`).
             const h = v.hit;
