@@ -81,6 +81,49 @@ test.describe('Robustez', () => {
     expect(errors.filter((e) => !/context|contexto/i.test(e))).toEqual([]);
   });
 
+  test('la resolución dinámica no deja ningún fotograma en negro al cambiar', async ({ page }) => {
+    await page.goto('/?qa=1&level=arena&preset=medium');
+    await page.waitForFunction(() => window.__EXCOM__?.ready === true, null, { timeout: 90_000 });
+    await page.evaluate(() => window.__EXCOM__!.playArena());
+    await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('playing');
+    // Redimensionar el lienzo lo borra: si en ese fotograma no se vuelve a dibujar, se ve en negro. Se vigila después de
+    // cada fotograma del juego mientras se le obliga a ir lento hasta que baja la resolución.
+    await page.evaluate(() => {
+      const canvas = document.querySelector<HTMLCanvasElement>('canvas')!;
+      const gl = canvas.getContext('webgl2')!;
+      const size = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, 'width')!;
+      const watch = { resizes: 0, blank: 0, dirty: false };
+      Object.defineProperty(canvas, 'width', {
+        configurable: true,
+        get: () => size.get!.call(canvas) as number,
+        set: (v: number) => {
+          size.set!.call(canvas, v);
+          watch.resizes++;
+          watch.dirty = true;
+        },
+      });
+      for (const name of ['drawElements', 'drawArrays'] as const) {
+        const draw = gl[name].bind(gl) as (...a: unknown[]) => void;
+        (gl as unknown as Record<string, unknown>)[name] = (...a: unknown[]) => {
+          watch.dirty = false;
+          draw(...a);
+        };
+      }
+      const after = (): void => {
+        if (watch.dirty) watch.blank++;
+        watch.dirty = false;
+        window.__EXCOM__!.lagSpike(45);
+        requestAnimationFrame(after);
+      };
+      requestAnimationFrame(after);
+      (window as unknown as { __watch: typeof watch }).__watch = watch;
+    });
+    await expect.poll(() => page.evaluate(() => window.__EXCOM__!.info().dynamicScale), { timeout: 60_000 }).toBeLessThan(1);
+    const watch = await page.evaluate(() => (window as unknown as { __watch: { resizes: number; blank: number } }).__watch);
+    expect(watch.resizes, 'el lienzo se redimensionó').toBeGreaterThan(0);
+    expect(watch.blank, 'fotogramas sin dibujar tras redimensionar').toBe(0);
+  });
+
   test('sin ?qa=1 no hay API de pruebas ni comandos de depuración en el F3', async ({ page }) => {
     // Así funciona la versión publicada, que además no incluye la API (lo comprueba perf.spec.ts).
     const errors = collectErrors(page);

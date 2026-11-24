@@ -920,6 +920,9 @@ export class Game {
     }
     const t0 = performance.now();
     this.renderer.checkResize();
+    // Antes de dibujar: redimensionar el lienzo lo borra. Hecho al final del fotograma, cada cambio de la resolución
+    // dinámica dejaba uno en negro.
+    this.renderer.updateDynamicResolution(this.stats.avgFrameMs(60), realDt);
     this.input.pollGamepad();
     this.handleFrameActions(realDt);
     this.updateIntel();
@@ -985,7 +988,6 @@ export class Game {
       p.render += performance.now() - tRender;
     }
     this.stats.push(realDt * 1000, this.lastCpuMs);
-    this.renderer.updateDynamicResolution(this.stats.avgFrameMs(60), realDt);
     void now;
   }
 
