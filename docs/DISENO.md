@@ -43,10 +43,17 @@ Título ─► Continental (hub) ─► Charon: contratos ─► Briefing ─►
 ### 2.3 Contratos
 | # | Contrato | Espacio | Mecánica distintiva | Objetivos | Regla especial |
 |---|---|---|---|---|---|
-| 1 | **Club Kairos** | Interiores con neón, pista, mezzanine VIP | Civiles que no se pueden dañar; panel de alarma | Entra, sube al VIP, elimina a Vance, sal por atrás | Cada civil herido baja el rango; matar uno lo limita a C |
-| 2 | **Muelle 9** | Patio abierto con contenedores y bodega con pasarelas | Cobertura, tiradores con láser, blindados | Destruye 3 cargamentos y llega al bote | El láser rojo indica que el tirador va a disparar: rompe la línea de visión |
-| 3 | **Torre Meridian** | Azoteas a 3 alturas con rampas y escaleras | Verticalidad, francotiradores, jefe con fases y escape cronometrado | Sube, elimina tiradores, vence al Juez y escapa en 45 s | El jefe blindado solo cae con headshots o takedown cuando se arrodilla |
+| 1 | **Club Kairos** | Calle y callejón; vestíbulo, pista con galerías, cocina y despacho al oeste, salón Índigo al este, sala de Vance sobre los camerinos y muelle de carga | Civiles que no se pueden dañar; panel de alarma | Entra, consigue la lista de invitados, sube al VIP, elimina a Vance, baja al muelle de carga y aguanta hasta que arranque el coche | Cada civil herido baja el rango; matar uno lo limita a C |
+| 2 | **Muelle 9** | Patio de contenedores con una ruta alta, aduana de dos plantas, bodega con pasarelas, explanada y embarcadero | Cobertura, tiradores con láser, blindados | Destruye los 2 cargamentos del patio, corta la radio de la aduana, destruye los 2 de la bodega, cruza al embarcadero y aguanta hasta que llegue el bote | El láser rojo indica que el tirador va a disparar: rompe la línea de visión |
+| 3 | **Torre Meridian** | Terraza jardín, atrio, oficinas y tres azoteas a 0, 3,84 y 7,68 m, con helipuerto | Verticalidad, francotiradores, jefe con fases y escape cronometrado | Bloquea los ascensores, sube a la segunda azotea, elimina a los tres tiradores, vence al Juez y escapa en 60 s | El jefe blindado solo cae con headshots o takedown cuando se arrodilla |
 | 4 | **Gauntlet "Excomunicado"** | El vestíbulo en modo hostil | Oleadas infinitas y crecientes | Sobrevive | Récord local (top 10) |
+
+**Cómo están hechos los tres contratos** (pensados para durar de 8 a 12 minutos):
+- **Sitio.** 4.300, 7.000 y 6.200 m² que se pisan (antes, 800, 3.300 y 2.500): caben cuatro jugadores separados en dos frentes.
+- **Siempre hay otro camino.** A cada zona se llega al menos por dos sitios, y una prueba corta el principal y comprueba que el otro sigue abierto: el club, por la puerta, por la cocina desde el callejón o por la escalera de incendios del VIP; la bodega del muelle, por dos portones, por la puerta de la pasarela del callejón o por los lados; el helipuerto, por la rampa o por la escalera.
+- **Alturas.** Galerías, pasarelas, tapas de contenedores y azoteas a las que se sube andando; los tiradores van en lo alto.
+- **Enemigos por etapas.** De 27 a 31 por contrato, pero nunca más de 14 al empezar: los demás llegan con los objetivos (la lista de invitados, la radio, los ascensores, los refuerzos de la huida).
+- **Quien guarda un puesto** (la escolta de Vance, la de la radio, la del Juez) no acude a la alarma y solo oye los disparos a la mitad de distancia: se puede despejar el resto antes de entrar.
 
 **Gauntlet en detalle** (`missions/gauntlet.ts`, lógica pura con tests):
 - Una sola vida (sin marcadores). El hub deja de ser zona neutral: no hay diálogos ni tienda mientras dura.
@@ -197,7 +204,7 @@ Un headshot mata de un tiro a matón, escolta y tirador. Esa regla es simple y p
 | Nombre | Discreto | Preciso | Letal | Implacable | Despiadado | Mítico | Baba Yaga | Leyenda |
 
 ### 5.1 Rango del contrato (D–S)
-Hay cinco subnotas de 0 a 100: **tiempo** (frente al par), **precisión** (impactos/disparos; solo takedowns = 100), **daño recibido**, **variedad** (tipos distintos de acción de estilo, con 6 o más = 100) y **civiles ilesos**. Pesan lo mismo; si el nivel no tiene civiles, el peso se reparte.
+Hay cinco subnotas de 0 a 100: **tiempo** (frente al par), **precisión** (impactos/disparos; solo takedowns = 100), **daño recibido** (un contrato más largo perdona más), **variedad** (tipos distintos de acción de estilo, con 6 o más = 100) y **civiles ilesos**. Pesan lo mismo; si el nivel no tiene civiles, el peso se reparte.
 
 - Bonus de estilo de hasta +10, y −15 por cada marcador gastado.
 - Umbrales: **S ≥ 88, A ≥ 74, B ≥ 58, C ≥ 40, D < 40**.
@@ -226,8 +233,8 @@ Hay cinco subnotas de 0 a 100: **tiempo** (frente al par), **precisión** (impac
 
 ### 5.3 Logros y desafíos (dan monedas una vez)
 - **Kairos:** "Nadie más" (ningún civil herido), "Fantasma" (sin alarma), "Gun-fu" (3 takedowns).
-- **Muelle 9:** "Demolición" (menos de 4 min), "Filo" (5 kills con cuchillo), "Intocable" (la salud nunca baja de 100).
-- **Torre Meridian:** "Cazatiradores" (todos los tiradores con headshot), "Puntual" (escapa con más de 20 s), "Economía de movimiento" (máximo 2 recargas).
+- **Muelle 9:** "Demolición" (menos de 7 min), "Filo" (5 kills con cuchillo), "Intocable" (la salud nunca baja de 100).
+- **Torre Meridian:** "Cazatiradores" (todos los tiradores con headshot), "Puntual" (escapa con más de 25 s), "Economía de movimiento" (máximo 6 recargas).
 - **Gauntlet:** "Oleada 5", "Oleada 10", "×8".
 - **Globales:** "Primer contrato", "Rango S", "Excomunicado", "Coleccionista" (5 mejoras).
 

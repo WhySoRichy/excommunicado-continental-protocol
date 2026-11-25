@@ -48,9 +48,9 @@ Es un proyecto independiente: los personajes, las armas, la animación, el sonid
 | | |
 |---|---|
 | **Simulacro** | Un tutorial de tres minutos que enseña cada movimiento con tu propia tecla y termina a tiros |
-| **Club Kairos** | Una pista llena de civiles que no hay que tocar, una alarma que conviene apagar y Vance arriba, en el VIP |
-| **Muelle 9** | Contenedores apilados, tiradores en lo alto, tres cargamentos que destruir y la huida en bote |
-| **Torre Meridian** | Tres azoteas, el Juez por fases y 45 segundos para salir |
+| **Club Kairos** | Calle, callejón y un club entero: pista, galerías, cocina, salón y la sala de Vance, con civiles que no hay que tocar y una alarma que conviene apagar |
+| **Muelle 9** | Contenedores apilados con tiradores en lo alto, una aduana, una bodega con pasarelas y cuatro cargamentos que destruir antes de aguantar hasta el bote |
+| **Torre Meridian** | Oficinas y tres azoteas, el Juez por fases en el helipuerto y 60 segundos para salir |
 | **Gauntlet** | Oleadas sin fin en el vestíbulo con una sola vida |
 
 Todos se pueden jugar en **cooperativo, hasta cuatro**: uno abre la sala y los demás entran con su código de cinco letras o desde la lista de salas públicas. Si alguien se corta, vuelve solo a su sitio.
@@ -130,7 +130,7 @@ Más en profundidad: [arquitectura](docs/ARQUITECTURA.md), [diseño](docs/DISENO
 
 | | |
 |---|---|
-| **398 unitarias** | Partidas completas sin pantalla, red con latencia y pérdidas, IA de cada enemigo y de la escuadra, balística, cobertura, animación (marcha sin patinar, manos en el arma, posturas), mallas, niveles, economía y guardado |
+| **431 unitarias** | Partidas completas sin pantalla, red con latencia y pérdidas, IA de cada enemigo y de la escuadra, balística, cobertura, animación (marcha sin patinar, manos en el arma, posturas), mallas, niveles, economía y guardado |
 | **66 de navegador** | El juego construido como en producción: contratos de principio a fin, cooperativo entre dos pestañas, movimiento sin atravesar paredes, tirones de animación, rendimiento, fugas de memoria, claridad visual, audio, mando y ajustes |
 
 Cada cambio pasa por el linter, la auditoría de dependencias y las dos baterías antes de publicarse.
@@ -141,11 +141,11 @@ Peor valor de todos los niveles en calidad Alta, comprobado en cada cambio:
 
 | | Medido | Tope |
 |---|---|---|
-| Llamadas de dibujo | 146 | 260 |
-| Triángulos, con sombras | 176 k | 230 k |
-| CPU por fotograma | 2,2 ms | 4 ms |
-| CPU por fotograma con el procesador frenado a la mitad | 5,8 ms | 10 ms |
-| Descarga del juego / de la física (gzip) | 355 KB / 1,6 MB | 368 KB / 1,8 MB |
+| Llamadas de dibujo | 201 | 260 |
+| Triángulos, con sombras | 154 k | 230 k |
+| CPU por fotograma | 2,4 ms | 4 ms |
+| CPU por fotograma con el procesador frenado a la mitad | 6,9 ms | 10 ms |
+| Descarga del juego / de la física (gzip) | 347 KB / 1,6 MB | 355 KB / 1,8 MB |
 
 En una RTX 4060 va a 144 FPS, el tope del monitor. En gráficas integradas arranca en calidad Baja.
 

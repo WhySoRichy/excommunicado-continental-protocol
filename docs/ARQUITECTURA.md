@@ -127,6 +127,7 @@ Las transiciones válidas están declaradas y cualquier otra lanza un error: no 
 | Armas | Piezas con forma real (perfiles laterales extruidos con bisel y esquinas redondeadas, torneados para cañones, frenos y miras, el tambor estriado del revólver) fusionadas en una geometría por arma y color de acento, compartida entre personajes. Cada vértice lleva su color, rugosidad y metalicidad (atributo `pbr`): un solo material para todas con su propio reflejo del entorno (`render/weaponMaterial.ts`). El acabado (`WeaponFinish`: color y brillo de cada parte) es lo que cambiará una skin | Una draw call por arma, como antes, y entre 800 y 4.400 triángulos (`weaponModels.test.ts` vigila el presupuesto, que la cantonera quede donde la espera el encare y que la mano izquierda agarre el arma) |
 | Personajes | Un `SkinnedMesh` por personaje (24 huesos: columna en dos tramos, cuello, clavículas, muñecas, dedos y punta del pie) + el arma aparte. La malla se genera por código (`entities/rig/`): tubos de anillos con superelipses y curvas monótonas (`loft.ts`), recorridos, elipsoides y parches pegados a la superficie del cuerpo (`shapes.ts`), con los pesos repartidos entre dos o tres huesos en las articulaciones y los faldones (`skin.ts`). Cada vértice lleva color, rugosidad, metalicidad y trama de tela; un solo material con relieve de tela y borde de color (`render/rigMaterial.ts`) los dibuja a todos. El aspecto se declara en `RigOptions`: colores, peinado y prendas (`Outfit`). Dos mallas por aspecto, de cerca (unos 8.000 triángulos) y de lejos (unos 3.000), que se cambian según la distancia, la calidad y el aumento de la cámara; se construyen al cargar el nivel y se quedan en memoria | Una draw call por cuerpo, ninguna descarga de modelos, ningún tirón al aparecer un enemigo y aspectos nuevos (las futuras skins) que son datos |
 | Animación de los personajes | Procedural y por capas. `CharacterRig.ts` suaviza los pesos con muelles críticos y llama a las capas (`rig/layers.ts`: marcha, acrobacias, caídas, golpes, cobertura, acciones, gestos), que componen la postura del fotograma (`rig/frame.ts`) sin tocar los huesos; al final se aplica. La marcha (`rig/gait.ts`) es matemática pura: el pie apoyado retrocede a la velocidad del cuerpo y los pies se plantan con cinemática inversa (`rig/limbs.ts`). Manda el arma: cada postura (`rig/weaponPoses.ts`) dice dónde va y hacia dónde mira, y las dos manos la alcanzan. La postura que pide cada jugador sale de `playerPose.ts`, la misma para el local y para los que llegan por la red | Los pies no patinan, las manos están siempre en el arma y una postura nueva es mover el arma o escribir una capa. Todo se prueba sin pantalla (`animation.test.ts`) |
+| Sombras en niveles grandes | El mapa de sombras sigue a la cámara a saltos de un texel (`followShadow` en `levels/LevelBuilder.ts`) | Un nivel de 115 m mantiene la definición de uno de 80 y los bordes no tiemblan |
 | Render | `NeutralToneMapping`, IBL tenue, luz hemisférica, una direccional con sombra, neón emisivo en HDR y rim light Fresnel; bloom y viñeta en los presets Medio y Alto, sobre un destino multimuestreado; oclusión ambiental (GTAO a media resolución) en Alto; cielo nocturno procedural en los niveles a cielo abierto (`render/sky.ts`) | Legibilidad antes que efectos |
 | Materiales del escenario | Texturas fotoescaneadas CC0 (color, relieve y un mapa de oclusión y rugosidad) en WebP, servidas desde `public/textures/` y descargadas antes de construir cada nivel (`render/pbrTextures.ts`); muestreo sin repetición en el shader; los dibujos con diseño propio (damero, cajas, moquetas) siguen siendo procedurales y la foto solo les pone relieve. Las aristas de las cajas llevan un chaflán de 3 cm solo en el dibujo | Realismo sin modelos importados: unos 4,4 MB en total y cada nivel descarga solo los suyos; sin conexión, el material se queda con su textura procedural |
 | UI | DOM y CSS encima del canvas | Accesible con teclado y fácil de iterar |
@@ -184,9 +185,13 @@ Medidas con el controlador de personaje real:
 | Techos | ≥ 2,6 m. A 1,3 m o menos solo se pasa agachado (recurso intencional) |
 | Cobertura baja | Al menos 1,2 m (`COVER_LOW_MIN` en `levels/validate.ts`): tapa a un personaje agachado (1,14 m) y aún se salta con vault. El jugador solo se cubre tras lo que pasa de 0,85 m; un mueble más bajo, como un sofá, no lleva `cover`. Lo comprueban los tests de niveles (la arena de pruebas queda fuera) |
 | Vault | Obstáculos de 0,42 a 1,28 m de alto y hasta 1,6 m de fondo; si son más profundos, el personaje se sube encima |
+| Muros con huecos | `wallX` y `wallZ` abren puertas y ventanas a cualquier altura. Si la puerta es de una planta alta, el forjado (`deck`) debe pasar por debajo del hueco: un muro no es suelo para la navegación |
+| Adornos | `trim` (ni choca ni se pisa) para pilastras, cornisas, pintura del suelo y marcos. Cada farola o fluorescente que se ve va con su luz puntual cerca |
+| Otra ruta | Cada zona, con al menos dos accesos (`tests/unit/contracts.test.ts` corta uno y comprueba el otro) |
+| Enemigos | Entre 8 y 14 al empezar y hasta 7 por etapa (`spawnOn` con `onStart` u `onComplete` de un objetivo); `guard` para los que no dejan su puesto |
 | Colliders | Toda caja con colisión debe estar en `boxes` o `ramps`; nada de colliders a mano |
 
-Al añadir un nivel nuevo, los tests de `tests/unit/levels.test.ts` y `tests/unit/hubNav.test.ts` comprueban automáticamente la luz mínima, los spawns libres, los ids únicos y que objetivos, checkpoints, enemigos y civiles estén conectados por la rejilla de navegación.
+Al añadir un nivel nuevo, los tests de `tests/unit/levels.test.ts`, `tests/unit/hubNav.test.ts` y, en los contratos, `tests/unit/contracts.test.ts` comprueban automáticamente la luz mínima, los spawns libres, los ids únicos y que objetivos, checkpoints, enemigos y civiles estén conectados por la rejilla de navegación.
 
 ## 9. Pruebas
 
@@ -226,19 +231,20 @@ Sin una GPU integrada a mano, se mide lo que la limita:
 - CPU por frame con la CPU frenada por el protocolo de DevTools: ×2 se parece a un portátil con gráfica integrada (es el límite que se exige) y ×4 a un portátil viejo (solo se registra);
 - tamaño del JavaScript comprimido.
 
-Todo está en `tests/e2e/perf.spec.ts`, con el motivo de cada presupuesto. El peor valor de todos los niveles en calidad Alta (2026-11-24, RTX 4060):
+Todo está en `tests/e2e/perf.spec.ts`, con el motivo de cada presupuesto. El peor valor de todos los niveles en calidad Alta (2026-11-25, RTX 4060):
 
 | Métrica | Medida | Límite |
 |---|---|---|
-| Draw calls | 130 | ≤ 260 |
-| Triángulos (con sombras) | 132 k | ≤ 230 k |
-| Programas de sombreado en toda la sesión | 71 | ≤ 76 |
-| CPU por frame | 2,0 ms | ≤ 4 ms |
-| CPU por frame con CPU ×2 | 5,4 ms | ≤ 10 ms |
-| CPU por frame con CPU ×4 | 13,1 ms | (registro) |
-| JS del juego / motor de física, gzip | 355 KB / 1,6 MB | ≤ 368 KB / 1,8 MB |
+| Draw calls | 201 | ≤ 260 |
+| Triángulos (con sombras) | 154 k | ≤ 230 k |
+| Programas de sombreado en toda la sesión | 49 | ≤ 76 |
+| CPU por frame | 2,4 ms | ≤ 4 ms |
+| CPU por frame con CPU ×2 | 6,9 ms | ≤ 10 ms |
+| CPU por frame con CPU ×4 | 20,1 ms | (registro) |
+| JS del juego / motor de física, gzip | 347 KB / 1,6 MB | ≤ 355 KB / 1,8 MB |
+| Datos de cada nivel, gzip (se descargan al entrar) | 5,6 KB | ≤ 8 KB |
 
-Lo que más ayudó: un `SkinnedMesh` por personaje (de 421 a 169 draw calls), fusionar los props por material (de 169 a 139), congelar las matrices del nivel estático y regenerar las sombras a 30 Hz en el preset Medio.
+Lo que más ayudó: un `SkinnedMesh` por personaje (de 421 a 169 draw calls), fusionar los props por material (de 169 a 139), congelar las matrices del nivel estático, regenerar las sombras a 30 Hz en el preset Medio y, con los mapas grandes, no dibujar a quien tapan del todo las paredes (`entities/occlusion.ts`: de 212 k a 119 k triángulos en la calle del club), no partir por zonas lo que hay poco de un material y quitar la sombra de los personajes lejanos.
 
 En el primer arranque el preset se elige según la GPU (las integradas de Intel, las de móvil y el render por software empiezan en Bajo) y la resolución dinámica baja la escala si los frames no llegan a ~58 FPS y la vuelve a subir cuando se recuperan.
 

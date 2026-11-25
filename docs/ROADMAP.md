@@ -8,6 +8,7 @@ Qué se puede mejorar y en qué orden. Cada bloque está pensado para una sesió
 
 - Hub, tutorial, tres contratos y Gauntlet completos y jugables de principio a fin.
 - Cuerpo y animación rehechos (bloque 2, pulido tras la quinta entrega): esqueleto de 24 huesos (columna en dos tramos, cuello, clavículas, muñecas, dedos y punta del pie), cuerpos con proporciones de persona (hombros, talle, manos, melena de una pieza), un ciclo de marcha que no patina en ninguna dirección y posturas según lo que pasa: relajado, en guardia, encarando, herido. El arma manda sobre los brazos, así que las manos están siempre en ella. A cubierto, de espaldas a la pared, y al asomarse se gira por fuera de la esquina. El Huésped acusa los golpes y los aterrizajes; la gente del hotel espera y gesticula, en el club se baila de tres maneras y con los tiros unos corren y otros se encogen. Todo en capas que se prueban sin pantalla.
+- Mapas nuevos (bloque 2, sexta y última entrega): Club Kairos, Muelle 9 y Torre Meridian rehechos con 5,5, 2,1 y 2,5 veces más sitio, al menos dos rutas a cada zona, alturas conectadas, de 6 a 7 objetivos y enemigos por etapas. Muros con puertas y ventanas a cualquier altura, farolas, coches, helicóptero y adornos que dan escala. Para sostenerlos, oclusión de personajes, sombras que siguen a la cámara y guardias que no dejan su puesto. Una prueba por contrato mide superficie, rutas alternativas, sitio para cuatro y ritmo de enemigos.
 - Carrera, remates, lluvia y caras (pulido tras la quinta entrega): al correr el tronco va inclinado, la rodilla de apoyo casi recta y el talón sube por detrás; el remate agarra de verdad de la solapa, proyecta y tira al suelo a la víctima, que cae con quien la lleva; en los contratos a cielo abierto llueve, y bajo techo no; y cada personaje tiene su cara (mandíbula, nariz, labios, cejas, orejas).
 - Animación sin tirones, medida articulación por articulación: las transiciones van con muelles críticos, el cuerpo gira con suavidad aunque la simulación gire en seco y ninguna postura se enciende ni se apaga de golpe. Se corrigió además un enganchón del movimiento: al correr se perdía uno de cada 20 o 30 pasos de simulación.
 - Enemigos (bloque 2, quinta entrega): pelean en escuadra (turnos de disparo, rodeos avisados con fuego de cobertura), usan coberturas bajas y altas comprobadas con rayos, recargan a cubierto, se asustan del fuego cercano, se apartan de las granadas, registran la zona y encuentran a sus caídos. Cada impacto se nota donde da (cabeza, brazo, pierna) y hay seis formas de caer. Tres tipos nuevos: antidisturbios con escudo, sabueso mecánico y dron. La dificultad se midió antes y después con las mismas semillas para que el daño que hacen no cambie.
@@ -32,11 +33,11 @@ Qué se puede mejorar y en qué orden. Cada bloque está pensado para una sesió
 Decidido el 22 de noviembre de 2026 (ver [VISION.md](VISION.md)): antes de las skins, el juego tiene que estar a la altura de ellas. La vara de medir es el deslizamiento: cada mecánica tiene que sentirse igual de pulida. Se entrega por partes, y cada una se publica cuando está probada:
 
 1. **Cobertura.** Hecha (ver «Estado actual»).
-2. **Render y materiales.** Hecho (ver «Estado actual»). Queda para más adelante: luz y sombra afinadas nivel a nivel cuando se rehagan los mapas (entrega 6).
+2. **Render y materiales.** Hecho (ver «Estado actual»). La luz de cada nivel se afinó al rehacer los mapas (entrega 6).
 3. **Armas.** Hecha: los modelos, el inventario y la aturdidora (ver «Estado actual»). Queda como contenido para después, ya sin obra: más armas para cada hueco y más equipo (humo, señuelo).
 4. **Personajes y aspecto por tipo de enemigo.** Hecha (ver «Estado actual»). Queda para más adelante: más variedad de rostros y cuerpos entre los civiles y entre los enemigos de un mismo tipo.
-5. **Enemigos: comportamiento, reacciones y tipos nuevos.** Hecha (ver «Estado actual»). Queda para la entrega 6 darles sitio: rutas para rodear y alturas para el dron.
-6. **Mapas.** Club Kairos, Muelle 9 y Torre Meridian rehechos con el doble de superficie o más, rutas para flanquear y alturas; contratos de 8 a 12 minutos y sitio para cuatro jugadores.
+5. **Enemigos: comportamiento, reacciones y tipos nuevos.** Hecha (ver «Estado actual»); con los mapas de la entrega 6 ya tienen rutas para rodear y alturas.
+6. **Mapas.** Hecha (ver «Estado actual»). Queda como contenido para después: puertas que se abren y se cierran, y más objetos con los que interactuar.
 
 ## Antes de añadir contenido: robustez y rendimiento
 
@@ -74,7 +75,7 @@ Ya hay pausa de impacto y sacudida en cada baja, casquillos, humo en la boca del
 - Los tests de `tests/unit/levels.test.ts` y `hubNav.test.ts` validan solos la luz mínima y la conectividad del nivel nuevo.
 
 ### 5. Más variedad de enemigos y jefes
-- Hecho: antidisturbios con escudo, sabueso y dron. Quedan por aprovechar en mapas más grandes, con sitio para rodear y alturas.
+- Hecho: antidisturbios con escudo, sabueso y dron, repartidos ya por los mapas grandes.
 - Patrones propios para Vance y el Juez (hoy comparten la IA general con fases).
 
 ### 6. Historia mínima

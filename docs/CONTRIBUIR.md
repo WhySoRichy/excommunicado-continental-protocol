@@ -35,7 +35,9 @@ La primera vez que se ejecuten las e2e: `npx playwright install chromium firefox
 | Servicio de salas (Cloudflare) | `server/salas/`: `core.ts` (la lógica, sin Cloudflare) y `worker.ts` (Worker y Durable Object). Se despliega con `.github/workflows/salas.yml`; en local, `npx wrangler dev` en esa carpeta |
 | Pantallas del cooperativo y lo que hacen sus botones | `src/ui/coopScreens.ts` y `src/game/coopScreenApi.ts` |
 | Textos nuevos | `src/text/`: el catálogo (cooperativo y equipo) |
-| Un nivel o uno nuevo | `src/levels/data/` (y registrarlo en `src/levels/registry.ts`) |
+| Un nivel o uno nuevo | `src/levels/data/` (y registrarlo en `src/levels/registry.ts`); las piezas (muros con huecos, escaleras, forjados, farolas, coches, adornos), en `src/levels/helpers.ts`; los props, en `LevelBuilder.ts`. Reglas en ARQUITECTURA §8; los contratos, además, en `tests/unit/contracts.test.ts` |
+| A quién se deja de dibujar (oculto tras paredes) y niveles de detalle | `src/entities/occlusion.ts` y `updateDetail` de `CharacterRig.ts` |
+| Lluvia | `src/render/Rain.ts` (`weather: 'rain'` en el nivel) |
 | Objetivos de un contrato | bloque `mission` del nivel; las reglas en `src/missions/objectives.ts` y su aplicación en `MissionDirector.ts` |
 | HUD, aviso contextual e Intel (qué se muestra) | `src/game/hudModel.ts`; cómo se dibuja, en `src/ui/` |
 | Tienda, monedas, logros | `src/hub/economy.ts`, `src/missions/achievements.ts` |
@@ -118,6 +120,9 @@ La primera vez que se ejecuten las e2e: `npx playwright install chromium firefox
 - **Cambiar de destino sin cambiar de estado.** Un enemigo a cubierto al que veían elegía otra cobertura, pero seguía en el estado «a cubierto» y se daba por llegado: no se movía. Lo que se reinicia al entrar en un estado hay que reiniciarlo también al volver a elegir dentro de él.
 - **Un panel cuyo contenido cambia de alto.** En la armería, cada pieza tenía un texto distinto: al pasar el ratón aparecían y desaparecían barras de desplazamiento y la ventana saltaba. Si el contenido cambia al señalar, el hueco debe ser el del más grande (los textos superpuestos en la misma celda de una rejilla) y los lienzos, medir lo que diga la hoja de estilos (`setSize(w, h, false)`).
 - **Caer girando por el centro del cuerpo.** Si la altura baja a un ritmo y el giro va a otro, los pies se hunden en el suelo a mitad de la caída. La altura sale del ángulo (`fallHeight`).
+- **La junta entre dos peldaños.** Una celda de navegación cuyo centro caía justo en la junta de dos cajas no estaba en ninguna de las dos (un redondeo en el último decimal) y cortaba la escalera: los enemigos daban la vuelta al mapa. El contorno de las cajas lleva ahora una décima de milímetro de margen.
+- **Puertas de una planta alta sin suelo.** El forjado acababa en la cara del muro y el hueco de la puerta quedaba sobre el muro de abajo: el jugador lo cruzaba, pero para la navegación no había por dónde pasar. El forjado tiene que llegar al otro lado.
+- **Una vista que no se anima porque no se ve.** Los personajes tapados se animan a ratos, no nunca: si al aparecer conservaran la postura de hace diez segundos, se vería el salto.
 - **Lo que se sube a la GPU al verlo por primera vez.** Un rótulo que entraba en cuadro a mitad de partida subía su textura en ese fotograma (un tirón) y, según el instante, la prueba de recursos contaba una más. `GameRenderer.prewarm` sube las texturas de toda la escena y los esqueletos al cargar el nivel.
 - **Publicar con una prueba en rojo solo en la CI.** Las e2e en verde con GPU no bastan: un despliegue cayó por un recurso que solo se contaba distinto con el render por software. Antes de publicar, `CI=1 npm run test:e2e` entero y sin nada pesado a la vez.
 - **Montar el mundo en cada prueba.** Las pruebas sin pantalla que necesitan física, enemigos y jugadores usan `tests/unit/support/world.ts` (`simWorld`), que los conecta como la sesión; no se vuelve a montar a mano.
