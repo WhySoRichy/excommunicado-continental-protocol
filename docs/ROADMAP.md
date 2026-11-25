@@ -8,6 +8,7 @@ Qué se puede mejorar y en qué orden. Cada bloque está pensado para una sesió
 
 - Hub, tutorial, tres contratos y Gauntlet completos y jugables de principio a fin.
 - Cuerpo y animación rehechos (bloque 2, pulido tras la quinta entrega): esqueleto de 24 huesos (columna en dos tramos, cuello, clavículas, muñecas, dedos y punta del pie), cuerpos con proporciones de persona (hombros, talle, manos, melena de una pieza), un ciclo de marcha que no patina en ninguna dirección y posturas según lo que pasa: relajado, en guardia, encarando, herido. El arma manda sobre los brazos, así que las manos están siempre en ella. A cubierto, de espaldas a la pared, y al asomarse se gira por fuera de la esquina. El Huésped acusa los golpes y los aterrizajes; la gente del hotel espera y gesticula, en el club se baila de tres maneras y con los tiros unos corren y otros se encogen. Todo en capas que se prueban sin pantalla.
+- Carrera, remates, lluvia y caras (pulido tras la quinta entrega): al correr el tronco va inclinado, la rodilla de apoyo casi recta y el talón sube por detrás; el remate agarra de verdad de la solapa, proyecta y tira al suelo a la víctima, que cae con quien la lleva; en los contratos a cielo abierto llueve, y bajo techo no; y cada personaje tiene su cara (mandíbula, nariz, labios, cejas, orejas).
 - Animación sin tirones, medida articulación por articulación: las transiciones van con muelles críticos, el cuerpo gira con suavidad aunque la simulación gire en seco y ninguna postura se enciende ni se apaga de golpe. Se corrigió además un enganchón del movimiento: al correr se perdía uno de cada 20 o 30 pasos de simulación.
 - Enemigos (bloque 2, quinta entrega): pelean en escuadra (turnos de disparo, rodeos avisados con fuego de cobertura), usan coberturas bajas y altas comprobadas con rayos, recargan a cubierto, se asustan del fuego cercano, se apartan de las granadas, registran la zona y encuentran a sus caídos. Cada impacto se nota donde da (cabeza, brazo, pierna) y hay seis formas de caer. Tres tipos nuevos: antidisturbios con escudo, sabueso mecánico y dron. La dificultad se midió antes y después con las mismas semillas para que el daño que hacen no cambie.
 - Personajes nuevos (bloque 2, cuarta entrega): cuerpos de superficies suaves en lugar de bloques, con manos de cinco dedos, rostro modelado, ropa con arrugas y un brillo propio para cada material. Cada enemigo tiene su silueta (cazadora, portaplacas, capucha y visor, armadura con pantalla, abrigo blanco) y las articulaciones se doblan sin abrirse. Dos mallas por aspecto según la distancia; todo generado por código, sin descargas. Una prueba compara las siluetas, las caras y los pesos de los trece aspectos.
@@ -45,7 +46,6 @@ Lo que quedó pendiente de esa revisión. Conviene hacerlo antes del cuarto cont
 - Pantalla de logros (hay 17 y solo aparecen al conseguirlos) y de estadísticas (el tiempo jugado se guarda y no se muestra).
 - Selector de dificultad: los multiplicadores de puntería y daño de los enemigos ya están cableados.
 - Registro local de partidas exportable, para medir el balance con jugadores reales (punto 3).
-- La lluvia declarada en los niveles (`weather`) no se dibuja.
 
 ### Mantenibilidad
 - Seguir repartiendo `src/game/Game.ts` (1.871 líneas; el flujo de los contratos, las interacciones del vestíbulo y lo del cooperativo son lo más separable) y pasar las fases del jefe de `MissionDirector` a un módulo puro.
@@ -55,7 +55,7 @@ Lo que quedó pendiente de esa revisión. Conviene hacerlo antes del cuarto cont
 
 ### 1. Pulido de animación
 Rehecha por capas (ver «Estado actual»). Queda como pulido:
-- **Remates coreografiados** con el enemigo: hoy cada uno hace su parte, sin agarrarse de verdad.
+- **Más remates**, según el arma y el sitio (contra un muro, por la espalda): hoy hay uno, con su agarre y su proyección.
 - **Civiles que miran** hacia el tiroteo antes de correr.
 - Cómo comprobarlo: `npm run sheets -- posturas marcha cobertura acciones gestos` y `npm run poses` (dentro del juego).
 

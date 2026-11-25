@@ -236,7 +236,7 @@ Todo está en `tests/e2e/perf.spec.ts`, con el motivo de cada presupuesto. El pe
 | CPU por frame | 2,0 ms | ≤ 4 ms |
 | CPU por frame con CPU ×2 | 5,4 ms | ≤ 10 ms |
 | CPU por frame con CPU ×4 | 13,1 ms | (registro) |
-| JS del juego / motor de física, gzip | 345 KB / 1,6 MB | ≤ 355 KB / 1,8 MB |
+| JS del juego / motor de física, gzip | 355 KB / 1,6 MB | ≤ 368 KB / 1,8 MB |
 
 Lo que más ayudó: un `SkinnedMesh` por personaje (de 421 a 169 draw calls), fusionar los props por material (de 169 a 139), congelar las matrices del nivel estático y regenerar las sombras a 30 Hz en el preset Medio.
 

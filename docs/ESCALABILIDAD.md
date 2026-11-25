@@ -18,7 +18,7 @@ El juego va a seguir creciendo en cuatro direcciones a la vez: gráficos, conten
 |---|---|---|
 | Simulación y vista mezcladas | Al empezar la fase 1, 11 módulos de simulación importaban render, audio, interfaz o cámara. Tras la fase 1, ninguno (vigilado por lint) | Resuelto: la simulación corre sin pantalla |
 | Un solo jugador cableado | Al empezar la fase 2, `LevelSession` guardaba un `player`, un `combat` y un único `PlayerTarget`. Tras ella, un registro de plazas con un objetivo por jugador; tras la fase 3, cooperativo en red | Resuelto |
-| Peso del juego | 345 KB comprimidos de un presupuesto de 355 (275 al terminar la red; después, armas, personajes y enemigos por código) | Lo próximo grande conviene cargarlo aparte, como los niveles |
+| Peso del juego | 355 KB comprimidos de un presupuesto de 368 (275 al terminar la red; después, armas, personajes y enemigos por código) | Lo próximo grande conviene cargarlo aparte, como los niveles |
 | Módulos que concentran demasiado | `Game.ts` 1.867 líneas, `PlayerController.ts` 1.597, `CharacterRig.ts` 1.327, `PlayerCombat.ts` 1.104, `Enemy.ts` 1.028 (2026-11-24) | Que dos frentes avancen a la vez sin pisarse |
 | Textos dentro del código | Cadenas en español repartidas por más de diez módulos de juego (armas, estilo, logros, diálogos) | Traducir y revisar textos sin tocar lógica |
 | Contenido sin validar fuera de los niveles | Armas, tipos de enemigo y diálogos no tienen comprobaciones como las de los niveles | Añadir contenido en volumen sin romper el equilibrio ni las referencias |

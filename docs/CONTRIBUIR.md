@@ -64,7 +64,7 @@ La primera vez que se ejecuten las e2e: `npx playwright install chromium firefox
 | `npm run poses` | Capturas de perfil de cada pose del jugador en `qa-screenshots/poses/`, con el build de pruebas servido en otra terminal (`npm run build:qa && npm run preview:qa`). Imprescindible al tocar animaciones |
 | `npm run media` | Regenera las capturas y el GIF del README (necesita ffmpeg) |
 | `npm run textures` | Descarga de Poly Haven las texturas CC0 de los escenarios y las convierte a WebP en `public/textures/` (necesita ffmpeg). Solo para añadir o cambiar una: las convertidas se versionan. Si se añade, va también en `PBR_SETS` (`src/render/pbrTextures.ts`) y en [CREDITOS.md](CREDITOS.md) |
-| `npm run sheets` | Hojas de diseño con el motor del juego y luz de estudio: posturas, marcha, cobertura, acciones, gestos, manos, armas, personajes, golpes y caídas, en `qa-screenshots/sheets/`. `npm run sheets -- armas cara` genera solo esas. Útiles para revisar un cambio de aspecto antes de enseñarlo |
+| `npm run sheets` | Hojas de diseño con el motor del juego y luz de estudio: posturas, marcha, carrera, cobertura, acciones, gestos, manos, caras, armas, personajes, golpes y caídas, en `qa-screenshots/sheets/`. `npm run sheets -- armas cara` genera solo esas. Útiles para revisar un cambio de aspecto antes de enseñarlo |
 | F3 en el juego | FPS, draw calls y estado. Con `?qa=1`, también botones de depuración (colisiones, modo dios, matar enemigos...) |
 | `?qa=1` | API de pruebas y comandos del F3. Solo en desarrollo (`npm start`) y en el build de pruebas (`npm run build:qa`); la versión publicada no los incluye |
 | `?level=arena` | Arena de pruebas de movimiento |

@@ -130,7 +130,7 @@ Más en profundidad: [arquitectura](docs/ARQUITECTURA.md), [diseño](docs/DISENO
 
 | | |
 |---|---|
-| **394 unitarias** | Partidas completas sin pantalla, red con latencia y pérdidas, IA de cada enemigo y de la escuadra, balística, cobertura, animación (marcha sin patinar, manos en el arma, posturas), mallas, niveles, economía y guardado |
+| **398 unitarias** | Partidas completas sin pantalla, red con latencia y pérdidas, IA de cada enemigo y de la escuadra, balística, cobertura, animación (marcha sin patinar, manos en el arma, posturas), mallas, niveles, economía y guardado |
 | **66 de navegador** | El juego construido como en producción: contratos de principio a fin, cooperativo entre dos pestañas, movimiento sin atravesar paredes, tirones de animación, rendimiento, fugas de memoria, claridad visual, audio, mando y ajustes |
 
 Cada cambio pasa por el linter, la auditoría de dependencias y las dos baterías antes de publicarse.
@@ -145,7 +145,7 @@ Peor valor de todos los niveles en calidad Alta, comprobado en cada cambio:
 | Triángulos, con sombras | 176 k | 230 k |
 | CPU por fotograma | 2,2 ms | 4 ms |
 | CPU por fotograma con el procesador frenado a la mitad | 5,8 ms | 10 ms |
-| Descarga del juego / de la física (gzip) | 353 KB / 1,6 MB | 355 KB / 1,8 MB |
+| Descarga del juego / de la física (gzip) | 355 KB / 1,6 MB | 368 KB / 1,8 MB |
 
 En una RTX 4060 va a 144 FPS, el tope del monitor. En gráficas integradas arranca en calidad Baja.
 
