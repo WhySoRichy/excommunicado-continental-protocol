@@ -19,6 +19,24 @@ export type WeaponModel = 'pistol' | 'revolver' | 'rifle' | 'dmr' | 'smg' | 'sho
 /** Rostro: `stern`, ceñudo (el común); `calm`, sereno (el del Huésped). */
 export type FaceStyle = 'stern' | 'calm';
 
+/** Rasgos de la cara: 1 es lo normal; más o menos exagera o suaviza cada uno. */
+export interface Features {
+  /** Ancho de la mandíbula, saliente del mentón, largo de la nariz y ancho de sus aletas. */
+  jaw: number;
+  chin: number;
+  nose: number;
+  nostrils: number;
+  /** Arco de las cejas, grosor de los labios, abertura de los ojos y relieve de los pómulos. */
+  brow: number;
+  lips: number;
+  eyes: number;
+  cheeks: number;
+  /** Rasgos suaves: cejas finas, pestañas, labios con color y sin sombra de barba. */
+  soft: boolean;
+  /** Color del iris (castaño por defecto). */
+  iris?: number;
+}
+
 /** Prendas y equipo opcionales. Sin `outfit`, el personaje lleva traje de chaqueta con corbata y pañuelo. */
 export interface Outfit {
   /** Lo que lleva en el tronco: traje (por defecto), cazadora acolchada, abrigo largo o uniforme de faena. */
@@ -77,8 +95,9 @@ export interface RigOptions {
   beard?: boolean;
   /** Prendas que cambian la silueta además de los colores (traje de tres piezas, sumiller...). */
   outfit?: Outfit;
-  /** Rostro (por defecto `stern`). */
+  /** Rostro (por defecto `stern`) y sus rasgos. */
   face?: FaceStyle;
+  features?: Partial<Features>;
   weapon: WeaponModel;
   /** Material propio (no cacheado): permite efectos por instancia (destello de impacto). */
   uniqueMaterial?: boolean;
@@ -143,6 +162,13 @@ export interface RigPose {
   death: DeathStyle;
   /** Tiempo dentro del takedown (s) de quien lo ejecuta; −1 si no hay. */
   takedown: number;
+  /** Tiempo (s) desde que lo agarran y lo proyectan (la víctima); −1 si no. Sigue contando tras morir así. */
+  thrown: number;
+  /** Punto del mundo que agarra la mano izquierda (la ropa de la víctima) y con qué peso (0..1). */
+  grabX: number;
+  grabY: number;
+  grabZ: number;
+  grab: number;
   /** Gesto de lanzar 0..1 (−1 = no lanza): hasta 0,4 arma el brazo izquierdo; después lanza y lo baja. */
   throw: number;
   /** 0..1 aturdido por un destello: se tambalea con la mano en la cara. */
@@ -196,6 +222,11 @@ export function idlePose(): RigPose {
     limp: 0,
     death: 0,
     takedown: -1,
+    thrown: -1,
+    grabX: 0,
+    grabY: 0,
+    grabZ: 0,
+    grab: 0,
     throw: -1,
     daze: 0,
     vault: -1,

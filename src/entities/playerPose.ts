@@ -1,7 +1,10 @@
+import { Vector3 } from 'three';
 import type { PlayerLook } from '../combat/playerLook';
 import { FIXED_DT } from '../core/Loop';
 import { clamp } from '../core/math';
+import type { CharacterRig } from './CharacterRig';
 import type { PlayerController } from './PlayerController';
+import { grabAt } from './rig/layers';
 import type { RigPose } from './rig/types';
 
 /** Segundos que sigue en guardia después de lo último que hizo en combate. */
@@ -35,6 +38,18 @@ export class PlayerBody {
     this.hurt = Math.max(0, this.hurt - HURT_DECAY * dt);
     pose.flinch = this.hurt * this.hurt;
   }
+}
+
+const _lapel = new Vector3();
+
+/** En un remate, la mano izquierda va a la solapa de la víctima (`body`, su personaje) y baja con ella. */
+export function grabVictim(pose: RigPose, body: CharacterRig | null): void {
+  pose.grab = body ? grabAt(pose.takedown) : 0;
+  if (!body || pose.grab <= 0) return;
+  body.bones.chest.localToWorld(_lapel.set(0.07, 0.13, -0.15));
+  pose.grabX = _lapel.x;
+  pose.grabY = _lapel.y;
+  pose.grabZ = _lapel.z;
 }
 
 /** Lo que se ve de un jugador, en su postura: su movimiento y lo que hace (`look`). Vale para el local y para los demás. */

@@ -97,6 +97,20 @@ const SHEETS = {
       ...GAIT('fusil corriendo', { speed: 5, ready: 1 }, 6, { weapon: 'rifle' }),
     ],
   },
+  carrera: {
+    tile: [230, 330],
+    cols: 8,
+    views: [
+      ...GAIT('trote', { speed: 4.6 }, 8, { cam: [4.2, 0.1, 0] }),
+      ...GAIT('trote, detrás', { speed: 4.6 }, 8, { cam: [0.6, 0.45, 4] }),
+      ...GAIT('trote, delante', { speed: 4.6 }, 8, { cam: [-0.8, 0.1, -4] }),
+      ...GAIT('sprint', { speed: 7 }, 8, { cam: [4.2, 0.1, 0] }),
+      ...GAIT('sprint, detrás', { speed: 7 }, 8, { cam: [0.6, 0.45, 4] }),
+      ...GAIT('fusil, trote', { speed: 4.6, ready: 1 }, 8, { weapon: 'rifle', cam: [4.2, 0.1, 0] }),
+      ...GAIT('fusil, sprint', { speed: 7, ready: 1 }, 8, { weapon: 'rifle', cam: [3.4, 0.2, -2.4] }),
+      ...GAIT('pistola en guardia', { speed: 4.6, ready: 1 }, 8, { cam: [4.2, 0.1, 0] }),
+    ],
+  },
   cobertura: {
     tile: [260, 340],
     cols: 5,
@@ -318,6 +332,14 @@ const SHEETS = {
       { label: 'manos', show: ['player'], weapon: 'pistol', target: [0.2, 0.98, -0.25], cam: [0.5, 0.2, -0.9], fov: 30 },
     ],
   },
+  caras: {
+    tile: [300, 340],
+    cols: 4,
+    views: ['player', 'charon', 'sommelier', 'winston', 'civ0', 'civ1', 'civ2', 'civ3', 'thug', 'boss'].flatMap((t) => [
+      { label: `${t}: frente`, show: [t], target: 'head', cam: [0, 0, -0.62], fov: 30 },
+      { label: `${t}: tres cuartos`, show: [t], target: 'head', cam: [0.42, 0.02, -0.46], fov: 30 },
+    ]),
+  },
   civiles: {
     tile: [300, 420],
     cols: 4,
@@ -442,6 +464,8 @@ try {
             beard: l.beard,
             bulk: l.bulk,
             outfit: l.outfit,
+            features: l.features,
+            face: 'calm',
             weapon: 'none',
           }),
         );
@@ -460,6 +484,7 @@ try {
             beard: d.beard,
             bulk: d.bulk,
             outfit: d.outfit,
+            features: d.features,
             weapon: d.weapon.model,
             uniqueMaterial: true,
           }),

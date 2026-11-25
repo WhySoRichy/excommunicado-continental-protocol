@@ -2,7 +2,7 @@ import { Quaternion, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { emptyPlayerLook } from '../../src/combat/playerLook';
 import { CharacterRig, idlePose, PLAYER_LOOK, type RigPose, type WeaponModel } from '../../src/entities/CharacterRig';
-import { PlayerBody } from '../../src/entities/playerPose';
+import { grabVictim, PlayerBody } from '../../src/entities/playerPose';
 import type { PlayerController } from '../../src/entities/PlayerController';
 import { footAt, stepAt, type Stride, strideAt } from '../../src/entities/rig/gait';
 import { reach, solveLimb } from '../../src/entities/rig/limbs';
@@ -112,6 +112,29 @@ describe('ciclo de marcha', () => {
     expect(at(7).length).toBeGreaterThan(at(4.6).length);
     expect(at(7).duty).toBeLessThan(0.3);
     expect(at(1.2).duty).toBeGreaterThan(0.5);
+  });
+
+  it('corriendo va erguido y hacia delante, no sentado: la rodilla de apoyo no pasa de 55° y el talón sube por detrás', () => {
+    for (const speed of [4.6, 7]) {
+      const rig = make('pistol');
+      const pose = idlePose();
+      pose.speed = speed;
+      settle(rig, pose);
+      const s = rig['gait'].stride;
+      let stance = 0;
+      let heel = 9;
+      for (let i = 0; i < 120; i++) {
+        rig.update(pose, DT);
+        const u = rig['gait'].u;
+        const m = rig.motionSample();
+        if (u < s.duty) stance = Math.min(stance, m.shinL!);
+        else heel = Math.min(heel, m.shinL!);
+      }
+      expect(stance, `a ${speed} m/s, apoyada`).toBeGreaterThan(-0.96);
+      expect(heel, `a ${speed} m/s, en el aire`).toBeLessThan(-1.5);
+      expect(rig.motionSample().torsoX!, 'inclinado hacia delante').toBeLessThan(-0.14);
+      rig.dispose();
+    }
   });
 
   it.each([
@@ -256,6 +279,42 @@ describe('posturas', () => {
     expect(at(0) - at(0.5)).toBeGreaterThan(0.02);
     expect(at(2)).toBeCloseTo(at(0), 2);
     rig.dispose();
+  });
+});
+
+describe('remate cuerpo a cuerpo', () => {
+  it('la izquierda agarra la ropa de la víctima y el arma acaba mirando al suelo', () => {
+    const killer = make('pistol');
+    const victim = make('none');
+    victim.root.position.set(0, 0, -0.82);
+    victim.root.rotation.y = Math.PI;
+    const a = idlePose();
+    const b = idlePose();
+    settle(killer, a);
+    settle(victim, b);
+    let closest = 9;
+    let low = 9;
+    let down = 0;
+    for (let i = 0; i < 50; i++) {
+      const t = i * DT;
+      Object.assign(a, { state: 'locked', takedown: t });
+      Object.assign(b, { state: 'dead', thrown: t });
+      victim.update(b, DT);
+      victim.root.updateMatrixWorld(true);
+      grabVictim(a, victim);
+      killer.update(a, DT);
+      killer.root.updateMatrixWorld(true);
+      const hand = killer.bones.handL.getWorldPosition(new Vector3());
+      const lapel = victim.bones.chest.localToWorld(new Vector3(0.07, 0.13, -0.15));
+      if (a.grab > 0.9) closest = Math.min(closest, hand.distanceTo(lapel));
+      low = Math.min(low, victim.bones.chest.getWorldPosition(new Vector3()).y);
+      if (t > 0.52 && t < 0.7) down = Math.min(down, new Vector3(0, 0, -1).applyQuaternion(killer.weaponMount.getWorldQuaternion(new Quaternion())).y);
+    }
+    expect(closest, 'la mano llega a la solapa').toBeLessThan(0.05);
+    expect(low, 'acaba en el suelo').toBeLessThan(0.35);
+    expect(down, 'el cañón, hacia abajo').toBeLessThan(-0.6);
+    killer.dispose();
+    victim.dispose();
   });
 });
 

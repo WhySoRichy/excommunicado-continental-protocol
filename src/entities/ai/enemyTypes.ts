@@ -1,6 +1,6 @@
 import type { EnemyType } from '../../levels/types';
 import type { RobotColors } from '../rig/robots';
-import type { HairStyle, Outfit, RigColors, WeaponModel } from '../rig/types';
+import type { Features, HairStyle, Outfit, RigColors, WeaponModel } from '../rig/types';
 
 /** Tipos de enemigo (DISENO §4.2): color + icono propios para que se distingan siempre. */
 export interface EnemyWeaponDef {
@@ -89,6 +89,7 @@ export interface EnemyTypeDef {
   hair: HairStyle;
   /** Prendas y equipo: la silueta con la que se le reconoce de lejos. */
   outfit: Outfit;
+  features?: Partial<Features>;
   beard?: boolean;
   bulk: number;
   score: number;
@@ -119,6 +120,7 @@ export const ENEMY_TYPES: Record<EnemyType, EnemyTypeDef> = {
     colors: { jacket: 0x3b2b22, shirt: 0x6a6d73, tie: 0x0c0d10, pants: 0x2b3340, shoes: 0x1c1612, skin: 0xbf8f72, hair: 0x2a211b, accent: 0xff8c2a },
     hair: 'bald',
     outfit: { top: 'bomber', armband: true },
+    features: { jaw: 1.1, chin: 1.2, nose: 1.08, nostrils: 1.2, brow: 1.5, cheeks: 1.2, eyes: 0.88, lips: 0.85 },
     beard: true,
     bulk: 1.08,
     score: 100,
@@ -147,6 +149,7 @@ export const ENEMY_TYPES: Record<EnemyType, EnemyTypeDef> = {
     colors: { jacket: 0x23262d, shirt: 0xd9d5cb, tie: 0xffd23f, pants: 0x23262d, shoes: 0x0b0b0d, skin: 0xb98766, hair: 0x1f1a16, accent: 0xffd23f },
     hair: 'short',
     outfit: { vest: 'carrier', glasses: true, earpiece: true, holster: true, armband: true, pocketSquare: false },
+    features: { jaw: 1.06, chin: 1.1, nose: 0.96, brow: 1.1, lips: 0.85 },
     bulk: 1,
     score: 120,
   },
@@ -243,6 +246,7 @@ export const ENEMY_TYPES: Record<EnemyType, EnemyTypeDef> = {
     // El Juez: abrigo blanco hasta la rodilla, guantes negros y el pelo engominado.
     hair: 'slick',
     outfit: { top: 'coat', gloves: 0x101114, boots: true },
+    features: { jaw: 1.04, chin: 1.25, nose: 1.12, nostrils: 0.95, brow: 1.4, cheeks: 1.45, eyes: 0.84, lips: 0.75, iris: 0x7d8a96 },
     beard: true,
     bulk: 1.12,
     score: 600,

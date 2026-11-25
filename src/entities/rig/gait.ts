@@ -32,12 +32,13 @@ export function strideAt(speed: number, crouch: number, out: Stride, across = 0,
   const short = (1 - 0.36 * across) * (1 - 0.14 * back);
   out.length = (0.75 + 0.5 * v - 0.007 * v * v) * (1 - 0.5 * Math.exp(-2.2 * v)) * (1 - 0.24 * crouch) * short;
   // Lo que recorre el pie en el suelo: lo que da de sí la pierna; lo demás se vuela.
-  const travel = Math.min(0.82 * (1 - Math.exp(-2.6 * v)) + 0.02 * fast, out.length * 0.66) * (1 - 0.12 * crouch) * (1 - 0.4 * across) * (1 - 0.1 * back);
+  const travel =
+    Math.min(lerp(0.82, 0.7, run) * (1 - Math.exp(-2.6 * v)) + 0.06 * fast, out.length * 0.66) * (1 - 0.12 * crouch) * (1 - 0.4 * across) * (1 - 0.1 * back);
   out.duty = travel / out.length;
-  const ahead = lerp(lerp(0.41, 0.34, run), 0.31, fast);
+  const ahead = lerp(lerp(0.41, 0.32, run), 0.33, fast);
   out.front = travel * ahead;
   out.back = travel * (1 - ahead);
-  out.lift = lerp(lerp(0.065, 0.2, run), 0.3, fast) * (1 - 0.4 * crouch) * (1 - 0.5 * across);
+  out.lift = lerp(lerp(0.065, 0.27, run), 0.38, fast) * (1 - 0.4 * crouch) * (1 - 0.5 * across);
   out.run = run * (1 - 0.6 * across);
   return out;
 }
@@ -50,19 +51,20 @@ export interface FootAt {
   /** Cabeceo (rad, + punta arriba) y flexión de los dedos (rad, + hacia arriba). */
   pitch: number;
   toe: number;
-  /** 0..1 cuánto peso lleva. */
+  /** 0..1 cuánto peso lleva y cuánto va suelto (en el aire, el pie sigue a la pierna). */
   load: number;
+  air: number;
 }
 
-export const footAt = (): FootAt => ({ along: 0, lift: 0, pitch: 0, toe: 0, load: 0 });
+export const footAt = (): FootAt => ({ along: 0, lift: 0, pitch: 0, toe: 0, load: 0, air: 0 });
 
 /** El pie en la fase `u` de su ciclo (0 al pisar). */
 export function stepAt(u0: number, s: Stride, out: FootAt): FootAt {
   const u = u0 - Math.floor(u0);
   const walk = 1 - s.run;
-  const strike = 0.3 * walk - 0.06 * s.run;
+  const strike = 0.3 * walk + 0.02 * s.run;
   const push = -0.72 + 0.1 * s.run;
-  const rise = lerp(0.5, 0.2, s.run);
+  const rise = lerp(0.5, 0.38, s.run);
   if (u < s.duty) {
     const k = u / s.duty;
     out.along = lerp(s.front, -s.back, k);
@@ -71,6 +73,7 @@ export function stepAt(u0: number, s: Stride, out: FootAt): FootAt {
     out.pitch = strike * (1 - smooth(0, 0.22, k)) + push * smoother(rise, 1.12, k) * 1.18;
     out.toe = Math.max(0, -out.pitch) * 0.85;
     out.load = smooth(0, 0.2, k) * (1 - smooth(0.82, 1, k));
+    out.air = 0;
     return out;
   }
   const t = (u - s.duty) / (1 - s.duty);
@@ -79,13 +82,15 @@ export function stepAt(u0: number, s: Stride, out: FootAt): FootAt {
   const m = (-(s.front + s.back) / s.duty) * (1 - s.duty);
   const r = 1 - t;
   out.along = -s.back + (s.front + s.back) * smoother(0, 1, t) + m * (t * Math.pow(r, 7) - r * Math.pow(t, 6));
-  const peak = Math.sin(Math.PI * t * (1 + lerp(0.05, 0.12, s.run) * r));
+  // Corriendo, el talón sube pronto, por detrás, y el pie pasa hacia delante ya bajando.
+  const peak = Math.sin(Math.PI * t * (1 + lerp(0.05, 0.4, s.run) * r));
   out.lift = s.lift * peak * peak;
   const off = push * smoother(rise, 1.12, 1) * 1.18;
   const tuck = -0.35 - 0.75 * s.run;
   out.pitch = lerp(off, strike, smooth(0.1, 0.95, t)) + tuck * Math.sin(Math.PI * Math.min(1, t * 1.15)) * (1 - t) * 0.9;
   out.toe = Math.max(0, -off) * 0.85 * (1 - smooth(0, 0.4, t));
   out.load = 0;
+  out.air = lerp(0.45, 0.95, s.run) * smooth(0, 0.24, t) * (1 - smooth(0.66, 0.96, t));
   return out;
 }
 
@@ -129,12 +134,12 @@ export function swayAt(u: number, s: Stride, out: BodySway): BodySway {
   const mid = s.duty / 2;
   const a = TAU * u;
   // Andando, lo más bajo es cuando los dos pies tocan; corriendo, a mitad del apoyo (y lo más alto, en el aire).
-  out.bounce = -lerp(0.019, 0, run) * Math.cos(2 * a) - lerp(0, 0.034, run) * Math.cos(2 * (a - TAU * mid));
+  out.bounce = -lerp(0.019, 0, run) * Math.cos(2 * a) - lerp(0, 0.03, run) * Math.cos(2 * (a - TAU * mid));
   const over = Math.cos(a - TAU * mid);
   out.side = -lerp(0.024, 0.014, run) * over;
   out.roll = -lerp(0.062, 0.05, run) * over;
-  out.yaw = -lerp(0.1, 0.16, run) * Math.cos(a);
-  out.twist = lerp(0.12, 0.2, run) * Math.cos(a - 0.15);
+  out.yaw = -lerp(0.1, 0.13, run) * Math.cos(a);
+  out.twist = lerp(0.12, 0.25, run) * Math.cos(a - 0.15);
   out.tilt = lerp(0.03, 0.04, run) * over;
   out.swing = Math.cos(a - 0.22);
   return out;

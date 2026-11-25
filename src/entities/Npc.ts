@@ -1,7 +1,7 @@
 import { type Scene, type Sprite, Vector3 } from 'three';
 import { dampAngle, wrapAngle } from '../core/math';
 import { disposeSprite, makeTextSprite } from '../render/labels';
-import { CharacterRig, type HairStyle, idlePose, type Outfit, type RigColors, type RigPose } from './CharacterRig';
+import { CharacterRig, type Features, type HairStyle, idlePose, type Outfit, type RigColors, type RigPose } from './CharacterRig';
 import { yawFromDir } from './PlayerController';
 import type { Gesture } from './rig/layers';
 import { type LookAngles, lookAngles } from './rigMath';
@@ -16,6 +16,7 @@ export interface NpcDef {
   beard?: boolean;
   bulk?: number;
   outfit?: Outfit;
+  features?: Partial<Features>;
   /** Cómo está de pie. */
   gesture?: Gesture;
 }
@@ -59,6 +60,8 @@ export class Npc {
       beard: def.beard,
       bulk: def.bulk,
       outfit: def.outfit,
+      features: def.features,
+      face: 'calm',
       weapon: 'none',
     });
     this.rig.root.position.copy(this.pos);
@@ -108,12 +111,16 @@ export class Npc {
 }
 
 /** Paletas de los NPC del Continental. */
-export const NPC_LOOKS: Record<'charon' | 'sommelier' | 'winston', Pick<NpcDef, 'name' | 'colors' | 'hair' | 'beard' | 'bulk' | 'outfit' | 'gesture'>> = {
+export const NPC_LOOKS: Record<
+  'charon' | 'sommelier' | 'winston',
+  Pick<NpcDef, 'name' | 'colors' | 'hair' | 'beard' | 'bulk' | 'outfit' | 'features' | 'gesture'>
+> = {
   charon: {
     name: 'Charon · Conserje',
     colors: { jacket: 0x1b1d22, shirt: 0xf1ece0, tie: 0x7a1020, pants: 0x1b1d22, shoes: 0x0b0b0d, skin: 0x6b4630, hair: 0x1a1512, accent: 0xd4af37 },
     hair: 'bald',
     outfit: { waistcoat: 0x7a1020 },
+    features: { jaw: 0.97, nose: 0.92, nostrils: 1.35, lips: 1.35, cheeks: 1.25, eyes: 1.02, iris: 0x2a1a10 },
     gesture: 'formal',
   },
   // Sumiller de la armería: sin chaqueta (camisa blanca a la vista), chaleco burdeos, pajarita,
@@ -123,6 +130,7 @@ export const NPC_LOOKS: Record<'charon' | 'sommelier' | 'winston', Pick<NpcDef, 
     colors: { jacket: 0xece6da, shirt: 0xece6da, tie: 0x111216, pants: 0x1c1c22, shoes: 0x0b0b0d, skin: 0xd9b08c, hair: 0x2b1d14, accent: 0xd4af37 },
     hair: 'slick',
     outfit: { jacket: false, waistcoat: 0x5a1a28, bowTie: true, apron: 0x16171b, tastevin: true, mustache: true },
+    features: { jaw: 0.94, chin: 0.9, nose: 1.14, nostrils: 0.9, lips: 0.8, brow: 0.8, iris: 0x5a6a3a },
     gesture: 'counter',
   },
   winston: {
@@ -131,6 +139,7 @@ export const NPC_LOOKS: Record<'charon' | 'sommelier' | 'winston', Pick<NpcDef, 
     hair: 'slick',
     beard: true,
     outfit: { waistcoat: 0x5c4a22 },
+    features: { jaw: 1.06, chin: 1.15, nose: 1.1, nostrils: 1.1, lips: 0.75, brow: 1.25, eyes: 0.85, cheeks: 1.1, iris: 0x6f8ea8 },
     gesture: 'behind',
   },
 };

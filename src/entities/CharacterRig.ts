@@ -25,6 +25,7 @@ import {
   actions,
   dazed,
   dying,
+  executeAt,
   flinching,
   gesture,
   inCover,
@@ -32,6 +33,7 @@ import {
   landing,
   locomotion,
   newGait,
+  ribsAt,
   staggering,
   type Gait,
   type Weights,
@@ -45,7 +47,7 @@ import { GRIP, gearGeometry, STOCK, weaponGeometry } from './rig/weapons';
 import { bell, type LegAngles, lookWeight, smooth, solveLeg, type Spring, spring } from './rigMath';
 
 export { idlePose } from './rig/types';
-export type { HairStyle, Outfit, RigColors, RigOptions, RigPose, WeaponModel } from './rig/types';
+export type { Features, HairStyle, Outfit, RigColors, RigOptions, RigPose, WeaponModel } from './rig/types';
 
 const HALF_PI = Math.PI / 2;
 const _v = new Vector3();
@@ -534,6 +536,10 @@ export class CharacterRig {
     mixPose(c, carryPose(cls, 'aim'), w.aim);
     if (p.reload >= 0) mixPose(c, carryPose(cls, 'reload'), smooth(0.02, 0.2, p.reload) * (1 - smooth(0.82, 0.98, p.reload)));
     if (w.shield > 0 && cls === 'pistol') c.x += 0.17 * w.shield;
+    if (p.takedown >= 0) {
+      mixPose(c, carryPose(cls, 'ribs'), ribsAt(p.takedown));
+      mixPose(c, carryPose(cls, 'execute'), executeAt(p.takedown));
+    }
     if (p.swap > 0) mixPose(c, carryPose(cls, 'swap'), p.swap);
     if (p.throw >= 0) mixPose(c, carryPose(cls, 'ready'), bell(p.throw) * 0.6);
   }
@@ -647,12 +653,14 @@ export class CharacterRig {
       SHIN,
       true,
       thigh.quaternion,
-      lerp(0.008, lerp(0.014, 0.06, this.gait.stride.run), Math.max(this.w.amp, this.w.turning)),
+      lerp(0.008, lerp(0.014, 0.045, this.gait.stride.run), Math.max(this.w.amp, this.w.turning)),
     );
     shin.rotation.set(bend, 0, 0);
     // El pie, plano en el suelo con su giro y su cabeceo, por mucho que se mueva la pelvis.
     _q.copy(_qHips).multiply(thigh.quaternion).multiply(shin.quaternion).invert();
     foot.quaternion.setFromEuler(_e.set(goal.pitch, goal.yaw, 0, 'YXZ')).premultiply(_q);
+    // En el aire cuelga de la espinilla, con la punta algo caída.
+    if (goal.air > 0.001) foot.quaternion.slerp(_q.setFromEuler(_e.set(-0.32, 0, 0, 'XYZ')), goal.air);
     toe.rotation.x = goal.toe;
 
     const k = f.free;
@@ -697,7 +705,7 @@ export class CharacterRig {
     const k = this.primed ? (f.exact ? (p.state === 'dead' ? lerp(10, 34, smooth(0, 0.28, p.stateTime)) : 40) : quick ? QUICK_K : ARM_K) : 1e4;
     this.angleArm(-1, f.armL, f.fingL, this.armL, f.exact ? 0 : this.body.torsoX, k, dt);
     this.angleArm(1, f.armR, f.fingR, this.armR, f.exact ? 0 : this.body.torsoX, k, dt);
-    const reaching = f.handL.w > 0.001 || f.handR.w > 0.001;
+    const reaching = f.handL.w > 0.001 || f.handR.w > 0.001 || p.grab > 0.001;
     if (!reaching && !w.armed && this.s.hold.x < 0.01 && this.s.support.x < 0.01) return;
     // A partir de aquí, posiciones en el mundo: el tronco ya está colocado.
     b.chest.updateWorldMatrix(true, true);
@@ -716,6 +724,7 @@ export class CharacterRig {
     if (w.blind > 0.01 && armed && p.reload < 0) this.blindFire(p, w.blind * (1 - p.swap));
     const support = this.blend('support', armed ? clamp(this.carry.support * f.grip * Math.max(hold, w.blind), 0, 1) : 0, 24, dt);
     if (support > 0.01) this.supportWeapon(p, support);
+    if (p.grab > 0.001) this.grabVictim(p);
   }
 
   /** Un brazo por ángulos, suavizado. La elevación es respecto a la vertical: se le quita la inclinación del pecho. */
@@ -788,9 +797,14 @@ export class CharacterRig {
     const pitch = c.pitch + p.aimPitch * ak + recoil * lerp(0.17, 0.05, w.long);
     // Posición respecto a los hombros; apuntando, sube y baja con la mirada.
     _v.set(c.x * lerp(1, this.bulk, 0.5), c.y, c.z + recoil * 0.035);
+    // Corriendo, el arma acompaña a los hombros y al rebote de cada paso.
+    const g = this.gait;
+    const step = w.amp * (1 - ak) * lerp(0.35, 1, g.stride.run);
+    _v.x += 0.02 * g.sway.swing * step;
+    _v.y -= 0.55 * g.sway.bounce * step;
     if (ak > 0) _v.applyQuaternion(_q.setFromAxisAngle(_t.set(1, 0, 0), p.aimPitch * ak));
     _hand.copy(_v).applyQuaternion(_qBody).add(_shoulders);
-    _qGun.copy(_qBody).multiply(_q.setFromEuler(_e.set(pitch, c.yaw * (1 - ak), c.roll, 'YXZ')));
+    _qGun.copy(_qBody).multiply(_q.setFromEuler(_e.set(pitch, (c.yaw + 0.09 * g.sway.swing * step) * (1 - ak), c.roll + 0.06 * g.sway.swing * step, 'YXZ')));
     const stock = STOCK[this.weaponModel];
     const shoulder = ak * (1 - p.swap);
     if (stock > 0 && shoulder > 0.001) {
@@ -861,6 +875,13 @@ export class CharacterRig {
     this.armTo(-1, _hand, this.pole(-1, this.carry.elbowL, _aim), k);
     this.handTo(-1, _qHand, k);
     this.bones.fingL.rotation.z = lerp(this.bones.fingL.rotation.z, (long ? 0.95 : 0.55) * fist, k);
+  }
+
+  /** Remate: la mano izquierda, cerrada sobre la ropa de la víctima. */
+  private grabVictim(p: RigPose): void {
+    _hand.set(p.grabX, p.grabY, p.grabZ);
+    this.armTo(-1, _hand, this.pole(-1, 0.75, _v), p.grab);
+    this.bones.fingL.rotation.z = lerp(this.bones.fingL.rotation.z, 0.7, p.grab);
   }
 
   // ======================================================== medidas
@@ -994,6 +1015,7 @@ export const PLAYER_LOOK: RigOptions = {
   hair: 'parted',
   beard: true,
   face: 'calm',
+  features: { jaw: 1.02, chin: 1.1, nose: 1.02, cheeks: 1.15, lips: 0.9, brow: 1.1, eyes: 0.94, iris: 0x4a3524 },
   weapon: 'pistol',
   outfit: { waistcoat: 0x17181d, pocketSquare: false },
 };

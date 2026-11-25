@@ -25,9 +25,10 @@ const BUDGET = {
    * JS inicial del juego (gzip) y del motor de física (gzip), en KB. El del juego subió de 300 a 320 con las armas de
    * piezas reales (bloque 2): las extrusiones, los torneados y la triangulación de contornos de three, unos 8 KB; y a 340
    * con los personajes de mallas suaves, unos 10 KB de código en lugar de megas de modelos descargados; y a 355 con la
-   * escuadra, las reacciones a los impactos y las máquinas (unos 12 KB: mallas, animación e IA, también sin descargas).
+   * escuadra, las reacciones a los impactos y las máquinas (unos 12 KB: mallas, animación e IA, también sin descargas); y
+   * a 368 con el cuerpo y las caras nuevas, los remates y la lluvia (unos 8 KB).
    */
-  appGzKb: 355,
+  appGzKb: 368,
   rapierGzKb: 1800,
 };
 

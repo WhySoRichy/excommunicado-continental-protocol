@@ -15,8 +15,9 @@ export interface LegGoal {
   pitch: number;
   toe: number;
   yaw: number;
-  /** Cuánto se abre la rodilla. */
+  /** Cuánto se abre la rodilla, y 0..1 cuánto va el pie suelto, siguiendo a la espinilla. */
   knee: number;
+  air: number;
 }
 
 /** Pierna suelta (en el aire, rodando, cayendo): el pie, respecto a su cadera. */
@@ -98,7 +99,7 @@ export interface Frame {
   exact: boolean;
 }
 
-const legGoal = (): LegGoal => ({ f: 0, x: 0, y: 0, pitch: 0, toe: 0, yaw: 0, knee: 0 });
+const legGoal = (): LegGoal => ({ f: 0, x: 0, y: 0, pitch: 0, toe: 0, yaw: 0, knee: 0, air: 0 });
 const legFree = (): LegFree => ({ f: 0, down: 0.9, side: 0, pitch: 0, loose: false });
 const arm = (): ArmAngles => ({ sx: 0, sy: 0, sz: 0, el: 0, hx: 0, hz: 0 });
 const hand = (): HandGoal => ({ w: 0, x: 0, y: 0, z: 0, elbow: 0.4, palm: 0 });
@@ -157,7 +158,7 @@ export function resetFrame(f: Frame): void {
   f.spinY = SPIN_Y;
   f.push = 0;
   for (const l of [f.legL, f.legR]) {
-    l.f = l.x = l.y = l.pitch = l.toe = l.yaw = l.knee = 0;
+    l.f = l.x = l.y = l.pitch = l.toe = l.yaw = l.knee = l.air = 0;
   }
   for (const l of [f.freeL, f.freeR]) {
     l.f = l.side = l.pitch = 0;

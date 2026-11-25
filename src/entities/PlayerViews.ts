@@ -4,7 +4,8 @@ import { playerName } from '../text/coop';
 import type { PlayerSlot } from '../combat/PlayerRoster';
 import type { WeaponId } from '../combat/weapons';
 import { CharacterRig, type DetailView, idlePose, PLAYER_LOOK, type RigOptions, type RigPose, type WeaponModel } from './CharacterRig';
-import { fillPlayerPose, PlayerBody } from './playerPose';
+import type { EnemyViews } from './EnemyView';
+import { fillPlayerPose, grabVictim, PlayerBody } from './playerPose';
 import { type BodyYaw, bodyYaw, updateBodyYaw } from './rigMath';
 
 /** Modelo que se dibuja para cada arma del jugador. */
@@ -60,7 +61,7 @@ class PlayerView {
     scene.add(this.label);
   }
 
-  update(alpha: number, dt: number, view: DetailView, threat: boolean): void {
+  update(alpha: number, dt: number, view: DetailView, threat: boolean, enemies: EnemyViews): void {
     this.rig.updateDetail(view);
     const p = this.slot.controller;
     const look = this.slot.look;
@@ -76,6 +77,7 @@ class PlayerView {
     const pose = this.pose;
     fillPlayerPose(pose, p, look, yaw);
     this.body.update(pose, p, look, threat, dt);
+    grabVictim(pose, pose.takedown >= 0 ? enemies.victimNear(p.feet.x, p.feet.z) : null);
     this.rig.update(pose, dt);
     const lp = root.position;
     this.updateLabel(lp.x, lp.y + (p.posture === 'crouch' ? 1.55 : 2.15), lp.z, look.dead, view.eye);
@@ -110,7 +112,7 @@ export class PlayerViews {
 
   constructor(private readonly scene: Scene) {}
 
-  update(slots: readonly PlayerSlot[], alpha: number, dt: number, view: DetailView, threat: boolean): void {
+  update(slots: readonly PlayerSlot[], alpha: number, dt: number, view: DetailView, threat: boolean, enemies: EnemyViews): void {
     const t = ++this.tick;
     for (const s of slots) {
       if (s.local) continue;
@@ -120,7 +122,7 @@ export class PlayerViews {
         this.views.set(s, v);
       }
       v.seen = t;
-      v.update(alpha, dt, view, threat);
+      v.update(alpha, dt, view, threat, enemies);
     }
     // Quien se fue de la partida ya no está en la lista: su personaje se retira.
     for (const [s, v] of this.views) {

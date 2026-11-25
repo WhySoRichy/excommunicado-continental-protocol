@@ -110,6 +110,7 @@ interface TakedownState {
   enemy: Enemy;
   t: number;
   shots: number;
+  slammed: boolean;
 }
 
 /** Duraciones del takedown (s): agarre, proyección y doble tap. */
@@ -118,6 +119,9 @@ const TD_SHOT1 = 0.55;
 const TD_SHOT2 = 0.75;
 const TD_RANGE = 1.9;
 const TD_ARC = 0.55; // cos(~57°)
+/** A esta distancia (m) lo agarra: da un paso hacia él si está más lejos. Y cuándo toca el suelo su espalda (s). */
+const TD_GAP = 0.82;
+const TD_SLAM = 0.5;
 /** Forcejeo al empezar el takedown y tajo del cuchillo (s): duración de su animación. */
 const GRAB_TIME = 0.45;
 // El tajo cabe en la cadencia del cuchillo táctico (0,4 s entre golpes).
@@ -951,12 +955,16 @@ export class PlayerCombat {
 
   private startTakedown(e: Enemy, ctx: CombatCtx): void {
     this.weapon.cancelReload();
-    this.takedown = { enemy: e, t: 0, shots: 0 };
+    this.takedown = { enemy: e, t: 0, shots: 0, slammed: false };
     e.stun();
     e.beginThrow(ctx.player.feet);
     ctx.player.setLocked(true);
-    // El jugador encara al objetivo.
-    ctx.player.yaw = Math.atan2(-(e.feet.x - ctx.player.feet.x), -(e.feet.z - ctx.player.feet.z));
+    // El jugador encara al objetivo y, si está lejos, da un paso hasta agarrarlo.
+    const dx = e.feet.x - ctx.player.feet.x;
+    const dz = e.feet.z - ctx.player.feet.z;
+    const d = Math.hypot(dx, dz) || 1;
+    ctx.player.yaw = Math.atan2(-dx, -dz);
+    if (d > TD_GAP) ctx.player.lockTo(e.feet.x - (dx / d) * TD_GAP, e.feet.z - (dz / d) * TD_GAP);
     this.grabT = GRAB_TIME;
     ctx.audio.takedown();
     ctx.camera.addTrauma(0.25);
@@ -967,11 +975,11 @@ export class PlayerCombat {
     td.t += dt;
     const e = td.enemy;
     const fire = (): void => {
-      this.muzzleOf(ctx.player, true, _muzzle);
-      // El cuerpo queda tumbado alejándose del jugador: se remata al pecho, no a los pies.
+      // El cuerpo queda tumbado alejándose del jugador: se remata al pecho, no a los pies, y desde abajo, agachado sobre él.
       const ax = e.feet.x - ctx.player.feet.x;
       const az = e.feet.z - ctx.player.feet.z;
       const al = Math.hypot(ax, az) || 1;
+      _muzzle.set(ctx.player.feet.x + (ax / al) * 0.72, ctx.player.feet.y + 0.62, ctx.player.feet.z + (az / al) * 0.72);
       _tmp.set(e.feet.x + (ax / al) * 0.85, e.feet.y + 0.2, e.feet.z + (az / al) * 0.85);
       _dir.subVectors(_tmp, _muzzle).normalize();
       ctx.vfx.tracer(_muzzle, _tmp, 0xffe2a0);
@@ -980,6 +988,17 @@ export class PlayerCombat {
       ctx.audio.shot('pistol');
       ctx.camera.addTrauma(0.12);
     };
+    if (!td.slammed && td.t >= TD_SLAM) {
+      // La espalda contra el suelo.
+      td.slammed = true;
+      const ax = e.feet.x - ctx.player.feet.x;
+      const az = e.feet.z - ctx.player.feet.z;
+      const al = Math.hypot(ax, az) || 1;
+      _tmp.set(e.feet.x + (ax / al) * 0.8, e.feet.y + 0.05, e.feet.z + (az / al) * 0.8);
+      ctx.vfx.impact(_tmp, _fwd.set(0, 1, 0), 'dust', 10);
+      ctx.audio.hit('body');
+      ctx.camera.addTrauma(0.22);
+    }
     if (td.shots === 0 && td.t >= TD_SHOT1) {
       td.shots = 1;
       fire();

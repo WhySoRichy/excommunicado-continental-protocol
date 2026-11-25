@@ -21,6 +21,8 @@ const laserGeo = new BoxGeometry(1, 1, 1);
   const p = laserGeo.getAttribute('position');
   for (let i = 0; i < p.count; i++) if (p.getZ(i) > 0) p.setXY(i, p.getX(i) * 0.3, p.getY(i) * 0.3);
 }
+/** Hasta dónde busca a la víctima de un remate (m). */
+const VICTIM_RADIUS = 1.8;
 /** Rapidez con la que el cuerpo sigue al giro de la simulación. */
 const TURN_OMEGA = 22;
 const RED = new Color(0xff2233);
@@ -80,6 +82,7 @@ export class EnemyView {
         beard: def.beard,
         bulk: def.bulk,
         outfit: def.outfit,
+        features: def.features,
         weapon: def.weapon.model,
         uniqueMaterial: true,
         lod: true,
@@ -166,7 +169,9 @@ export class EnemyView {
     pose.hitPart = e.hitPart;
     pose.stagger = e.alive ? e.stagger : 0;
     pose.limp = e.limping;
-    pose.death = thrown ? 1 : e.deathStyle;
+    pose.death = e.deathStyle;
+    // Proyectado en un remate: la caída sigue su curso aunque muera a mitad.
+    pose.thrown = thrown ? e.thrownT : !e.alive && e.deathFallStart > 0 ? this.deadFor + THROW_DELAY : -1;
     this.rig.update(pose, dt);
     // Feedback de impacto y telégrafo del blindado/jefe: el rim se enciende.
     const rim = this.rig.rim;
@@ -309,6 +314,26 @@ export class EnemyViews {
   /** El personaje de un enemigo (para medir su animación en las pruebas). */
   rigOf(e: Enemy): EnemyBody | null {
     return this.views.get(e)?.rig ?? null;
+  }
+
+  /** El personaje de un enemigo, si es una persona (a las máquinas no se las agarra). */
+  personOf(e: Enemy): CharacterRig | null {
+    const rig = this.rigOf(e);
+    return rig instanceof CharacterRig ? rig : null;
+  }
+
+  /** A quién está proyectando el que hay en ese punto (en red no llega quién es: el más cercano que cae así). */
+  victimNear(x: number, z: number): CharacterRig | null {
+    let best: CharacterRig | null = null;
+    let bestD = VICTIM_RADIUS * VICTIM_RADIUS;
+    for (const [e, v] of this.views) {
+      if (e.thrownT < 0 && e.deathFallStart <= 0) continue;
+      const d = (e.feet.x - x) ** 2 + (e.feet.z - z) ** 2;
+      if (d >= bestD || !(v.rig instanceof CharacterRig)) continue;
+      bestD = d;
+      best = v.rig;
+    }
+    return best;
   }
 
   dispose(): void {

@@ -38,6 +38,7 @@ export function appearanceKey(o: RigOptions): string {
     o.beard ? 1 : 0,
     JSON.stringify(o.outfit ?? {}),
     o.face ?? 'stern',
+    JSON.stringify(o.features ?? {}),
   ].join('|');
 }
 

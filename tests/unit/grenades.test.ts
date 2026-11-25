@@ -190,6 +190,27 @@ describe('aturdir', () => {
     expect(w.shots.n, 'vuelve a la pelea').toBeGreaterThan(before);
   });
 
+  it('el takedown da un paso hasta agarrarlo y, si hay un muro de por medio, no lo atraviesa', () => {
+    const w = world();
+    const p = w.join(0, 8);
+    const a = w.enemies.spawnAt('thug', new Vector3(0, 0, 6.3), 0);
+    w.physics.step();
+    p.combatIntent.aimDir.set(0, 0, -1);
+    p.combatIntent.takedownPressed = true;
+    w.step();
+    p.combatIntent.takedownPressed = false;
+    expect(p.controller.state).toBe('locked');
+    w.step(14);
+    const gap = Math.hypot(a.feet.x - p.controller.feet.x, a.feet.z - p.controller.feet.z);
+    expect(gap, 'a la distancia de un brazo').toBeLessThan(0.95);
+    expect(gap, 'sin meterse en él').toBeGreaterThan(0.6);
+    expect(a.thrownT, 'ya lo está proyectando').toBeGreaterThan(0);
+    expect(p.controller.penetration()).toBeNull();
+    w.step(60);
+    expect(a.alive).toBe(false);
+    expect(p.controller.state).toBe('ground');
+  });
+
   it('un takedown a un aturdido lo remata sin que se recupere a mitad, y sus bajas puntúan', () => {
     const w = world();
     const p = w.join(0, 8);

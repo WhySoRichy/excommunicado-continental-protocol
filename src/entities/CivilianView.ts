@@ -1,6 +1,6 @@
 import type { Scene } from 'three';
 import { FIXED_DT } from '../core/Loop';
-import { CharacterRig, type DetailView, type HairStyle, idlePose, type Outfit, type RigColors, type RigPose } from './CharacterRig';
+import { CharacterRig, type DetailView, type Features, type HairStyle, idlePose, type Outfit, type RigColors, type RigPose } from './CharacterRig';
 import type { Civilian } from './Civilian';
 import type { Gesture } from './rig/layers';
 
@@ -12,26 +12,30 @@ const BEATS = 2.07;
 const DANCES: readonly Gesture[] = ['dance0', 'dance1', 'dance2'];
 
 /** Cómo van vestidos los civiles. */
-export const CIVILIAN_LOOKS: ReadonlyArray<{ colors: RigColors; hair: HairStyle; outfit: Outfit }> = [
+export const CIVILIAN_LOOKS: ReadonlyArray<{ colors: RigColors; hair: HairStyle; outfit: Outfit; features: Partial<Features> }> = [
   {
     colors: { jacket: 0xb33a5a, shirt: 0xf0e6e0, tie: 0xb33a5a, pants: 0x2b2b30, shoes: 0x111, skin: 0xd9b08c, hair: 0x3b2a1e, accent: 0xff2e88 },
     hair: 'long',
     outfit: { tie: false, pocketSquare: false },
+    features: { soft: true, jaw: 0.9, chin: 0.8, nose: 0.86, nostrils: 0.85, brow: 0.4, lips: 1.35, eyes: 1.14, iris: 0x4f6b3a },
   },
   {
     colors: { jacket: 0x2d6cb5, shirt: 0xf5f5f5, tie: 0x2d6cb5, pants: 0x1f2a3a, shoes: 0x111, skin: 0x8c5a3c, hair: 0x1a1512, accent: 0x19e3ff },
     hair: 'short',
     outfit: { top: 'bomber' },
+    features: { jaw: 1.02, nose: 0.94, nostrils: 1.25, lips: 1.25, cheeks: 1.1, iris: 0x2a1a10 },
   },
   {
     colors: { jacket: 0xe8c04a, shirt: 0x141414, tie: 0xe8c04a, pants: 0x3a3a3a, shoes: 0x111, skin: 0xf0c8a8, hair: 0xc9a46a, accent: 0xffd23f },
     hair: 'long',
     outfit: { top: 'bomber' },
+    features: { soft: true, jaw: 0.92, chin: 0.85, nose: 0.9, nostrils: 0.9, brow: 0.45, lips: 1.2, eyes: 1.1, iris: 0x6f8ea8 },
   },
   {
     colors: { jacket: 0x6a3cff, shirt: 0xe9e9f2, tie: 0x6a3cff, pants: 0x202030, shoes: 0x111, skin: 0xb98a6a, hair: 0x2a1e18, accent: 0x7a3cff },
     hair: 'cap',
     outfit: { tie: false, pocketSquare: false },
+    features: { jaw: 0.96, nose: 1.06, lips: 1.05, eyes: 1.05 },
   },
 ];
 
@@ -56,6 +60,8 @@ class CivilianView {
       rimStrength: 0.7,
       hair: outfit.hair,
       outfit: outfit.outfit,
+      features: outfit.features,
+      face: 'calm',
       weapon: 'none',
       lod: true,
     });

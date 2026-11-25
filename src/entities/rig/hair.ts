@@ -140,7 +140,7 @@ export function hair(o: RigOptions): BufferGeometry[] {
       out.push(
         drape(
           hairline(0.158, 0.09, 0.0),
-          (a, t) => 0.006 + 0.0016 * Math.sin(a * 30) + 0.012 * gauss(fromFront(a), 0.6) * bell01((t - 0.45) / 0.5),
+          (a, t) => (0.0065 + 0.0016 * Math.sin(a * 30)) * (0.3 + 0.7 * smooth(0, 0.3, t)) + 0.012 * gauss(fromFront(a), 0.6) * bell01((t - 0.45) / 0.5),
           { ...s, r: 0.36 },
           { segs: 44, rows: 12, tint: strands(30, 0.1) },
         ),
@@ -150,7 +150,8 @@ export function hair(o: RigOptions): BufferGeometry[] {
       out.push(
         drape(
           hairline(0.152, 0.088, 0.004),
-          (a, t) => 0.007 + 0.0022 * Math.sin(a * 19 + t * 14) + 0.005 * gauss(fromFront(a), 0.7) * bell01((t - 0.5) / 0.5),
+          (a, t) =>
+            (0.007 + 0.0022 * Math.sin(a * 19 + t * 14)) * (0.25 + 0.75 * smooth(0, 0.3, t)) + 0.005 * gauss(fromFront(a), 0.7) * bell01((t - 0.5) / 0.5),
           s,
           { segs: 38, rows: 11, tint: strands(19, 0.16) },
         ),

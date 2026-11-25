@@ -96,6 +96,7 @@ function placeFoot(leg: LegGoal, s: -1 | 1, foot: FootAt, g: Gait, w: Weights): 
   leg.y = foot.lift * amp * limp * (1 - 0.35 * Math.abs(g.right)) + 0.035 * w.turning * still * Math.max(0, Math.sin(w.time * 11 + (s > 0 ? Math.PI : 0)));
   leg.pitch = foot.pitch * heel;
   leg.toe = foot.toe * heel;
+  leg.air = foot.air * heel;
   // Hacia dónde apuntan: algo abiertos; el de atrás, más.
   const out = lerp(0.2, 0.07, amp) + 0.06 * ck;
   leg.yaw = -s * out - (s > 0 ? 0.28 * ak * bladed + 0.14 * rk * bladed : 0) * still + g.hips * 0.75;
@@ -127,17 +128,17 @@ export function locomotion(f: Frame, w: Weights, g: Gait): void {
 
   // Pelvis. Relajado, las piernas casi estiradas; en guardia, algo flexionadas.
   const stand = lerp(lerp(HIP_STAND, HIP_STAND - 0.012, rk), HIP_STAND - 0.02, ak);
-  const going = lerp(0.927, 0.868, s.run);
+  const going = lerp(0.927, 0.914 - 0.008 * sk, s.run);
   f.hipY = lerp(lerp(stand, going, amp), HIP_CROUCH + 0.07 * amp, ck) + sway.bounce * amp * (1 - 0.4 * ck);
   f.hipX = 0.024 * shift + sway.side * amp;
   f.hipZ = -0.012 * sk * amp;
   f.pelvisY = g.hips + sway.yaw * fwd - lerp(0.06 * ak, 0.3 * ak + 0.14 * rk, w.long) * still;
   f.pelvisZ = 0.042 * shift + sway.roll * amp * (1 - 0.5 * ck);
-  f.pelvisX = -(0.02 + 0.05 * s.run + 0.06 * sk) * fwd - 0.3 * ck + 0.35 * w.leanX;
+  f.pelvisX = -(0.02 + 0.07 * s.run + 0.07 * sk) * fwd - 0.3 * ck + 0.35 * w.leanX;
 
   // Columna: se inclina con la velocidad y al acelerar, y compensa a la pelvis.
   const tense = 0.035 * rk + 0.06 * ak;
-  f.torsoX = -tense - (0.035 + 0.1 * s.run + 0.13 * sk) * fwd - (0.71 - 0.12 * ak + 0.1 * amp) * ck + w.leanX + 0.011 * breath * still;
+  f.torsoX = -tense - (0.035 + 0.145 * s.run + 0.13 * sk) * fwd - (0.71 - 0.12 * ak + 0.1 * amp) * ck + w.leanX + 0.011 * breath * still;
   f.torsoY = sway.twist * fwd * (w.armed && w.ready > 0.5 && sk < 0.5 ? 0.45 : 1);
   f.torsoZ = -0.03 * shift + sway.tilt * amp + w.leanZ;
   f.headX = 0.02 * breath * still * 0.3;
@@ -160,17 +161,20 @@ export function locomotion(f: Frame, w: Weights, g: Gait): void {
 /** Brazos libres: cuelgan con el codo algo doblado y se balancean al contrario que las piernas. */
 function arms(f: Frame, w: Weights, g: Gait): void {
   const run = g.stride.run;
-  const { amp, sprint: sk, ready: rk } = w;
-  const size = lerp(0.34, 0.52, run) + 0.2 * sk;
+  const { amp, sprint: sk, ready: gk } = w;
   const swing = g.sway.swing * amp * Math.max(-0.4, Math.abs(g.fwd) < 0.3 ? 0.3 * g.fwd : g.fwd);
-  const el = lerp(lerp(0.2, 0.28, amp), 1.3 + 0.16 * sk, run * amp);
   const drift = Math.sin(w.time * 0.8 + w.seed * 5) * 0.02 * (1 - amp);
+  const rk = run * amp;
   const one = (a: ArmAngles, s: -1 | 1): void => {
     const k = s * swing;
-    a.sx = k * size * (k > 0 ? 1 : 0.85) - 0.05 * amp + drift * s + 0.06 * run * amp;
-    a.sz = s * (0.09 + 0.05 * run * amp);
-    a.sy = s * (0.16 + 0.22 * run * amp);
-    a.el = el + Math.max(0, k) * lerp(0.28, 0.14, run) - Math.max(0, -k) * lerp(0.06, 0.4, run);
+    const ahead = Math.max(0, k);
+    const behind = Math.max(0, -k);
+    // Andando, un péndulo con el codo casi suelto; corriendo, en ángulo recto: el codo tira hacia atrás más que adelante y la
+    // mano va de la cadera al pecho, hacia el centro.
+    a.sx = lerp(k * (k > 0 ? 0.34 : 0.29) - 0.05 * amp, -0.17 - 0.04 * sk + ahead * (0.44 + 0.16 * sk) - behind * (0.5 + 0.16 * sk), rk) + drift * s;
+    a.sz = s * (0.09 + 0.05 * rk + 0.07 * rk * behind);
+    a.sy = s * (0.16 + 0.1 * rk + 0.1 * rk * ahead);
+    a.el = lerp(lerp(0.2, 0.28, amp) + ahead * 0.28 - behind * 0.06, 1.4 + 0.1 * sk * ahead - 0.2 * behind, rk);
     a.hx = 0.1 - 0.1 * k * (1 - run);
     a.hz = 0;
   };
@@ -178,7 +182,11 @@ function arms(f: Frame, w: Weights, g: Gait): void {
   one(f.armR, 1);
   // Con un arma corta en la mano, ese brazo se balancea menos y se separa algo del cuerpo.
   if (w.armed && w.long < 0.5) {
-    f.armR.sx *= 0.7 + 0.3 * sk;
+    // Corriendo, baja y junto a la cadera: apenas se balancea, y el cañón va hacia el suelo.
+    f.armR.sx = lerp(f.armR.sx, -0.22 + 0.45 * (f.armR.sx + 0.16), rk * (1 - 0.85 * sk));
+    f.armR.el = lerp(f.armR.el, 0.95, rk * (1 - 0.85 * sk));
+    f.armR.sy *= 1 - 0.6 * rk;
+    f.armR.hx -= 0.12 * rk;
     f.armR.sz += 0.05;
     f.fingR = 1;
   }
@@ -186,7 +194,7 @@ function arms(f: Frame, w: Weights, g: Gait): void {
   if (!w.armed) f.fingR = f.fingL;
   if (w.knife) {
     // Guardia de cuchillo: las dos manos por delante, la del arma atrás y el codo cubriendo.
-    const k = (0.1 + 0.9 * rk) * (1 - 0.85 * sk);
+    const k = (0.1 + 0.9 * gk) * (1 - 0.85 * sk);
     setArm(f.armR, 0.42, 0.04, 1.32, k);
     setArm(f.armL, 0.55, 0.05, 1.5, k);
     f.armL.sy = lerp(f.armL.sy, -0.5, k);
@@ -331,6 +339,7 @@ export function dying(f: Frame, p: RigPose): void {
   R.side = 0.1;
   f.fingL = f.fingR = 0.3;
   f.armL.sy = f.armR.sy = f.armL.hx = f.armR.hx = 0;
+  if (p.thrown >= 0) return thrown(f, p.thrown);
   switch (p.death) {
     case 1: {
       // De espaldas: el impacto lo tumba hacia atrás con las piernas abiertas.
@@ -444,6 +453,34 @@ export function dying(f: Frame, p: RigPose): void {
     setArm(f.armL, back ? lerp(0.8, 0.05, down) : -0.2, -0.95, lerp(0.5, 0.25, down));
     setArm(f.armR, back ? lerp(0.6, -0.02, down) : -0.25, 0.95, lerp(0.5, 0.12, down));
   }
+}
+
+/** Proyectado en un remate: tiran de él, sale por los aires de espaldas con las piernas por delante y da contra el suelo. */
+function thrown(f: Frame, t: number): void {
+  const L = f.freeL;
+  const R = f.freeR;
+  const pull = smooth(0, 0.12, t) * (1 - smooth(0.1, 0.26, t));
+  const u = smoother(0.08, 0.5, t);
+  const fly = bell(u);
+  const slam = bell(clamp((t - 0.5) / 0.2, 0, 1));
+  f.spinX = HALF_PI * u;
+  f.spinY = fallHeight(f.spinX, 0.15) + 0.14 * fly + 0.05 * slam;
+  f.spinZ = 0.16 * fly;
+  L.f = lerp(0.12, 0.04, u) + 0.62 * fly;
+  R.f = lerp(0.02, -0.02, u) + 0.42 * fly;
+  L.down = 0.88 - 0.2 * fly;
+  R.down = 0.9 - 0.1 * fly;
+  L.side = -0.16;
+  R.side = 0.2;
+  f.torsoX = -0.4 * pull - 0.55 * fly + 0.1 * u + 0.08 * slam;
+  f.headX = -0.45 * fly - 0.3 * pull + 0.25 * u * (1 - fly) + 0.15 * slam;
+  f.headZ = 0.2 * u;
+  // Se agarra a quien lo tira y, al dar contra el suelo, los brazos se abren.
+  const open = smooth(0.46, 0.64, t);
+  const hold = smooth(0.02, 0.12, t);
+  setArm(f.armL, lerp(lerp(0.2, 1.35, hold), 0.08, open), lerp(0.1, -0.95, open), lerp(lerp(0.4, 1.2, hold), 0.35, open));
+  setArm(f.armR, lerp(lerp(0.2, 1.2, hold), -0.02, open), lerp(-0.1, 0.9, open), lerp(lerp(0.4, 1.35, hold), 0.2, open));
+  f.fingL = f.fingR = lerp(0.9, 0.3, open);
 }
 
 // ------------------------------------------------------------------ lo que le pasa
@@ -625,7 +662,7 @@ const SLASH_CUT = 0.5;
 
 /** Forcejeo, tajo, takedown, lanzar y escudo. */
 export function actions(f: Frame, p: RigPose, w: Weights): void {
-  if (p.melee > 0) {
+  if (p.melee > 0 && p.takedown < 0) {
     // Barrido cruzado con giro de torso.
     setArm(f.armR, 1.45, -0.75, 0.4, p.melee);
     f.torsoY += 0.45 * p.melee;
@@ -633,7 +670,7 @@ export function actions(f: Frame, p: RigPose, w: Weights): void {
   }
   if (p.slash >= 0 && w.armed && !f.exact) slash(f, p.slash);
   if (p.throw >= 0 && !f.exact) throwing(f, p.throw);
-  if (p.takedown >= 0) takedown(f, p.takedown, p.recoil);
+  if (p.takedown >= 0) takedown(f, p.takedown);
   if (w.shield > 0.001) {
     // El brazo izquierdo sujeta el escudo por delante, con el codo pegado, y la derecha dispara a su lado.
     reachTo(f.handL, w.shield, -0.12, -0.36, -0.31, 0.3, 0.1);
@@ -690,24 +727,45 @@ function throwing(f: Frame, u: number): void {
   f.fingL = lerp(f.fingL, 1 - out, busy);
 }
 
-/** La izquierda agarra, el torso se vuelca para proyectar y la derecha remata hacia el suelo. */
-function takedown(f: Frame, t: number, recoil: number): void {
-  const grab = smooth(0, 0.14, t) * (1 - smooth(0.3, 0.5, t));
-  const thrw = smooth(0.2, 0.45, t) * (1 - smooth(0.82, 0.95, t));
-  const exec = smooth(0.4, 0.54, t) * (1 - smooth(0.85, 0.95, t));
-  f.torsoX -= 0.18 * grab + 0.4 * thrw;
-  f.torsoY -= 0.5 * grab - 0.3 * thrw;
-  f.pelvisY -= 0.2 * grab - 0.15 * thrw;
-  f.hipY -= 0.06 * thrw;
-  f.legL.f += 0.12 * thrw;
-  f.legR.f -= 0.12 * thrw;
-  f.headX -= 0.4 * exec;
-  setArm(f.armL, 1.3, 0.2, 0.3, grab);
-  setArm(f.armL, 0.35, 0, 0.5, thrw * (1 - grab));
-  setArm(f.armR, 0.85 + recoil * 0.2, -0.12, 0.12, exec);
-  f.armR.sy = lerp(f.armR.sy, 0, exec);
-  f.hold *= 1 - Math.max(grab, thrw, exec);
-  f.fingL = lerp(f.fingL, 1, grab);
+/**
+ * Remate cuerpo a cuerpo: da un paso, la izquierda agarra la ropa (la lleva `CharacterRig` al cuerpo de la víctima), tira
+ * girando el tronco y lo acompaña al suelo; ya encima, la derecha baja el arma y remata.
+ */
+function takedown(f: Frame, t: number): void {
+  const step = smooth(0, 0.12, t) * (1 - smooth(0.2, 0.36, t));
+  const turn = bell(clamp((t - 0.08) / 0.36, 0, 1));
+  const down = smooth(0.14, 0.46, t) * (1 - smooth(0.74, 0.95, t));
+  f.legL.f += 0.2 * step + 0.26 * down;
+  f.legR.f -= 0.1 * step + 0.22 * down;
+  f.legL.x -= 0.05 * down;
+  f.legR.x += 0.07 * down;
+  f.hipY -= 0.04 * step + 0.24 * down;
+  f.hipZ -= 0.05 * step;
+  f.torsoX -= 0.16 * step + 0.62 * down;
+  f.torsoY += 0.5 * turn - 0.2 * down;
+  f.pelvisY += 0.24 * turn;
+  f.pelvisX -= 0.2 * down;
+  f.clavL += 0.15 * down;
+  f.headX -= 0.25 * down;
+  f.grip *= 1 - smooth(0, 0.08, t) * (1 - smooth(0.78, 0.94, t));
+  f.fingL = lerp(f.fingL, 1, smooth(0.04, 0.12, t) * (1 - smooth(0.62, 0.72, t)));
+  // Sin arma que empuñar (cuchillo), la derecha golpea hacia abajo.
+  const hit = smooth(0.4, 0.5, t) * (1 - smooth(0.82, 0.95, t));
+  setArm(f.armR, 0.95, -0.12, 0.25, hit);
+}
+
+/** Con qué fuerza agarra la izquierda en cada momento del remate. */
+export function grabAt(t: number): number {
+  return t < 0 ? 0 : smooth(0.03, 0.13, t) * (1 - smooth(0.6, 0.78, t));
+}
+
+/** Cuánto lleva el arma recogida a las costillas y, después, hacia el suelo (remate). */
+export function ribsAt(t: number): number {
+  return t < 0 ? 0 : smooth(0, 0.1, t) * (1 - smooth(0.36, 0.48, t));
+}
+
+export function executeAt(t: number): number {
+  return t < 0 ? 0 : smooth(0.36, 0.5, t) * (1 - smooth(0.8, 0.95, t));
 }
 
 // ------------------------------------------------------------------ gestos de quien no pelea

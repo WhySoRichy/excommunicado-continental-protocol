@@ -1,7 +1,7 @@
 import type { BufferGeometry } from 'three';
-import { face } from './face';
+import { eyes } from './face';
 import { shade } from './geometry';
-import { bell01, loft } from './loft';
+import { bell01, far, loft } from './loft';
 import { ellipsoid, type Knot, softBox, tubePath } from './shapes';
 import { drape, fromFront, gauss, SKULL, Y0 } from './skull';
 import { cloth, leather, plastic, steel } from './surfaces';
@@ -31,7 +31,7 @@ export function headwear(o: RigOptions): BufferGeometry[] {
         { segs: 28, capStart: true },
       ),
     );
-    out.push(...face({ ...o, outfit: {} }).slice(0, 8));
+    if (!far()) out.push(...eyes(o));
   }
   if (o.hair === 'cap') {
     const k = cloth(c.accent, 0.9, 0.75);

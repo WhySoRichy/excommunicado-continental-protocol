@@ -47,7 +47,7 @@ const pose = (x: number, y: number, z: number, pitch: number, o: Partial<WeaponP
   ...o,
 });
 
-export type Carry = 'relaxed' | 'ready' | 'aim' | 'sprint' | 'tuckHigh' | 'tuckLow' | 'swap' | 'reload';
+export type Carry = 'relaxed' | 'ready' | 'aim' | 'sprint' | 'tuckHigh' | 'tuckLow' | 'swap' | 'reload' | 'ribs' | 'execute';
 
 /** Arma corta: suelta junto al muslo, recogida al pecho a dos manos, extendida a la altura de los ojos. */
 const PISTOL: Record<Carry, WeaponPose> = {
@@ -59,6 +59,9 @@ const PISTOL: Record<Carry, WeaponPose> = {
   tuckLow: pose(0.09, -0.2, -0.25, 0.75, { yaw: 0.15, elbowR: 0.45, elbowL: 0.45 }),
   swap: pose(0.22, -0.46, 0.0, -1.4, { support: 0, elbowR: 0.3 }),
   reload: pose(0.06, -0.12, -0.27, 0.35, { yaw: 0.35, roll: -0.35, elbowR: 0.6, elbowL: 0.4 }),
+  // En el remate: recogida a las costillas mientras la izquierda agarra, y después, hacia el suelo.
+  ribs: pose(0.2, -0.28, -0.08, 0.1, { support: 0, elbowR: 0.5 }),
+  execute: pose(0.1, -0.3, -0.42, -1.12, { support: 0, elbowR: 0.55 }),
 };
 
 /** Arma larga: cruzada y baja, culata cerca del hombro, encarada (la coloca la culata), cruzada en alto al correr. */
@@ -71,6 +74,8 @@ const LONG: Record<Carry, WeaponPose> = {
   tuckLow: pose(0.14, -0.22, -0.22, 0.7, { yaw: 0.35, elbowR: 0.4, elbowL: 0.4 }),
   swap: pose(0.22, -0.42, -0.02, -1.1, { support: 0, elbowR: 0.3 }),
   reload: pose(0.12, -0.17, -0.22, 0.25, { yaw: 0.3, roll: -0.3, blade: -0.15, elbowR: 0.6, elbowL: 0.4 }),
+  ribs: pose(0.21, -0.3, -0.04, 0.15, { support: 0, elbowR: 0.5 }),
+  execute: pose(0.16, -0.26, -0.22, -1.0, { support: 0, elbowR: 0.6 }),
 };
 
 /** El cuchillo y las manos vacías se llevan por ángulos: aquí, solo lo que hace falta para mezclar. */

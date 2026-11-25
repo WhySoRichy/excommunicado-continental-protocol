@@ -27,6 +27,8 @@ import {
   wrapTurn,
 } from './coverSensor';
 
+/** Lo más que dura el paso de `lockTo` (s). */
+const LOCK_STEP = 0.25;
 /** Un movimiento que se aparta esto (m) del pedido en un paso puede ser el empujón de otro personaje. */
 const SHOVED = 0.03;
 /** Y lo más que ese empujón lo mueve por paso (m). */
@@ -382,6 +384,8 @@ export class PlayerController {
   private holdT = 0;
   /** Empuje contra un borde para rodear la esquina (negativo: espera tras un intento fallido). */
   private edgePush = 0;
+  /** Adónde se acerca estando bloqueado (ver `lockTo`). */
+  private lockGoal: { x: number; z: number } | null = null;
   private readonly wrapPlan = emptyWrap();
   private wrapT = 0;
   /** Tras doblar una esquina, la dirección se mantiene mientras no cambie la tecla. */
@@ -477,6 +481,7 @@ export class PlayerController {
 
   /** Bloquea el control (takedown, cinemática). */
   setLocked(on: boolean): void {
+    this.lockGoal = null;
     if (on) {
       this.exitCover();
       this.state = 'locked';
@@ -487,9 +492,31 @@ export class PlayerController {
     this.stateTime = 0;
   }
 
+  /** Bloqueado, se acerca a un punto (el paso hacia quien agarra en un takedown) y se queda ahí. */
+  lockTo(x: number, z: number): void {
+    this.lockGoal = { x, z };
+  }
+
+  private stepLocked(dt: number): void {
+    this.velocity.x = this.velocity.z = 0;
+    const g = this.lockGoal;
+    if (!g) return;
+    const dx = g.x - this.feet.x;
+    const dz = g.z - this.feet.z;
+    const d = Math.hypot(dx, dz);
+    if (d < 0.02 || this.stateTime > LOCK_STEP) {
+      this.lockGoal = null;
+      return;
+    }
+    const v = Math.min(MOVE.sprint, d / dt);
+    this.velocity.x = (dx / d) * v;
+    this.velocity.z = (dz / d) * v;
+  }
+
   kill(): void {
     this.exitCover();
     this.vault = null;
+    this.lockGoal = null;
     this.state = 'dead';
     this.stateTime = 0;
     this.invulnerable = false;
@@ -588,8 +615,7 @@ export class PlayerController {
         this.stepFly(dt, wishLen);
         break;
       case 'locked':
-        this.velocity.x = 0;
-        this.velocity.z = 0;
+        this.stepLocked(dt);
         this.applyGravity(dt);
         this.move(dt, true);
         break;

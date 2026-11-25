@@ -37,7 +37,7 @@ import { type DetailView, idlePose, PLAYER_LOOK, type RigPose, type WeaponModel 
 import { WEAPON_MODEL } from '../entities/PlayerViews';
 import { type BodyYaw, bodyYaw, updateBodyYaw } from '../entities/rigMath';
 import { emptyIntent, type PlayerIntent } from '../entities/PlayerController';
-import { fillPlayerPose, PlayerBody } from '../entities/playerPose';
+import { fillPlayerPose, grabVictim, PlayerBody } from '../entities/playerPose';
 import { DIALOGUE, HUB_TEXT, rulesPlaque } from '../hub/dialogue';
 import { buy } from '../hub/economy';
 import { HubDirector } from '../hub/HubDirector';
@@ -974,7 +974,7 @@ export class Game {
       s.civilianViews?.update(alpha, scaledDt, view);
       s.pickupViews.update(s.pickups.items, scaledDt);
       s.grenadeViews.update(s.grenades.items, alpha);
-      s.playerViews.update(s.roster.slots, alpha, scaledDt, view, this.musicIn.fighting > 0);
+      s.playerViews.update(s.roster.slots, alpha, scaledDt, view, this.musicIn.fighting > 0, s.enemyViews);
       s.vfx.update(scaledDt);
       this.updateRain(s, scaledDt);
       s.renderNpcs(scaledDt);
@@ -1662,6 +1662,7 @@ export class Game {
     fillPlayerPose(pose, p, look, yaw);
     this.playerBody.update(pose, p, look, this.musicIn.fighting > 0, scaledDt);
     this.hurtFrom(s, yaw, pose);
+    grabVictim(pose, c.takedown ? s.enemyViews.personOf(c.takedown.enemy) : null);
     pose.aimPitch = this.camera.pitch;
     // La cabeza mira hacia donde apunta la cámara; con la cámara delante del personaje, al frente.
     pose.lookYaw = wrapAngle(this.camera.yaw - yaw);
@@ -1684,7 +1685,6 @@ export class Game {
     }
   }
 
-  /** El arco de lo que se lanzaría, con el mismo vuelo que hará la granada. */
   /** La lluvia acompaña a la cámara. */
   private updateRain(s: LevelSession, dt: number): void {
     if (!s.rain) return;
@@ -1693,6 +1693,7 @@ export class Game {
     s.rain.update(cam.position, pixels, dt);
   }
 
+  /** El arco de lo que se lanzaría, con el mismo vuelo que hará la granada. */
   private updateThrowArc(s: LevelSession, dt: number): void {
     const c = s.combat;
     let n = 0;
