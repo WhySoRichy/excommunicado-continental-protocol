@@ -12,6 +12,7 @@ import type { GuestWorld } from '../net/NetGuest';
 import { LevelAlarm } from '../render/LevelAlarm';
 import { CoverMarker } from '../render/CoverMarker';
 import { GrenadeViews } from '../render/GrenadeViews';
+import { Rain } from '../render/Rain';
 import { ThrowArc } from '../render/ThrowArc';
 import { PickupViews } from '../render/PickupViews';
 import { PlayerViews } from '../entities/PlayerViews';
@@ -82,6 +83,8 @@ export class LevelSession implements HostWorld, GuestWorld {
   readonly grenadeViews: GrenadeViews;
   /** El arco de lo que se lanzaría. */
   readonly throwArc: ThrowArc;
+  /** Lluvia, si el nivel la tiene. */
+  readonly rain: Rain | null;
   /** Marca de la cobertura a la que iría C. */
   readonly coverMarker: CoverMarker;
   /** Lo que se ve de los jugadores que no son el local. */
@@ -128,6 +131,7 @@ export class LevelSession implements HostWorld, GuestWorld {
     this.coverMarker = new CoverMarker(scene);
     this.grenadeViews = new GrenadeViews(scene);
     this.throwArc = new ThrowArc(scene);
+    this.rain = data.weather === 'rain' ? new Rain(scene, this.physics, data, deps.quality.particles) : null;
     if (!this.replica) for (const p of data.pickups) this.pickups.add(p.kind, new Vector3(p.pos[0], p.pos[1], p.pos[2]));
     this.combat = new PlayerCombat(deps.upgrades, loadoutFor(deps.upgrades, deps.loadout), gearFor(deps.upgrades, deps.loadout));
     this.enemies = new EnemyManager({
@@ -289,6 +293,7 @@ export class LevelSession implements HostWorld, GuestWorld {
     this.coverMarker.dispose();
     this.grenadeViews.dispose();
     this.throwArc.dispose();
+    this.rain?.dispose();
     this.grenades.clear();
     this.playerViews.dispose();
     this.pickups.dispose();

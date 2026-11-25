@@ -387,11 +387,58 @@ export class AudioEngine implements CombatAudio, MissionAudio {
         this.ambNodes.push(hum);
         break;
       }
+      case 'harbor': {
+        // Lluvia sobre chapa y asfalto, y el agua que va y viene.
+        nf.type = 'bandpass';
+        nf.frequency.value = 3200;
+        nf.Q.value = 0.4;
+        ng.gain.value = 0.034;
+        this.swell(ctx, master, t, 240, 0.05, 0.13);
+        break;
+      }
+      case 'wind': {
+        // Viento de azotea a rachas, con la lluvia por encima.
+        nf.type = 'bandpass';
+        nf.frequency.value = 2600;
+        nf.Q.value = 0.4;
+        ng.gain.value = 0.022;
+        this.swell(ctx, master, t, 420, 0.085, 0.19);
+        this.swell(ctx, master, t, 900, 0.03, 0.31);
+        break;
+      }
+      case 'club': {
+        // Murmullo del gentío y el aire de la ventilación.
+        nf.frequency.value = 520;
+        ng.gain.value = 0.04;
+        this.swell(ctx, master, t, 760, 0.03, 0.5);
+        break;
+      }
       default:
         nf.frequency.value = 900;
         ng.gain.value = 0.045;
         break;
     }
+  }
+
+  /** Ruido grave que sube y baja despacio (olas, rachas, gentío): frecuencia, fuerza y cuántas veces por segundo. */
+  private swell(ctx: AudioContext, out: AudioNode, t: number, freq: number, gain: number, rate: number): void {
+    const n = ctx.createBufferSource();
+    n.buffer = this.noise;
+    n.loop = true;
+    const f = ctx.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.value = freq;
+    const g = ctx.createGain();
+    g.gain.value = gain * 0.6;
+    const lfo = ctx.createOscillator();
+    lfo.frequency.value = rate;
+    const depth = ctx.createGain();
+    depth.gain.value = gain * 0.4;
+    lfo.connect(depth).connect(g.gain);
+    n.connect(f).connect(g).connect(out);
+    n.start(t, Math.random() * 1.5);
+    lfo.start(t);
+    this.ambNodes.push(n, lfo);
   }
 
   // ======================= SFX =======================

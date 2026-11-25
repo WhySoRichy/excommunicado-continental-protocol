@@ -976,6 +976,7 @@ export class Game {
       s.grenadeViews.update(s.grenades.items, alpha);
       s.playerViews.update(s.roster.slots, alpha, scaledDt, view, this.musicIn.fighting > 0);
       s.vfx.update(scaledDt);
+      this.updateRain(s, scaledDt);
       s.renderNpcs(scaledDt);
       s.alarm.update(scaledDt);
       if (controlling) this.updateBeacon();
@@ -1684,6 +1685,14 @@ export class Game {
   }
 
   /** El arco de lo que se lanzaría, con el mismo vuelo que hará la granada. */
+  /** La lluvia acompaña a la cámara. */
+  private updateRain(s: LevelSession, dt: number): void {
+    if (!s.rain) return;
+    const cam = this.renderer.camera;
+    const pixels = this.renderer.canvas.height / (2 * Math.tan((cam.fov * Math.PI) / 360));
+    s.rain.update(cam.position, pixels, dt);
+  }
+
   private updateThrowArc(s: LevelSession, dt: number): void {
     const c = s.combat;
     let n = 0;
