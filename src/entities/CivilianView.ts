@@ -1,6 +1,7 @@
 import type { Scene } from 'three';
 import { FIXED_DT } from '../core/Loop';
 import { CharacterRig, type DetailView, type Features, type HairStyle, idlePose, type Outfit, type RigColors, type RigPose } from './CharacterRig';
+import { animationStep, newSight, type Sight } from './occlusion';
 import type { Civilian } from './Civilian';
 import type { Gesture } from './rig/layers';
 
@@ -45,6 +46,7 @@ class CivilianView {
   private readonly pose: RigPose = idlePose();
   /** Por qué golpe de la música va (avanza 1 por golpe). */
   private beat: number;
+  private readonly sight: Sight;
   /** Segundos de juego desde la muerte (animación de caída). */
   private deadFor = 0;
 
@@ -67,14 +69,16 @@ class CivilianView {
     });
     scene.add(this.rig.root);
     this.beat = civ.dancePhase0;
+    this.sight = newSight(civ.index);
   }
 
   update(alpha: number, dt: number, view: DetailView): void {
     const c = this.civ;
-    this.rig.updateDetail(view);
+    this.rig.updateDetail(view, CROWD_DETAIL);
     const m = c.mover;
     const root = this.rig.root;
     m.renderFeet(alpha, root.position);
+    root.visible = view.occlusion?.look(this.sight, view.eye, root.position, m.height) ?? true;
     root.rotation.y = m.renderYaw(alpha);
     const pose = this.pose;
     pose.speed = m.stepSpeed(FIXED_DT);
@@ -96,7 +100,8 @@ class CivilianView {
     const hiding = c.state === 'hide';
     pose.look = c.alive && (hiding || c.state === 'calm') && c.behavior !== 'dance' ? 1 : 0;
     pose.lookYaw = (hiding ? 0.9 : 0.5) * Math.sin(this.beat * (hiding ? 0.8 : 0.22) + c.index);
-    this.rig.update(pose, dt);
+    const step = animationStep(this.sight, dt);
+    if (step > 0) this.rig.update(pose, step);
   }
 
   /** Cada uno a lo suyo: en la pista baila (hay tres maneras), en la barra se apoya y, con los tiros, huye o se encoge. */
@@ -116,6 +121,9 @@ class CivilianView {
     this.scene.remove(this.rig.root);
   }
 }
+
+/** Los civiles son muchos y van juntos: pasan a la malla lejana antes que los enemigos. */
+const CROWD_DETAIL = 0.6;
 
 /** Las vistas de los civiles de un nivel (son siempre los mismos: no aparecen ni se retiran a mitad de partida). */
 export class CivilianViews {

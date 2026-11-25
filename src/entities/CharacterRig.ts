@@ -16,6 +16,7 @@ import {
 import { clamp, damp, lerp } from '../core/math';
 import type { RimUniforms } from '../render/materials';
 import { weaponMaterial } from '../render/weaponMaterial';
+import type { Occlusion } from './occlusion';
 import { type ArmAngles, type Frame, type HandGoal, type LegFree, type LegGoal, newFrame, resetFrame } from './rig/frame';
 import { ankleRoll, cycleRate, strideAt } from './rig/gait';
 import { acquire, release, type SharedGeometry } from './rig/geometry';
@@ -97,10 +98,15 @@ const LAND_KICK = 4.2;
 const LOOK_YAW_MAX = 1.05;
 const LOOK_OMEGA = 8;
 
+/** Hasta cuántas veces la distancia de la malla de cerca proyecta sombra un personaje. */
+const SHADOW_REACH = 2.2;
+
 /** Desde dónde se mira y a qué distancia (m, corregida por el aumento de la cámara) se pasa a las mallas lejanas. */
 export interface DetailView {
   readonly eye: Vector3;
   limit: number;
+  /** A quién tapan las paredes (sin ella, se dibuja a todos). */
+  occlusion?: Occlusion;
 }
 
 /** Los pesos de mezcla que llevan muelle crítico: con un suavizado de primer orden, cada cambio daba un tirón. */
@@ -304,13 +310,16 @@ export class CharacterRig {
     this.skin = mesh;
   }
 
-  /** Malla de cerca o de lejos según la distancia a la cámara, con un margen para no ir y venir en la frontera. */
-  updateDetail(v: DetailView): void {
+  /** Malla de cerca o de lejos según la distancia a la cámara, con un margen para no ir y venir en la frontera. `scale`: quien es público se conforma antes con la lejana. */
+  updateDetail(v: DetailView, scale = 1): void {
     const mesh = this.skin;
     if (!mesh) return;
     const d = this.root.position.distanceTo(v.eye);
     const isFar = mesh.geometry === this.far;
-    const want = d > v.limit + (isFar ? -1 : 1) ? this.far : this.near;
+    const limit = v.limit * scale;
+    // A lo lejos tampoco hace falta su sombra: ocupa unos pocos píxeles y cuesta otra pasada del cuerpo.
+    if (this.far) mesh.castShadow = d < limit * SHADOW_REACH + (mesh.castShadow ? 1 : -1);
+    const want = d > limit + (isFar ? -1 : 1) ? this.far : this.near;
     if (!want || mesh.geometry === want) return;
     mesh.geometry = want;
     // De lejos, la sombra del arma no se distingue de la del cuerpo.

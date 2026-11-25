@@ -143,7 +143,7 @@ export interface DecorSign {
   glow?: number;
 }
 
-export type PropKind = 'plant' | 'lampDesk' | 'chandelier' | 'barStools' | 'speaker' | 'rotor' | 'waterTower' | 'antenna' | 'crane';
+export type PropKind = 'plant' | 'lampDesk' | 'chandelier' | 'barStools' | 'speaker' | 'rotor' | 'waterTower' | 'antenna' | 'crane' | 'car' | 'helicopter';
 
 export interface DecorProp {
   kind: 'prop';
@@ -179,6 +179,8 @@ export interface EnemySpawnDef {
   patrol?: Vec3[];
   /** No se desplaza (tiradores en altura). */
   stationary?: boolean;
+  /** Guarda su puesto: no acude a la alarma y solo oye los disparos cercanos. */
+  guard?: boolean;
   /** Grupo de alerta compartida. */
   group?: string;
   /** Solo aparece al activarse este evento (refuerzos/oleadas). */

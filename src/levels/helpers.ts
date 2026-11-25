@@ -1,4 +1,4 @@
-import type { BoxDef, CoverKind, MaterialId, RampDef, Vec3 } from './types';
+import type { BoxDef, CoverKind, DecorDef, MaterialId, RampDef, Vec3 } from './types';
 
 /**
  * Helpers PUROS para escribir niveles como datos. Cada función devuelve cajas;
@@ -195,4 +195,76 @@ export function rampSlopeDeg(r: RampDef): number {
   const dz = r.to[2] - r.from[2];
   const dy = r.to[1] - r.from[1];
   return (Math.atan2(Math.abs(dy), Math.hypot(dx, dz)) * 180) / Math.PI;
+}
+
+/** Hueco de un muro: centro a lo largo de él, ancho y entre qué alturas (por defecto, desde la base). */
+export interface Opening {
+  at: number;
+  w: number;
+  to: number;
+  from?: number;
+}
+
+/** Tramos de un muro de `a0` a `a1` y de `y0` a `y1` con sus huecos: [desde, hasta, abajo, arriba]. */
+function wallPieces(a0: number, a1: number, y0: number, y1: number, openings: readonly Opening[]): Array<[number, number, number, number]> {
+  const out: Array<[number, number, number, number]> = [];
+  let cursor = a0;
+  for (const o of openings.slice().sort((p, q) => p.at - q.at)) {
+    const s0 = o.at - o.w / 2;
+    const s1 = o.at + o.w / 2;
+    const from = o.from ?? y0;
+    if (s0 < cursor || s1 > a1 || from < y0 || o.to > y1) throw new Error(`Hueco fuera del muro en ${o.at}`);
+    if (s0 > cursor) out.push([cursor, s0, y0, y1]);
+    if (from > y0) out.push([s0, s1, y0, from]);
+    if (o.to < y1) out.push([s0, s1, o.to, y1]);
+    cursor = s1;
+  }
+  if (cursor < a1) out.push([cursor, a1, y0, y1]);
+  return out;
+}
+
+/** Muro a lo largo de X, centrado en `z`, con puertas y ventanas a cualquier altura. */
+export function wallX(z: number, x0: number, x1: number, y0: number, y1: number, mat: MaterialId, openings: readonly Opening[] = [], t = 0.5): BoxDef[] {
+  return wallPieces(x0, x1, y0, y1, openings).map(([a, b, lo, hi]) => aabb(a, lo, z - t / 2, b, hi, z + t / 2, mat, { noWalk: true }));
+}
+
+/** Muro a lo largo de Z, centrado en `x`. */
+export function wallZ(x: number, z0: number, z1: number, y0: number, y1: number, mat: MaterialId, openings: readonly Opening[] = [], t = 0.5): BoxDef[] {
+  return wallPieces(z0, z1, y0, y1, openings).map(([a, b, lo, hi]) => aabb(x - t / 2, lo, a, x + t / 2, hi, b, mat, { noWalk: true }));
+}
+
+/** Techo (no se camina por él ni proyecta sombra). */
+export function ceiling(minX: number, minZ: number, maxX: number, maxZ: number, y: number, mat: MaterialId): BoxDef {
+  return aabb(minX, y, minZ, maxX, y + 0.3, maxZ, mat, { shadow: false, noWalk: true });
+}
+
+/** Forjado: se camina por encima y hace de techo por debajo. */
+export function deck(minX: number, minZ: number, maxX: number, maxZ: number, top: number, mat: MaterialId, thickness = 0.34): BoxDef {
+  return aabb(minX, top - thickness, minZ, maxX, top, maxZ, mat);
+}
+
+/** Todoterreno aparcado: carrocería que cubre a quien se agacha y cabina que no se salta. Las ruedas y los faros son el prop `car`. */
+export function car(x: number, z: number, rotY: number, mat: MaterialId): BoxDef[] {
+  return [
+    { c: [x, 0.66, z], s: [4.6, 1.2, 1.95], rotY, mat, cover: 'low', noWalk: true, tag: 'car' },
+    { c: [x - 0.25 * Math.cos(rotY), 1.5, z + 0.25 * Math.sin(rotY)], s: [2.5, 0.5, 1.7], rotY, mat: 'tilesBlack', noWalk: true },
+  ];
+}
+
+/** Caja de adorno: ni choca ni se camina por ella. */
+export function trim(minX: number, minY: number, minZ: number, maxX: number, maxY: number, maxZ: number, mat: MaterialId, shadow = false): BoxDef {
+  return aabb(minX, minY, minZ, maxX, maxY, maxZ, mat, { collide: false, shadow, noWalk: true });
+}
+
+/** Farola: poste que choca y brazo hacia `dx`; la pantalla encendida es `lampGlow`, y la luz, una `PointLightDef` ahí arriba. */
+export function lampPost(x: number, z: number, h: number, dx: 1 | -1, y0 = 0): BoxDef[] {
+  return [
+    block(x, z, 0.22, h, 0.22, 'metalDark', { y0, noWalk: true, tag: 'lamp' }),
+    trim(Math.min(x, x + dx * 1.3), y0 + h - 0.12, z - 0.07, Math.max(x, x + dx * 1.3), y0 + h, z + 0.07, 'metalDark'),
+    trim(x + dx * 1.2 - 0.45, y0 + h - 0.16, z - 0.22, x + dx * 1.2 + 0.45, y0 + h + 0.02, z + 0.22, 'metalDark'),
+  ];
+}
+
+export function lampGlow(x: number, z: number, h: number, dx: 1 | -1, color: number, y0 = 0): DecorDef {
+  return { kind: 'neon', c: [x + dx * 1.2, y0 + h - 0.19, z], s: [0.76, 0.06, 0.34], color, intensity: 1.1 };
 }

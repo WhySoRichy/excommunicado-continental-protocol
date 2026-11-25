@@ -977,6 +977,7 @@ export class Game {
       s.playerViews.update(s.roster.slots, alpha, scaledDt, view, this.musicIn.fighting > 0, s.enemyViews);
       s.vfx.update(scaledDt);
       this.updateRain(s, scaledDt);
+      s.level.followShadow(this.renderer.camera.position);
       s.renderNpcs(scaledDt);
       s.alarm.update(scaledDt);
       if (controlling) this.updateBeacon();
@@ -1727,6 +1728,7 @@ export class Game {
   private updateDetailView(): DetailView {
     const v = this.detailView;
     v.limit = (this.renderer.quality.characterDetail * DEFAULT_CAMERA.fov) / this.renderer.camera.fov;
+    v.occlusion = this.session?.occlusion;
     return v;
   }
 

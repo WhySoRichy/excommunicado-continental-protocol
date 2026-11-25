@@ -3,6 +3,7 @@ import type { AudioEngine } from '../audio/AudioEngine';
 import { EnemyManager } from '../combat/EnemyManager';
 import { Grenades } from '../combat/Grenades';
 import { EnemyViews } from '../entities/EnemyView';
+import { Occlusion } from '../entities/occlusion';
 import { Pickups } from '../combat/Pickups';
 import { PlayerRoster, type PlayerSlot, type SlotPorts } from '../combat/PlayerRoster';
 import type { CombatAudio, CombatVfx } from '../combat/ports';
@@ -92,6 +93,8 @@ export class LevelSession implements HostWorld, GuestWorld {
   readonly enemies: EnemyManager;
   /** Lo que se ve de los enemigos; la simulación (`enemies`) no sabe que existe. */
   readonly enemyViews: EnemyViews;
+  /** A quién tapan las paredes. */
+  readonly occlusion: Occlusion;
   readonly combat: PlayerCombat;
   readonly ctx: CombatCtx;
   readonly target: PlayerTarget;
@@ -189,6 +192,7 @@ export class LevelSession implements HostWorld, GuestWorld {
     if (!this.replica) this.enemies.spawnInitial();
     // Vistas creadas ya, antes de precompilar los shaders del nivel (no en mitad de la partida).
     this.enemyViews = new EnemyViews(scene);
+    this.occlusion = new Occlusion(this.physics);
     this.enemyViews.sync(this.enemies.enemies);
     this.physics.step();
   }

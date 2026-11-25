@@ -244,6 +244,8 @@ export interface LevelRuntime {
   key: DirectionalLight;
   points: PointLight[];
   alarmLights: PointLight[];
+  /** En los niveles que no caben en el mapa de sombras, lo centra en lo que se está viendo. */
+  followShadow(at: Vector3): void;
   /** Todas las cajas orientadas del nivel (cobertura, vault, QA). */
   solids: OrientedBox[];
   dispose(): void;
@@ -258,10 +260,14 @@ export interface BuildOptions {
 }
 
 /**
- * Tamaño de celda para agrupar la geometría estática. Los niveles miden 50–90 m: con celdas
+ * Tamaño de celda para agrupar la geometría estática. Los niveles miden 50–115 m: con celdas
  * de 40 m hay pocas draw calls por material y aún se descartan zonas fuera de cámara.
  */
 const CELL = 40;
+/** Hasta cuántas cajas de un material van juntas sin partirse por zonas. */
+const SPARSE = 14;
+/** A qué distancia de lo que ilumina se pone la luz principal (m). */
+const SHADOW_DISTANCE = 60;
 
 export function buildLevel(data: LevelData, scene: Scene, physics: PhysicsWorld, opts: BuildOptions): LevelRuntime {
   const root = new Group();
@@ -272,8 +278,16 @@ export function buildLevel(data: LevelData, scene: Scene, physics: PhysicsWorld,
 
   // --- Geometría estática fusionada + colliders desde la MISMA fuente (R4) ---
   const groups = new Map<string, { mat: MaterialId; cast: boolean; acc: GeoAccumulator }>();
+  // Lo que hay poco de un material va en una sola malla: partirlo por zonas solo sumaría draw calls.
+  const counts = new Map<string, number>();
+  for (const b of data.boxes) {
+    if (b.invisible) continue;
+    const k = `${b.mat}|${b.shadow ?? true}`;
+    counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
   const accFor = (mat: MaterialId, cast: boolean, cx: number, cz: number): GeoAccumulator => {
-    const key = `${mat}|${cast ? 1 : 0}|${Math.floor(cx / CELL)},${Math.floor(cz / CELL)}`;
+    const cell = (counts.get(`${mat}|${cast}`) ?? 0) > SPARSE ? `${Math.round(cx / CELL)},${Math.round(cz / CELL)}` : '';
+    const key = `${mat}|${cast}|${cell}`;
     let g = groups.get(key);
     if (!g) {
       g = { mat, cast, acc: new GeoAccumulator() };
@@ -316,7 +330,7 @@ export function buildLevel(data: LevelData, scene: Scene, physics: PhysicsWorld,
   const cx = (data.bounds.min[0] + data.bounds.max[0]) / 2;
   const cz = (data.bounds.min[2] + data.bounds.max[2]) / 2;
   key.target.position.set(cx, 0, cz);
-  key.position.set(cx + kd.x * 60, kd.y * 60, cz + kd.z * 60);
+  key.position.set(cx + kd.x * SHADOW_DISTANCE, kd.y * SHADOW_DISTANCE, cz + kd.z * SHADOW_DISTANCE);
   key.castShadow = k.shadow;
   if (key.castShadow) {
     key.shadow.mapSize.set(opts.shadowMapSize, opts.shadowMapSize);
@@ -331,6 +345,7 @@ export function buildLevel(data: LevelData, scene: Scene, physics: PhysicsWorld,
     key.shadow.normalBias = 0.03;
   }
   root.add(key, key.target);
+  const followShadow = shadowFollower(key, kd, Math.max(data.bounds.max[0] - data.bounds.min[0], data.bounds.max[2] - data.bounds.min[2]) / 2, k.shadowArea);
   // La luz se libera con el nivel: su mapa de sombras es una textura de la GPU que nadie más suelta.
   disposables.push(key);
 
@@ -387,12 +402,36 @@ export function buildLevel(data: LevelData, scene: Scene, physics: PhysicsWorld,
     key,
     points,
     alarmLights,
+    followShadow,
     solids,
     dispose(): void {
       scene.remove(root);
       for (const d of disposables) d.dispose();
       root.clear();
     },
+  };
+}
+
+/**
+ * Mueve el mapa de sombras con `at`, a saltos de un texel (así los bordes de las sombras no tiemblan al andar). Si el nivel
+ * cabe entero, se queda quieto.
+ */
+function shadowFollower(key: DirectionalLight, dir: Vector3, levelHalf: number, area: number): (at: Vector3) => void {
+  if (!key.castShadow || levelHalf <= area) return () => {};
+  const right = new Vector3().crossVectors(new Vector3(0, 1, 0), dir).normalize();
+  const up = new Vector3().crossVectors(dir, right);
+  return (at) => {
+    const texel = (2 * area) / key.shadow.mapSize.x;
+    const a = Math.round(at.dot(right) / texel) * texel;
+    const b = Math.round(at.dot(up) / texel) * texel;
+    const t = key.target.position;
+    t.copy(dir).multiplyScalar(at.dot(dir)).addScaledVector(right, a).addScaledVector(up, b);
+    key.position.copy(t).addScaledVector(dir, SHADOW_DISTANCE);
+    // El grafo del nivel es estático: sus matrices no se recalculan solas.
+    for (const o of [key, key.target]) {
+      o.updateMatrix();
+      o.matrixWorld.copy(o.matrix);
+    }
   };
 }
 
@@ -538,6 +577,47 @@ function buildProp(d: DecorProp, ctx: PropContext): Group {
     case 'antenna': {
       add(new CylinderGeometry(0.06, 0.12, 8, 6), getLevelMaterial('metal'), 0, 4, 0);
       add(new SphereGeometry(0.15, 8, 6), getNeonMaterial(0xff3344, 2.5), 0, 8.1, 0);
+      break;
+    }
+    case 'car': {
+      // Ruedas, faros y pilotos: la carrocería son las cajas de `car()`.
+      const tire = getLevelMaterial('leather');
+      const rim = getLevelMaterial('metal');
+      for (const [x, z] of [
+        [-1.45, -0.86],
+        [1.45, -0.86],
+        [-1.45, 0.86],
+        [1.45, 0.86],
+      ] as const) {
+        add(new CylinderGeometry(0.37, 0.37, 0.28, 18), tire, x, 0.37, z).rotation.x = Math.PI / 2;
+        add(new CylinderGeometry(0.2, 0.2, 0.3, 12), rim, x, 0.37, z).rotation.x = Math.PI / 2;
+      }
+      for (const z of [-0.68, 0.68]) {
+        add(new BoxGeometry(0.04, 0.14, 0.36), getNeonMaterial(0xfff2d8, 1.1), 2.31, 0.82, z);
+        add(new BoxGeometry(0.04, 0.1, 0.4), getNeonMaterial(0xff3344, 1.1), -2.31, 0.9, z);
+      }
+      add(new BoxGeometry(4.5, 0.05, 1.97), rim, 0, 0.42, 0);
+      break;
+    }
+    case 'helicopter': {
+      // Morro hacia +X. La cabina y la cola chocan con cajas invisibles del nivel.
+      const body = getLevelMaterial('metalDark');
+      const glass = getLevelMaterial('tilesBlack');
+      add(new SphereGeometry(1, 24, 14), body, 0, 1.75, 0).scale.set(2.5, 1.15, 1.15);
+      add(new SphereGeometry(1, 20, 12), glass, 0.95, 1.85, 0).scale.set(1.62, 0.9, 1.02);
+      add(new CylinderGeometry(0.42, 0.16, 5, 14), body, -4.4, 2.05, 0).rotation.z = Math.PI / 2;
+      add(new BoxGeometry(0.9, 1.5, 0.12), body, -6.8, 2.6, 0);
+      add(new CylinderGeometry(0.75, 0.75, 0.04, 20), getLevelMaterial('metal'), -6.75, 2.5, 0.16).rotation.x = Math.PI / 2;
+      add(new CylinderGeometry(0.22, 0.3, 0.7, 10), body, 0, 3.05, 0);
+      add(new BoxGeometry(10.4, 0.05, 0.3), glass, 0, 3.42, 0);
+      add(new BoxGeometry(0.3, 0.05, 10.4), glass, 0, 3.42, 0);
+      for (const z of [-0.95, 0.95]) {
+        add(new CylinderGeometry(0.06, 0.06, 4.2, 8), body, 0, 0.12, z).rotation.z = Math.PI / 2;
+        add(new CylinderGeometry(0.05, 0.05, 0.9, 6), body, 1, 0.5, z * 0.92);
+        add(new CylinderGeometry(0.05, 0.05, 0.9, 6), body, -1, 0.5, z * 0.92);
+      }
+      add(new SphereGeometry(0.1, 8, 6), getNeonMaterial(0xff3344, 2), -6.8, 3.4, 0);
+      add(new SphereGeometry(0.09, 8, 6), getNeonMaterial(0x3ddc84, 2), 0.2, 0.95, 1.1);
       break;
     }
     case 'crane': {

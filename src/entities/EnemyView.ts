@@ -7,6 +7,7 @@ import { CharacterRig, type DetailView, idlePose, type RigPose } from './Charact
 import { CORPSE_SETTLE, type Enemy, THROW_DELAY } from './Enemy';
 import { acquire, release, type SharedGeometry } from './rig/geometry';
 import { shieldGeometry } from './rig/weapons';
+import { animationStep, newSight, type Sight } from './occlusion';
 import { type BodyYaw, bodyYaw, type LookAngles, lookAngles, smooth, updateBodyYaw } from './rigMath';
 import { DroneRig, type EnemyBody, HoundRig } from './RobotRigs';
 
@@ -61,6 +62,7 @@ export class EnemyView {
   private pitchS = 0;
   /** Giro visual del cuerpo (con muelle sobre el de la simulación). */
   private readonly visualYaw: BodyYaw = bodyYaw();
+  private readonly sight: Sight;
 
   constructor(
     readonly enemy: Enemy,
@@ -68,6 +70,7 @@ export class EnemyView {
   ) {
     const def = enemy.def;
     this.glance = enemy.index * 2.3;
+    this.sight = newSight(enemy.index);
     // Material propio por enemigo (mismo programa): el destello de impacto es individual.
     const key = `enemy:${enemy.id}`;
     if (def.body && def.robot) {
@@ -126,10 +129,11 @@ export class EnemyView {
       this.icon.visible = false;
       if (this.laser) this.laser.visible = false;
     }
-    // Un cuerpo ya asentado no se anima más: conserva su última pose.
-    if (!e.alive && this.deadFor > CORPSE_SETTLE) return;
     const m = e.mover;
     const root = this.rig.root;
+    root.visible = view.occlusion?.look(this.sight, view.eye, root.position, e.height) ?? true;
+    // Un cuerpo ya asentado no se anima más: conserva su última pose.
+    if (!e.alive && this.deadFor > CORPSE_SETTLE) return;
     m.renderFeet(alpha, root.position);
     // Siempre con el muelle, también apuntando: a un enemigo no le hace falta el giro exacto y sus cambios de sentido se notaban.
     const yaw = updateBodyYaw(this.visualYaw, m.renderYaw(alpha), false, dt, TURN_OMEGA);
@@ -172,7 +176,8 @@ export class EnemyView {
     pose.death = e.deathStyle;
     // Proyectado en un remate: la caída sigue su curso aunque muera a mitad.
     pose.thrown = thrown ? e.thrownT : !e.alive && e.deathFallStart > 0 ? this.deadFor + THROW_DELAY : -1;
-    this.rig.update(pose, dt);
+    const step = animationStep(this.sight, dt);
+    if (step > 0) this.rig.update(pose, step);
     // Feedback de impacto y telégrafo del blindado/jefe: el rim se enciende.
     const rim = this.rig.rim;
     const telegraph = e.cmd.telegraph;
