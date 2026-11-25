@@ -47,17 +47,17 @@
     "three": "0.187.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20261121.1",
+    "@cloudflare/workers-types": "5.20261125.1",
     "@playwright/test": "1.65.1",
-    "@types/node": "26.6.6",
+    "@types/node": "26.6.10",
     "@types/three": "0.187.0",
-    "knip": "6.45.1",
-    "oxlint": "1.94.0",
-    "oxlint-tsgolint": "7.0.2007",
+    "knip": "6.48.0",
+    "oxlint": "1.95.0",
+    "oxlint-tsgolint": "7.0.2008",
     "prettier": "3.10.1",
     "typescript": "7.0.2",
     "vite": "8.3.8",
-    "vitest": "5.1.0"
+    "vitest": "5.1.2"
   },
   "engines": {
     "node": ">=22.12.0"
