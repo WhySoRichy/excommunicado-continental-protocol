@@ -291,11 +291,11 @@ test.describe('Fase 3 · cooperativo en red', () => {
     expect(await qa(host)(() => window.__EXCOM__!.mission()!.alarmDisabled)).toBe(false);
 
     // El anfitrión lleva al invitado junto al panel de la alarma; el invitado lo mira y lo usa.
-    expect(await qa(host)(() => window.__EXCOM__!.coopPlace(1, 3.6, 0, 16, -Math.PI / 2))).toBe(true);
+    expect(await qa(host)(() => window.__EXCOM__!.coopPlace(1, 5.2, 0, 20.6, -Math.PI / 2))).toBe(true);
     await expect
       .poll(async () => {
         const p = await qa(guest)(() => window.__EXCOM__!.player()!);
-        return Math.hypot(p.x - 3.6, p.z - 16);
+        return Math.hypot(p.x - 5.2, p.z - 20.6);
       })
       .toBeLessThan(0.2);
     await qa(guest)(() => window.__EXCOM__!.setLook(-Math.PI / 2, -0.1));

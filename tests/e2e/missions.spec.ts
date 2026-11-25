@@ -40,9 +40,9 @@ test.describe('Fase 4 · contratos', () => {
     });
     expect(start.m.index).toBe(0);
     expect(start.m.objective).toContain('Entra');
-    expect(start.civ).toHaveLength(12);
+    expect(start.civ).toHaveLength(14);
     expect(start.civ.every((c) => c.alive)).toBe(true);
-    expect(start.enemies).toBe(8);
+    expect(start.enemies).toBe(13);
     await page.evaluate(() => window.__EXCOM__!.measureFps(0.3));
     const lumAlley = await page.evaluate(() => window.__EXCOM__!.luminance());
     expect(lumAlley).toBeGreaterThan(LUMINANCE_MIN);
@@ -51,12 +51,12 @@ test.describe('Fase 4 · contratos', () => {
     const o1 = await page.evaluate(() => {
       const q = window.__EXCOM__!;
       q.setGod(true);
-      q.teleport(0, 0, 12.5, 0);
+      q.teleport(0, 0, 15.6, 0);
       q.step(8, {});
       return q.mission()!;
     });
     expect(o1.index).toBe(1);
-    expect(o1.respawn.z).toBeCloseTo(12, 0);
+    expect(o1.respawn.z).toBeCloseTo(16, 0);
     await page.evaluate(() => window.__EXCOM__!.measureFps(0.3));
     const lumFloor = await page.evaluate(() => window.__EXCOM__!.luminance());
     console.log(`[kairos] luminancia callejón ${lumAlley.toFixed(3)} · pista ${lumFloor.toFixed(3)}`);
@@ -89,7 +89,7 @@ test.describe('Fase 4 · contratos', () => {
     expect(hurt.m.civiliansHurt).toBe(1);
     expect(hurt.civ).toBeGreaterThan(0);
 
-    // El disparo alerta a los matones: suena la alarma y entran refuerzos por la entrada.
+    // El disparo alerta a los matones: suena la alarma y salen refuerzos de los camerinos.
     const alarm = await page.evaluate(() => {
       const q = window.__EXCOM__!;
       for (let i = 0; i < 40 && !q.mission()!.alarmSounded; i++) q.step(15, {});
@@ -98,30 +98,65 @@ test.describe('Fase 4 · contratos', () => {
     expect(alarm.m.alarmSounded).toBe(true);
     expect(alarm.alarmEnemies).toBe(3);
 
-    // Objetivo 2: subir al VIP → checkpoint. Objetivo 3: Vance.
+    // Objetivo 2: la lista de invitados, en el despacho → gente en las galerías.
     const o2 = await page.evaluate(() => {
       const q = window.__EXCOM__!;
-      q.teleport(12.5, 3.2, -6, Math.PI / 2);
+      q.teleport(-24.4, 0, 22.4, Math.PI / 2);
+      q.setLook(Math.PI / 2, -0.2);
+      q.step(8, {});
+      const prompt = q.prompt();
+      q.hold('interact', true);
+      q.step(100, {});
+      q.hold('interact', false);
+      q.step(4, {});
+      return { prompt, m: q.mission()!, gallery: q.enemies().filter((e) => e.id.startsWith('g-') && e.alive).length };
+    });
+    expect(o2.prompt).toContain('lista de invitados');
+    expect(o2.m.index).toBe(2);
+    expect(o2.m.objective).toContain('VIP');
+    expect(o2.gallery).toBe(3);
+    // Objetivo 3: subir al VIP → checkpoint. Objetivo 4: Vance.
+    const o3 = await page.evaluate(() => {
+      const q = window.__EXCOM__!;
+      q.teleport(0, 3.2, -8.6, 0);
       q.step(8, {});
       return q.mission()!;
     });
-    expect(o2.index).toBe(2);
-    expect(o2.objective).toContain('Vance');
-    expect(o2.beacon).not.toBeNull();
-    const o3 = await page.evaluate(() => {
+    expect(o3.index).toBe(3);
+    expect(o3.objective).toContain('Vance');
+    expect(o3.beacon).not.toBeNull();
+    const o4 = await page.evaluate(() => {
       const q = window.__EXCOM__!;
       q.runDebug('killAll');
       q.step(5, {});
       return { m: q.mission()!, reinforce: q.enemies().filter((e) => e.id.startsWith('r-') && e.alive).length };
     });
-    expect(o3.m.index).toBe(3);
-    expect(o3.m.objective).toContain('trasera');
-    expect(o3.reinforce).toBe(3);
+    expect(o4.m.index).toBe(4);
+    expect(o4.m.objective).toContain('muelle de carga');
+    expect(o4.reinforce).toBe(4);
 
-    // Objetivo 4: salida trasera → resultados con rango y recompensa.
+    // Objetivos 5 y 6: el muelle de carga, y aguantar hasta que arranque el coche.
+    const o5 = await page.evaluate(() => {
+      const q = window.__EXCOM__!;
+      q.teleport(24, 0, -18.4, 0);
+      q.step(8, {});
+      return { m: q.mission()!, last: q.enemies().filter((e) => e.id.startsWith('k-') && e.alive).length, hud: q.hud().objective };
+    });
+    expect(o5.m.index).toBe(5);
+    expect(o5.m.respawn.z).toBeCloseTo(-18, 0);
+    expect(o5.last).toBe(4);
+    expect(o5.hud).toMatch(/\d+ s/);
+    const o6 = await page.evaluate(() => {
+      const q = window.__EXCOM__!;
+      q.step(31 * 60, {});
+      return q.mission()!;
+    });
+    expect(o6.index).toBe(6);
+
+    // Objetivo 7: el coche → resultados con rango y recompensa.
     await page.evaluate(() => {
       const q = window.__EXCOM__!;
-      q.teleport(10, 0, -16.5, 0);
+      q.teleport(27, 0, -31.4, 0);
       q.step(8, {});
     });
     await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('results');
@@ -142,12 +177,13 @@ test.describe('Fase 4 · contratos', () => {
 
   test('Club Kairos: desactivar la alarma evita refuerzos; sin marcadores el contrato falla y se reintenta', async ({ page }) => {
     await enterContract(page, 'nightclub');
-    // Panel de alarma: interacción mantenida 2 s (antes, el guardia de la puerta cae en silencio).
+    // Panel de alarma: interacción mantenida 2 s (antes, los dos guardias de la entrada caen en silencio).
     const panel = await page.evaluate(() => {
       const q = window.__EXCOM__!;
       q.setGod(true);
       q.killEnemy('e-door');
-      q.teleport(3.2, 0, 16, -Math.PI / 2);
+      q.killEnemy('e-lobby');
+      q.teleport(5.2, 0, 20.6, -Math.PI / 2);
       q.setLook(-Math.PI / 2, -0.1);
       q.step(8, {});
       const prompt = q.prompt();
@@ -180,7 +216,7 @@ test.describe('Fase 4 · contratos', () => {
     // Tres muertes = tres marcadores: las dos primeras reaparecen en el checkpoint, la tercera falla.
     await page.evaluate(() => {
       const q = window.__EXCOM__!;
-      q.teleport(0, 0, 12.5, 0);
+      q.teleport(0, 0, 15.6, 0);
       q.step(8, {});
       q.setGod(false);
     });
@@ -199,7 +235,7 @@ test.describe('Fase 4 · contratos', () => {
         await expect(page.locator('#hud .death-hint')).toContainText('marcador');
         await page.evaluate(() => window.__EXCOM__!.respawn());
         const p = await page.evaluate(() => window.__EXCOM__!.player()!);
-        expect(p.z).toBeCloseTo(12, 0);
+        expect(p.z).toBeCloseTo(16, 0);
         expect(await page.evaluate(() => window.__EXCOM__!.state())).toBe('playing');
       } else {
         await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('results');
@@ -227,7 +263,7 @@ test.describe('Fase 4 · contratos 2 y 3', () => {
     await page.evaluate(() => window.localStorage.clear());
   });
 
-  test('Muelle 9: tres cargas con interacción mantenida, bodega, refuerzos del bote y resultados', async ({ page }) => {
+  test('Muelle 9: cargas con interacción mantenida, radio, bodega, aguantar hasta el bote y resultados', async ({ page }) => {
     const errors = collectErrors(page);
     await enterContract(page, 'docks');
     const start = await page.evaluate(() => ({ m: window.__EXCOM__!.mission()!, enemies: window.__EXCOM__!.enemies().length }));
@@ -240,13 +276,13 @@ test.describe('Fase 4 · contratos 2 y 3', () => {
     expect(lum).toBeGreaterThan(LUMINANCE_MIN);
     await page.screenshot({ path: shotPath('fase4-muelle-patio') });
     // Carga a carga: colocarse junto al palé, mirarlo y mantener E 2,5 s.
-    const plant = async (x: number, z: number, px: number, pz: number): Promise<{ index: number; prompt: string }> =>
+    const plant = async (x: number, z: number, px: number, pz: number, y = 0): Promise<{ index: number; prompt: string }> =>
       page.evaluate(
-        ([cx, cz, ox, oz]) => {
+        ([cx, cz, ox, oz, oy]) => {
           const q = window.__EXCOM__!;
           q.setGod(true);
           const yaw = Math.atan2(-(cx! - ox!), -(cz! - oz!));
-          q.teleport(ox!, 0, oz!, yaw);
+          q.teleport(ox!, oy!, oz!, yaw);
           q.setLook(yaw, -0.2);
           q.step(8, {});
           const prompt = q.prompt();
@@ -256,26 +292,51 @@ test.describe('Fase 4 · contratos 2 y 3', () => {
           q.step(4, {});
           return { index: q.mission()!.index, prompt };
         },
-        [x, z, px, pz],
+        [x, z, px, pz, y],
       );
-    const c1 = await plant(-22, 20, -20.5, 20);
+    const alive = (prefix: string): Promise<number> =>
+      page.evaluate((p) => window.__EXCOM__!.enemies().filter((e) => e.id.startsWith(p) && e.alive).length, prefix);
+    const c1 = await plant(-35.5, -13.2, -35.5, -11.6);
     expect(c1.prompt).toContain('Colocar carga explosiva');
     expect(c1.index).toBe(0);
-    const c2 = await plant(14, -4, 14, -2.5);
+    const c2 = await plant(40, 25, 38.4, 25);
     expect(c2.index).toBe(1);
     const m1 = await page.evaluate(() => window.__EXCOM__!.mission()!);
-    expect(m1.respawn.z).toBeCloseTo(4, 0);
-    const c3 = await plant(-20, -24, -20, -22.5);
+    expect(m1.respawn.z).toBeCloseTo(8, 0);
+    expect(await alive('w-'), 'la bodega aún está vacía').toBe(0);
+    const radio = await plant(35, -9, 35, -7.2, 3.2);
+    expect(radio.prompt).toContain('Cortar la radio');
+    expect(radio.index).toBe(2);
+    expect(await alive('w-')).toBe(6);
+    expect(await alive('m-catwalk')).toBe(1);
+    const c3 = await plant(-19, -50, -19, -48.4);
     expect(c3.index).toBe(2);
-    const o3 = await page.evaluate(() => ({
-      m: window.__EXCOM__!.mission()!,
-      boat: window.__EXCOM__!.enemies().filter((e) => e.id.startsWith('b-') && e.alive).length,
-    }));
-    expect(o3.m.objective).toContain('bote');
-    expect(o3.boat).toBe(4);
+    const c4 = await plant(-36.6, -58.6, -35, -58.6, 3.84);
+    expect(c4.index).toBe(3);
+    const o3 = await page.evaluate(() => window.__EXCOM__!.mission()!);
+    expect(o3.objective).toContain('embarcadero');
+    expect(await alive('a-')).toBe(4);
+    // El embarcadero: dos tandas de refuerzos hasta que llega el bote.
+    const hold = await page.evaluate(() => {
+      const q = window.__EXCOM__!;
+      const left = (p: string): number => q.enemies().filter((e) => e.id.startsWith(p) && e.alive).length;
+      q.teleport(14, 0, -42, 0);
+      q.step(8, {});
+      const first = { index: q.mission()!.index, n: left('b-'), hud: q.hud().objective };
+      q.step(31 * 60, {});
+      const second = { index: q.mission()!.index, n: left('f-') };
+      q.step(26 * 60, {});
+      return { first, second, index: q.mission()!.index };
+    });
+    expect(hold.first.index).toBe(4);
+    expect(hold.first.n).toBe(4);
+    expect(hold.first.hud).toMatch(/\d+ s/);
+    expect(hold.second.index).toBe(5);
+    expect(hold.second.n).toBe(4);
+    expect(hold.index).toBe(6);
     await page.evaluate(() => {
       const q = window.__EXCOM__!;
-      q.teleport(20, 0, -36, 0);
+      q.teleport(11, 0, -57.6, 0);
       q.step(8, {});
     });
     await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('results');
@@ -294,51 +355,77 @@ test.describe('Fase 4 · contratos 2 y 3', () => {
     const lum = await page.evaluate(() => window.__EXCOM__!.luminance());
     console.log(`[torre] luminancia ${lum.toFixed(3)}`);
     expect(lum).toBeGreaterThan(LUMINANCE_MIN);
-    // Por la escalera hasta B caminando (el personaje sube 0,32 m por peldaño sin saltar).
+    // Por la escalera de la terraza y por la de las oficinas hasta B, caminando (0,32 m por peldaño sin saltar).
     const climb = await page.evaluate(() => {
       const q = window.__EXCOM__!;
+      const walk = (x: number, y: number, z: number, yaw: number, steps: number): number => {
+        q.teleport(x, y, z, yaw);
+        q.setLook(yaw, -0.1);
+        q.step(steps, { moveY: 1, sprint: true });
+        return q.player()!.y;
+      };
       q.setGod(true);
-      q.teleport(-20, 0, 2, 0);
-      q.setLook(0, -0.1);
-      q.step(240, { moveY: 1, sprint: true });
-      return { p: q.player()!, m: q.mission()! };
+      return { terrace: walk(-30, 0, 6.4, 0, 150), offices: walk(36.4, 0, -11.8, 0, 100) };
     });
-    expect(climb.p.y).toBeGreaterThan(3.7);
+    expect(climb.terrace).toBeGreaterThan(3.7);
+    expect(climb.offices).toBeGreaterThan(3.7);
+    // Los ascensores: al bloquearlos llega gente a la segunda azotea.
+    const o0 = await page.evaluate(() => {
+      const q = window.__EXCOM__!;
+      q.teleport(23, 0, -8.4, 0);
+      q.setLook(0, -0.1);
+      q.step(8, {});
+      const prompt = q.prompt();
+      q.hold('interact', true);
+      q.step(130, {});
+      q.hold('interact', false);
+      q.step(4, {});
+      return { prompt, m: q.mission()!, roof: q.enemies().filter((e) => e.id.startsWith('b-') && e.alive).length };
+    });
+    expect(o0.prompt).toContain('Bloquear los ascensores');
+    expect(o0.m.index).toBe(1);
+    expect(o0.roof).toBe(5);
     const o1 = await page.evaluate(() => {
       const q = window.__EXCOM__!;
-      q.teleport(-16, 3.84, -12, 0);
+      q.teleport(-13, 3.84, -12, 0);
       q.step(8, {});
       return q.mission()!;
     });
-    expect(o1.index).toBe(1);
+    expect(o1.index).toBe(2);
     expect(o1.objective).toContain('tiradores');
-    // Los dos tiradores (uno en B, otro en C) → objetivo cumplido; luego el helipuerto por la rampa.
+    // Los tres tiradores → llega la guardia del Juez; al helipuerto, por la rampa o por la escalera de la azotea este.
     const o2 = await page.evaluate(() => {
       const q = window.__EXCOM__!;
-      q.killEnemy('m-roofB');
-      q.killEnemy('m-roofC');
+      for (const id of ['m-roofB', 'm-roofC', 'm-tower']) q.killEnemy(id);
       q.step(5, {});
       const afterKill = q.mission()!.index;
-      q.teleport(-9, 3.84, -12, -Math.PI / 2);
-      q.setLook(-Math.PI / 2, -0.1);
-      q.step(200, { moveY: 1, sprint: true });
-      return { afterKill, p: q.player()!, m: q.mission()! };
+      const guard = q.enemies().filter((e) => e.id.startsWith('c-') && e.alive).length;
+      const walk = (x: number, z: number, yaw: number): number => {
+        q.teleport(x, 3.84, z, yaw);
+        q.setLook(yaw, -0.1);
+        q.step(160, { moveY: 1, sprint: true });
+        return q.player()!.y;
+      };
+      return { afterKill, guard, ramp: walk(-33, -44, -Math.PI / 2), stairs: walk(16, -17.6, 0) };
     });
-    expect(o2.afterKill).toBe(2);
-    expect(o2.p.y).toBeGreaterThan(7.5);
+    expect(o2.afterKill).toBe(3);
+    expect(o2.guard).toBe(3);
+    expect(o2.ramp).toBeGreaterThan(7.5);
+    expect(o2.stairs).toBeGreaterThan(7.5);
     const o3 = await page.evaluate(() => {
       const q = window.__EXCOM__!;
-      q.teleport(4, 7.68, -14, 0);
+      q.teleport(10, 7.68, -27, 0);
       q.step(8, {});
       return q.mission()!;
     });
-    expect(o3.index).toBe(3);
+    expect(o3.index).toBe(4);
     expect(o3.kind).toBe('boss');
     await page.screenshot({ path: shotPath('fase4-torre-helipuerto') });
     // El Juez: a disparos de pistola a la cabeza; al cruzar el 50 % se arrodilla y llegan escoltas.
     const boss = await page.evaluate(() => {
       const q = window.__EXCOM__!;
       q.press('weapon2');
+      for (const e of q.enemies()) if (e.alive && e.id.startsWith('c-')) q.killEnemy(e.id);
       // De pie, el Juez no admite takedown (no hay remate gratis).
       const j0 = q.enemies().find((e) => e.id === 'judge')!;
       q.teleport(j0.x, 7.68, j0.z + 1.2, 0);
@@ -348,7 +435,7 @@ test.describe('Fase 4 · contratos 2 y 3', () => {
       q.step(3, {});
       const j1 = q.enemies().find((e) => e.id === 'judge')!;
       const standingTakedown = j1.state === 'stunned' || !j1.alive;
-      q.teleport(12, 7.68, -16, 0);
+      q.teleport(12, 7.68, -31, 0);
       q.step(20, { aim: true });
       let kneel = false;
       let finisher = false;
@@ -385,9 +472,9 @@ test.describe('Fase 4 · contratos 2 y 3', () => {
     expect(boss.kneel).toBe(true);
     expect(boss.finisher).toBe(true);
     expect(boss.phaseSpawn).toBeGreaterThanOrEqual(2);
-    expect(boss.m.index).toBe(4);
+    expect(boss.m.index).toBe(5);
     expect(boss.m.kind).toBe('escape');
-    expect(boss.m.escapeLeft).toBeGreaterThan(40);
+    expect(boss.m.escapeLeft).toBeGreaterThan(55);
     const hudObj = await page.evaluate(() => window.__EXCOM__!.hud().objective);
     expect(hudObj).toMatch(/\d+ s/);
     // Escape: refuerzos en A y la tirolina antes de que acabe el tiempo.
@@ -395,12 +482,12 @@ test.describe('Fase 4 · contratos 2 y 3', () => {
       const q = window.__EXCOM__!;
       q.step(120, {});
       const left = q.mission()!.escapeLeft;
-      q.teleport(24, 0, 12.4, Math.PI);
+      q.teleport(37, 0, 22.4, Math.PI);
       q.step(8, {});
       return { left, escapers: q.enemies().filter((e) => e.id.startsWith('esc-')).length };
     });
-    expect(esc.escapers).toBe(3);
-    expect(esc.left).toBeLessThan(44);
+    expect(esc.escapers).toBe(5);
+    expect(esc.left).toBeLessThan(59);
     await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('results');
     const out = await page.evaluate(() => window.__EXCOM__!.outcome()!);
     expect(out.success).toBe(true);
@@ -414,19 +501,25 @@ test.describe('Fase 4 · contratos 2 y 3', () => {
     await page.evaluate(() => {
       const q = window.__EXCOM__!;
       q.setGod(true);
-      q.teleport(-16, 3.84, -12, 0);
+      q.teleport(23, 0, -8.4, 0);
+      q.setLook(0, -0.1);
       q.step(8, {});
-      q.killEnemy('m-roofB');
-      q.killEnemy('m-roofC');
+      q.hold('interact', true);
+      q.step(130, {});
+      q.hold('interact', false);
+      q.teleport(-13, 3.84, -12, 0);
+      q.step(8, {});
+      for (const id of ['m-roofB', 'm-roofC', 'm-tower']) q.killEnemy(id);
       q.step(5, {});
-      q.teleport(4, 7.68, -14, 0);
+      for (const e of q.enemies()) if (e.alive && e.id.startsWith('c-')) q.killEnemy(e.id);
+      q.teleport(10, 7.68, -27, 0);
       q.step(8, {});
       q.killEnemy('judge');
       q.step(5, {});
     });
     const m = await page.evaluate(() => window.__EXCOM__!.mission()!);
     expect(m.kind).toBe('escape');
-    await page.evaluate(() => window.__EXCOM__!.step(46 * 60, {}));
+    await page.evaluate(() => window.__EXCOM__!.step(61 * 60, {}));
     await expect.poll(() => page.evaluate(() => window.__EXCOM__!.state())).toBe('results');
     const out = await page.evaluate(() => window.__EXCOM__!.outcome()!);
     expect(out.success).toBe(false);
@@ -438,15 +531,21 @@ test.describe('Fase 4 · contratos 2 y 3', () => {
     await page.evaluate(() => {
       const q = window.__EXCOM__!;
       q.setGod(true);
-      q.teleport(-16, 3.84, -12, 0);
+      q.teleport(23, 0, -8.4, 0);
+      q.setLook(0, -0.1);
       q.step(8, {});
-      q.killEnemy('m-roofB');
-      q.killEnemy('m-roofC');
+      q.hold('interact', true);
+      q.step(130, {});
+      q.hold('interact', false);
+      q.teleport(-13, 3.84, -12, 0);
+      q.step(8, {});
+      for (const id of ['m-roofB', 'm-roofC', 'm-tower']) q.killEnemy(id);
       q.step(5, {});
-      q.teleport(4, 7.68, -14, 0);
+      for (const e of q.enemies()) if (e.alive && e.id.startsWith('c-')) q.killEnemy(e.id);
+      q.teleport(10, 7.68, -27, 0);
       q.step(8, {});
       q.press('weapon2');
-      q.teleport(12, 7.68, -16, 0);
+      q.teleport(12, 7.68, -31, 0);
       q.step(20, { aim: true });
     });
     // Disparos a la cabeza sin rematarlo: cuenta las veces que se arrodilla hasta dejarlo casi sin salud.
@@ -477,7 +576,7 @@ test.describe('Fase 4 · contratos 2 y 3', () => {
       });
     const first = await fight();
     expect(first.kneels).toBe(2);
-    expect(first.adds).toBe(4);
+    expect(first.adds).toBe(6);
     // Sin modo dios el jugador cae, gasta un marcador y reaparece en el helipuerto.
     const back = await page.evaluate(() => {
       const q = window.__EXCOM__!;
@@ -487,7 +586,7 @@ test.describe('Fase 4 · contratos 2 y 3', () => {
       q.respawn();
       q.step(4, {});
       q.setGod(true);
-      q.teleport(12, 7.68, -16, 0);
+      q.teleport(12, 7.68, -31, 0);
       q.step(20, { aim: true });
       const all = q.enemies();
       return {
@@ -506,7 +605,7 @@ test.describe('Fase 4 · contratos 2 y 3', () => {
     // El combate empieza de nuevo: vuelve a arrodillarse en cada umbral y los refuerzos regresan.
     const second = await fight();
     expect(second.kneels).toBe(2);
-    expect(second.adds).toBe(4);
+    expect(second.adds).toBe(6);
   });
 });
 

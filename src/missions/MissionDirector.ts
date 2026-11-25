@@ -52,6 +52,8 @@ export interface MissionDirectorDeps {
 /** Fases del jefe: al cruzar estos umbrales de salud se arrodilla (takedown posible) y pide refuerzos. */
 const BOSS_PHASES: readonly number[] = [0.5, 0.2];
 const BOSS_KNEEL_TIME = 3.5;
+/** Hasta dónde se enteran los demás cuando llegan refuerzos (m): los del otro extremo del nivel no cruzan el mapa. */
+const REINFORCE_ALERT = 45;
 /** Gauntlet: no aparecen enemigos a menos de esta distancia del jugador. */
 const GAUNTLET_SPAWN_MIN_PLAYER_DIST = 4;
 /** Paso de Foco del tutorial: el medidor se llena para poder practicarlo. */
@@ -261,7 +263,7 @@ export class MissionDirector {
     if (o.kind === 'learn') this.startLearn(o);
     if (o.onStart) {
       const n = this.d.session.enemies.spawnEvent(o.onStart);
-      if (n > 0) this.d.session.enemies.alertAll(this.d.session.player.feet);
+      if (n > 0) this.d.session.enemies.alertAll(this.d.session.player.feet, REINFORCE_ALERT);
     }
     if (o.kind === 'escape') this.escapeLeft = objectiveTimeLeft(o, 0);
     this.d.hud.setObjective(this.text(o));

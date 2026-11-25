@@ -51,7 +51,7 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = [
   { id: 'nightclub.ghost', name: 'Fantasma', desc: 'Sin disparar la alarma.', coins: 2, mission: 'nightclub', check: (r) => !r.alarmSounded },
   { id: 'nightclub.gunfu', name: 'Gun-fu', desc: '3 takedowns en el club.', coins: 2, mission: 'nightclub', check: (r) => r.stats.takedowns >= 3 },
   // Muelle 9
-  { id: 'docks.fast', name: 'Demolición', desc: 'Menos de 4 minutos.', coins: 2, mission: 'docks', check: (r) => r.stats.timeSec < 240 },
+  { id: 'docks.fast', name: 'Demolición', desc: 'Menos de 7 minutos.', coins: 2, mission: 'docks', check: (r) => r.stats.timeSec < 420 },
   { id: 'docks.knife', name: 'Filo', desc: '5 bajas con cuchillo.', coins: 2, mission: 'docks', check: (r) => r.stats.knifeKills >= 5 },
   { id: 'docks.untouched', name: 'Intocable', desc: 'La salud nunca bajó de 100.', coins: 3, mission: 'docks', check: (r) => r.minHealth >= 100 },
   // Torre Meridian
@@ -63,8 +63,8 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = [
     mission: 'rooftop',
     check: (r) => r.marksmenTotal > 0 && r.marksmenHeadshots >= r.marksmenTotal,
   },
-  { id: 'rooftop.punctual', name: 'Puntual', desc: 'Escapa con más de 20 s.', coins: 2, mission: 'rooftop', check: (r) => r.escapeSecondsLeft > 20 },
-  { id: 'rooftop.economy', name: 'Economía de movimiento', desc: 'Máximo 2 recargas.', coins: 3, mission: 'rooftop', check: (r) => r.reloads <= 2 },
+  { id: 'rooftop.punctual', name: 'Puntual', desc: 'Escapa con más de 25 s.', coins: 2, mission: 'rooftop', check: (r) => r.escapeSecondsLeft > 25 },
+  { id: 'rooftop.economy', name: 'Economía de movimiento', desc: 'Máximo 6 recargas.', coins: 3, mission: 'rooftop', check: (r) => r.reloads <= 6 },
   // Gauntlet
   { id: 'gauntlet.w5', name: 'Oleada 5', desc: 'Supera la oleada 5.', coins: 2, mission: 'gauntlet', check: (r) => r.gauntletWaves >= 5 },
   { id: 'gauntlet.w10', name: 'Oleada 10', desc: 'Supera la oleada 10.', coins: 4, mission: 'gauntlet', check: (r) => r.gauntletWaves >= 10 },

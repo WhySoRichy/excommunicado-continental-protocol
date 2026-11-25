@@ -40,6 +40,8 @@ const _v = new Vector3();
 const _a = new Vector3();
 const _b = new Vector3();
 const SHOUT_RADIUS = 18;
+/** A qué fracción de la distancia oye los disparos quien guarda un puesto. */
+const GUARD_HEARING = 0.5;
 /** Cada cuánto reparte órdenes la escuadra y cuánto pasa entre un rodeo y el siguiente (s). */
 const SQUAD_PERIOD = 0.25;
 const FLANK_COOLDOWN = 6;
@@ -189,8 +191,10 @@ export class EnemyManager implements Tactics {
 
   /** Ruido de un disparo del jugador: los enemigos dentro del radio lo oyen. */
   noise(pos: Vector3, radius: number): void {
-    const r2 = radius * radius;
-    for (const e of this.enemies) if (e.alive && e.feet.distanceToSquared(pos) <= r2) e.hear(pos);
+    for (const e of this.enemies) {
+      const r = e.spawnDef.guard ? radius * GUARD_HEARING : radius;
+      if (e.alive && e.feet.distanceToSquared(pos) <= r * r) e.hear(pos);
+    }
   }
 
   /**
@@ -259,9 +263,9 @@ export class EnemyManager implements Tactics {
     this.grenadeSeen.delete(id);
   }
 
-  /** Alerta a todos (alarma). */
-  alertAll(at: Vector3): void {
-    for (const e of this.enemies) if (e.alive) e.brain.alert(at);
+  /** Alarma: alerta a todos los que estén a menos de `radius` de `at`, salvo a quien guarda un puesto. */
+  alertAll(at: Vector3, radius = Number.POSITIVE_INFINITY): void {
+    for (const e of this.enemies) if (e.alive && !e.spawnDef.guard && e.feet.distanceTo(at) <= radius) e.brain.alert(at);
   }
 
   /** Un paso de todos los enemigos; cada uno elige a quién atacar entre `targets` (uno por jugador). */

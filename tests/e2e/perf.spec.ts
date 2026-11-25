@@ -25,15 +25,20 @@ const BUDGET = {
    * JS inicial del juego (gzip) y del motor de física (gzip), en KB. El del juego subió de 300 a 320 con las armas de
    * piezas reales (bloque 2): las extrusiones, los torneados y la triangulación de contornos de three, unos 8 KB; y a 340
    * con los personajes de mallas suaves, unos 10 KB de código en lugar de megas de modelos descargados; y a 355 con la
-   * escuadra, las reacciones a los impactos y las máquinas (unos 12 KB: mallas, animación e IA, también sin descargas); y
-   * a 368 con el cuerpo y las caras nuevas, los remates y la lluvia (unos 8 KB).
+   * escuadra, las reacciones a los impactos y las máquinas (unos 12 KB: mallas, animación e IA, también sin descargas).
+   * El cuerpo y las caras nuevas, los remates y la lluvia caben ahí desde que los niveles, que se descargan al entrar en
+   * cada uno, se cuentan aparte.
    */
-  appGzKb: 368,
+  appGzKb: 355,
+  /** Datos de un nivel (gzip), en KB. */
+  levelGzKb: 8,
   rapierGzKb: 1800,
 };
 
 type MissionId = 'practice' | 'nightclub' | 'docks' | 'rooftop';
 const LEVELS: MissionId[] = ['practice', 'nightclub', 'docks', 'rooftop'];
+/** Niveles que se descargan aparte, cada uno en su archivo. */
+const LEVEL_FILES = ['arena', 'hub', ...LEVELS];
 
 interface Sample {
   level: string;
@@ -247,12 +252,21 @@ test.describe('Fase 6 · rendimiento', () => {
     const files = readdirSync(dir).filter((f) => f.endsWith('.js'));
     let app = 0;
     let rapier = 0;
+    let level = 0;
+    let levels = 0;
     for (const f of files) {
       const gz = gzipSync(readFileSync(join(dir, f))).length / 1024;
       if (f.startsWith('rapier')) rapier += gz;
-      else app += gz;
+      else if (LEVEL_FILES.some((id) => f.startsWith(`${id}-`))) {
+        level = Math.max(level, gz);
+        levels++;
+      } else app += gz;
     }
-    console.log(`[bundle] juego ${app.toFixed(0)} KB gzip · física ${rapier.toFixed(0)} KB gzip (carga perezosa con la pantalla de arranque)`);
+    console.log(
+      `[bundle] juego ${app.toFixed(0)} KB gzip · física ${rapier.toFixed(0)} KB gzip (carga perezosa con la pantalla de arranque) · nivel mayor ${level.toFixed(1)} KB`,
+    );
+    expect(levels, 'cada nivel en su archivo').toBe(LEVEL_FILES.length);
+    expect(level).toBeLessThanOrEqual(BUDGET.levelGzKb);
     expect(app).toBeLessThanOrEqual(BUDGET.appGzKb);
     expect(rapier).toBeLessThanOrEqual(BUDGET.rapierGzKb);
   });

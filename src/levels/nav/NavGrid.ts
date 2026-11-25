@@ -24,6 +24,9 @@ const STAIR_STEP = 0.7;
 /** Separación vertical entre muestras de espacio libre (menor que el grosor mínimo de losa). */
 const CLEARANCE_STEP = 0.28;
 
+/** Margen del contorno: un punto justo en la junta de dos cajas es de las dos, no de ninguna (redondeo). */
+const EDGE = 1e-4;
+
 const KIND_FLAT = 0;
 const KIND_RAMP = 1;
 const KIND_STAIR = 2;
@@ -175,7 +178,7 @@ export class NavGrid {
         cand.length = 0;
         for (const wt of walkTops) {
           const s = wt.s;
-          if (x < s.minX || x > s.maxX || z < s.minZ || z > s.maxZ) continue;
+          if (x < s.minX - EDGE || x > s.maxX + EDGE || z < s.minZ - EDGE || z > s.maxZ + EDGE) continue;
           if (footprintContains(s, x, z)) cand.push({ y: wt.top, kind: wt.stair ? KIND_STAIR : KIND_FLAT });
         }
         for (const rs of ramps) {
@@ -542,7 +545,7 @@ function makeSolid(ob: OrientedBox): Solid {
 /** ¿(x, z) está sobre la huella de la caja? (para superficies caminables). */
 function footprintContains(s: Solid, x: number, z: number): boolean {
   _p.set(x - s.ob.center.x, 0, z - s.ob.center.z).applyQuaternion(s.inv);
-  return Math.abs(_p.x) <= s.ob.half.x && Math.abs(_p.z) <= s.ob.half.z;
+  return Math.abs(_p.x) <= s.ob.half.x + EDGE && Math.abs(_p.z) <= s.ob.half.z + EDGE;
 }
 
 /** ¿El punto está dentro de la caja inflada `r` en su plano local XZ? */

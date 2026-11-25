@@ -112,6 +112,23 @@ describe('coberturas de los enemigos', () => {
 });
 
 describe('fuego cercano, granadas y cuerpos', () => {
+  it('quien guarda un puesto no acude a la alarma y solo oye los disparos cercanos; los demás, sí', () => {
+    const w = world(arena);
+    const post = w.enemies.spawn({ id: 'post', type: 'escort', pos: [-6, 0, -12], yaw: 0, guard: true });
+    const loose = w.enemies.spawn({ id: 'loose', type: 'escort', pos: [6, 0, -12], yaw: 0 });
+    const at = new Vector3(0, 0, 12);
+    w.enemies.noise(at, 30);
+    expect(post.perception.heard).toBe(false);
+    expect(loose.perception.heard).toBe(true);
+    w.enemies.noise(new Vector3(-6, 0, 0), 30);
+    expect(post.perception.heard, 'a 12 m, sí lo oye').toBe(true);
+    w.enemies.alertAll(at, 10);
+    expect(loose.state, 'lejos de la alarma').toBe('patrol');
+    w.enemies.alertAll(at);
+    expect(post.state).toBe('patrol');
+    expect(loose.state).not.toBe('patrol');
+  });
+
   it('un disparo que pasa cerca pone nervioso; el que pasa lejos, al que ya dio o a su espalda, no', () => {
     const w = world(arena);
     const near = w.enemies.spawnAt('thug', new Vector3(0.8, 0, 2), Math.PI);

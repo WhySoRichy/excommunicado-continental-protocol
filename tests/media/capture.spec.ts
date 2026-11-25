@@ -103,17 +103,17 @@ test('imágenes del README', async ({ page }) => {
   await bare(page, true);
 
   await contract(page, 'nightclub');
-  await scene(page, 'club', { at: [-3, 0, 12, 0.25], look: [0.25, 0] });
+  await scene(page, 'club', { at: [-15.4, 3.2, 6, -0.75], look: [-0.75, -0.14] });
 
   await contract(page, 'docks');
-  await scene(page, 'muelle', { at: [2, 0, 22, 0.15], look: [0.15, 0], weapon: 'weapon1', steps: 22, move: { moveY: 1 } });
+  await scene(page, 'muelle', { at: [0.4, 0, 20, 0], look: [0.04, 0.06], weapon: 'weapon1', steps: 22, move: { moveY: 1 } });
   // A cubierto contra un contenedor: en medio de la pared y, de portada, en su esquina.
   const cover = async (weapon: string, walk: number, look: [number, number]): Promise<void> => {
     await page.evaluate(
       ([w, n, yaw, pitch]) => {
         const q = window.__EXCOM__!;
         q.releaseAll();
-        q.teleport(5.5, 0, 20.5, 0);
+        q.teleport(32.5, 0, 21.2, 0);
         q.setLook(0.1, -0.08);
         q.press(w as 'weapon1');
         q.step(30, {});
@@ -136,7 +136,7 @@ test('imágenes del README', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
 
   await contract(page, 'rooftop');
-  await scene(page, 'torre', { at: [0, 0, 15, 0], look: [0.1, -0.05], weapon: 'weapon1', steps: 30, move: { moveY: 1, sprint: true } });
+  await scene(page, 'torre', { at: [5, 7.68, -26.4, 0], look: [-0.12, -0.02], weapon: 'weapon1', steps: 30, move: { moveY: 1, sprint: true } });
 });
 
 test('fotogramas de la animación: el simulacro a tiros', async ({ page }) => {

@@ -46,6 +46,8 @@ describe('rango del contrato', () => {
     expect(accuracyScore(0, 0, 0, 0)).toBe(50);
     expect(damageScore(0, 160)).toBe(100);
     expect(damageScore(240, 160)).toBe(0);
+    expect(damageScore(240, 160, 120), 'un contrato corto no perdona menos').toBe(0);
+    expect(damageScore(240, 160, 600), 'uno el doble de largo perdona el doble').toBe(50);
     expect(varietyScore(3)).toBe(50);
     expect(varietyScore(9)).toBe(100);
   });

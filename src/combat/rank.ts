@@ -66,9 +66,12 @@ export function accuracyScore(fired: number, hit: number, takedowns: number, kni
   return clamp100((100 * hit) / fired);
 }
 
-export function damageScore(taken: number, pool: number): number {
+/** Contratos más largos traen más enemigos: el daño que se perdona crece con su tiempo par (s). */
+const DAMAGE_PAR_TIME = 300;
+
+export function damageScore(taken: number, pool: number, parTime = 0): number {
   if (pool <= 0) return 100;
-  return clamp100(100 * (1 - taken / (1.5 * pool)));
+  return clamp100(100 * (1 - taken / (1.5 * pool * Math.max(1, parTime / DAMAGE_PAR_TIME))));
 }
 
 export function varietyScore(count: number): number {
@@ -90,7 +93,7 @@ export function computeRank(s: MissionStats): RankResult {
   const subs: SubScores = {
     time: timeScore(s.timeSec, s.parTime),
     accuracy: accuracyScore(s.shotsFired, s.shotsHit, s.takedowns, s.knifeKills),
-    damage: damageScore(s.damageTaken, s.healthPool),
+    damage: damageScore(s.damageTaken, s.healthPool, s.parTime),
     variety: varietyScore(s.varietyCount),
     civilians: s.hasCivilians ? civilianScore(s.civiliansHurt, s.civiliansKilled) : null,
   };
